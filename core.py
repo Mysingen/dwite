@@ -10,6 +10,8 @@ import Image
 import ImageDraw
 import ImageFont
 
+from canvas import Canvas, TextRender
+
 device_ids = {
 	2:'SqueezeBox',
 	3:'SoftSqueeze',
@@ -115,64 +117,60 @@ def handle_bye(s, data, len):
 	if reason == 1:
 		print 'Player is going out for an upgrade'
 
-def render_text(string):
-	image = Image.new('1', (320, 32), 0)
-	draw  = ImageDraw.Draw(image)
-	font  = ImageFont.truetype('/Library/Fonts/Arial.ttf', 27)
-	draw.text((0,0), string, font=font, fill=1)
-	# transpose before outputting to the SqueezeBox. the full image is composed
-	# of 320 stripes of 32 bits each, running from top to bottom. each 8-bit part
-	# of each stripe has to be sent in reverse.
-	#image = image.transpose(Image.ROTATE_270)
-	#image = image.transpose(Image.FLIP_LEFT_RIGHT)
-
-	for y in [8, 16, 24, 32]:
-		box = (0, y-8, 320, y)
-		sub = image.crop(box).transpose(Image.FLIP_TOP_BOTTOM)
-		image.paste(sub, box)
-	image.save('blaha.png', 'PNG')
-
-	pack = []
-	data = list(image.getdata()) # len() == 320*32
-
-	for i in range(320):
-		# pack each stripe into an unsigned 32 bit integer.
-		stripe = 0
-		for j in range(32):
-			stripe = stripe | (data[j * 320 + i] << j)
-		pack.append(struct.pack('L', stripe))
-	return ''.join(pack)
-
-def one(i):
-	print i
-	return struct.pack('L', (2**32)-1 & ~(1 << i))
-
-def send_grfe(s):
-	b0 = 128
-	b1 = 129
-	b2 = 130
-	b3 = 134
-	cmd = 'grfe'
-	offset = socket.htons(0)
-	offset = struct.pack('H', offset)
-	transition = ' ' # ' ' 'l' 'r' 'u' 'd' (scroll) 'L' 'R' 'U' 'D' (bounce)
-	distance = struct.pack('B', 0)
-
-	bitmap = render_text('Hejsan')
-	
-	payload = cmd + offset + transition + distance + bitmap
-	length = socket.htons(len(payload))
-	length = struct.pack('H', length)
-
-	s.send(length + cmd + offset + transition + distance + bitmap)
+# def render_text(string):
+# 	image = Image.new('1', (320, 32), 0)
+# 	draw  = ImageDraw.Draw(image)
+# 	font  = ImageFont.truetype('/Library/Fonts/Arial.ttf', 27)
+# 	draw.text((0,0), string, font=font, fill=1)
+# 
+# 	# transpose before outputting to the SqueezeBox. the full image is composed
+# 	# of 320 stripes of 32 bits each, running from top to bottom. each 8-bit part
+# 	# of each stripe has to be sent in reverse.
+# 
+# 	for y in [8, 16, 24, 32]:
+# 		box = (0, y-8, 320, y)
+# 		sub = image.crop(box).transpose(Image.FLIP_TOP_BOTTOM)
+# 		image.paste(sub, box)
+# 	image.save('blaha.png', 'PNG')
+# 
+# 	pack = []
+# 	data = list(image.getdata()) # len() == 320*32
+# 
+# 	for i in range(320):
+# 		# pack each stripe into an unsigned 32 bit integer.
+# 		stripe = 0
+# 		for j in range(32):
+# 			stripe = stripe | (data[j * 320 + i] << j)
+# 		pack.append(struct.pack('L', stripe))
+# 	return ''.join(pack)
+# 
+# def one(i):
+# 	print i
+# 	return struct.pack('L', (2**32)-1 & ~(1 << i))
+# 
+# def send_grfe(s):
+# 	b0 = 128
+# 	b1 = 129
+# 	b2 = 130
+# 	b3 = 134
+# 	cmd = 'grfe'
+# 	offset = socket.htons(0)
+# 	offset = struct.pack('H', offset)
+# 	transition = ' ' # ' ' 'l' 'r' 'u' 'd' (scroll) 'L' 'R' 'U' 'D' (bounce)
+# 	distance = struct.pack('B', 0)
+# 
+# 	bitmap = render_text('Hejsan')
+# 	
+# 	payload = cmd + offset + transition + distance + bitmap
+# 	length = socket.htons(len(payload))
+# 	length = struct.pack('H', length)
+# 
+# 	s.send(length + cmd + offset + transition + distance + bitmap)
 
 def main():
 	myHost = ''
 	myPort = 3483
 	
-	render_text('Hejsan')
-#	sys.exit(0)
-		
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	while (1):
 		try:
@@ -185,35 +183,39 @@ def main():
 
 	connection, address = s.accept()
 
-	try:
-		while (1):
-			data = connection.recv(1024)
-			dlen = struct.unpack('L', data[4:8])
-			dlen = socket.ntohl(dlen[0])
-			print '\n%s %d %d' % (data[0:4], dlen, len(data))
-	
-			if data[0:4] == 'HELO':
-				handle_helo(s, data[8:], dlen)
-				continue
-	
-			if data[0:4] == 'ANIC':
-				continue
-			
-			send_grfe(connection)
+	canvas = Canvas(connection)
+	render = TextRender(canvas, '/Library/Fonts/Arial.ttf', 27)
+	render.render('Hello')
 
-			if data[0:4] == 'IR  ':
-				handle_ir(s, data[8:], dlen)
-				continue
+#	try:
+	while (1):
+		data = connection.recv(1024)
+		dlen = struct.unpack('L', data[4:8])
+		dlen = socket.ntohl(dlen[0])
+		print '\n%s %d %d' % (data[0:4], dlen, len(data))
 
-			if data[0:4] == 'BYE!':
-				handle_bye(s, data[8:], dlen)
-				break
+		if data[0:4] == 'HELO':
+			handle_helo(s, data[8:], dlen)
+			continue
 
-			print 'unknown message'
-			print ['%x' % ord(c) for c in data]
+		if data[0:4] == 'ANIC':
+			continue
 
-	except Exception, msg:
-		print msg
+		render.tick()
+
+		if data[0:4] == 'IR  ':
+			handle_ir(s, data[8:], dlen)
+			continue
+
+		if data[0:4] == 'BYE!':
+			handle_bye(s, data[8:], dlen)
+			break
+
+		print 'unknown message'
+		print ['%x' % ord(c) for c in data]
+
+#	except Exception, msg:
+#		raise msg
 
 	connection.close()
 
