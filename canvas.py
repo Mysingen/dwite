@@ -70,7 +70,7 @@ class Canvas:
 			pack.append(struct.pack('L', stripe))
 
 		bitmap = ''.join(pack) # ready for transmission
-		send_grfe(self.medium, bitmap, transition)
+		send_grfe(self.medium.connection, bitmap, transition)
 
 class Render:
 	canvas  = None
