@@ -3,38 +3,36 @@ import struct
 
 from threading import Thread
 
-class Listener(Thread):
-	connection = None
-	reactor    = None
+from remote import IR, Remote
 
-	def __new__(cls, connection, reactor):
-		object = super(Listener, cls).__new__(
-			cls, None, Listener.run, 'Listener', (), {})
-		Listener.__init__(object, connection, reactor)
+class Receiver(Thread):
+	connection = None
+	queue      = None
+
+	def __new__(cls, wire, queue):
+		object = super(Receiver, cls).__new__(
+			cls, None, Receiver.run, 'Receiver', (), {})
+		Receiver.__init__(object, wire, queue)
 		return object
 
-	def __init__(self, connection, reactor):
+	def __init__(self, wire, queue):
 		Thread.__init__(self)
-		self.connection = connection
-		self.reactor    = reactor
+		self.wire  = wire
+		self.queue = queue
 
 	def run(self):
+		print('Listening')
 		try:
 			while 1:
-				data = self.connection.recv(1024)
+				data = self.wire.connection.recv(1024)
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
 				print '\n%s %d %d' % (data[0:4], dlen, len(data))
-				self.reactor.handle(data, dlen)
+				self.handle(data, dlen)
 		except Exception, msg:
 			print msg
 			return
 
-# this class knows the full protocol that a SqueezeBox may use in transmissions
-# to the host. the name "prototocol" is avoided because it only implements the
-# part that reacts to what the other party is sending. other classes implement
-# protocol "actors".
-class Reactor:
 	def handle(self, data, dlen):
 		if data[0:4] == 'HELO':
 			self.handle_helo(data[8:], dlen)
@@ -53,17 +51,6 @@ class Reactor:
 
 		print 'unknown message'
 		print ['%x' % ord(c) for c in data]
-
-	device_ids = {
-		2:'SqueezeBox',
-		3:'SoftSqueeze',
-		4:'SqueezeBox 2',
-		5:'Transporter',
-		6:'SoftSqueeze 3',
-		7:'Receiver',
-		8:'SqueezeSlave',
-		9:'Controller'
-	}
 
 	def handle_helo(self, data, len):
 		id       = ord(data[0])
@@ -92,9 +79,20 @@ class Reactor:
 			language = '%s' % data[10:12]
 		else:
 			language = 'None'
-
-		if id in self.device_ids:
-			print 'ID       %s' % self.device_ids[id]
+		
+		device_ids = {
+			2:'SqueezeBox',
+			3:'SoftSqueeze',
+			4:'SqueezeBox 2',
+			5:'Transporter',
+			6:'SoftSqueeze 3',
+			7:'Receiver',
+			8:'SqueezeSlave',
+			9:'Controller'
+		}
+		
+		if id in device_ids:
+			print 'ID       %s' % device_ids[id]
 		else:
 			print 'ID       %d undefined' % id
 	
@@ -110,87 +108,76 @@ class Reactor:
 		if reason == 1:
 			print 'Player is going out for an upgrade'
 
-	ir_codes = {
-		1203276150:'SLEEP',
-		3208677750:'POWER',
-		16187392  :'HARD POWER DOWN?',
-		1069582710:'REWIND',
-		3743451510:'PAUSE',
-		1604356470:'FORWARD',
-		2673903990:'ADD',
-		4010838390:'PLAY',
-		534808950 :'UP',
-		1871743350:'LEFT',
-		802195830 :'RIGHT',
-		1336969590:'DOWN',
-		4278225270:'VOLUME-',
-		2139130230:'VOLUME+',
-		267422070 :'1',
-		4144531830:'2',
-		2005436790:'3',
-		3074984310:'4',
-		935889270 :'5',
-		3609758070:'6',
-		1470663030:'7',
-		2540210550:'8',
-		401115510 :'9',
-		1738049910:'0',
-		3877144950:'FAVORITES',
-		# SEARCH button not reactive in emulator
-		2406517110:'BROWSE',
-		668502390 :'SHUFFLE',
-		3342371190:'REPEAT',
-		2272823670:'NOW PLAYING',
-		133728630 :'SIZE',
-		4211378550:'BRIGHTNESS'
-	}
-
 	def handle_ir(self, data):
 		time    = struct.unpack('L', data[0:4])[0]
 		format  = struct.unpack('B', data[4:5])[0]
 		nr_bits = struct.unpack('B', data[5:6])[0]
 		code    = struct.unpack('L', data[6:10])[0]
 		
+		ir_codes_debug = {
+			IR.SLEEP      :'SLEEP',
+			IR.POWER      :'POWER',
+			IR.HARD_POWER :'HARD POWER DOWN?',
+			IR.REWIND     :'REWIND',
+			IR.PAUSE      :'PAUSE',
+			IR.FORWARD    :'FORWARD',
+			IR.ADD        :'ADD',
+			IR.PLAY       :'PLAY',
+			IR.UP         :'UP',
+			IR.LEFT       :'LEFT',
+			IR.RIGHT      :'RIGHT',
+			IR.DOWN       :'DOWN',
+			IR.VOLUME_DOWN:'VOLUME-',
+			IR.VOLUME_UP  :'VOLUME+',
+			IR.NUM_0      :'0',
+			IR.NUM_1      :'1',
+			IR.NUM_2      :'2',
+			IR.NUM_3      :'3',
+			IR.NUM_4      :'4',
+			IR.NUM_5      :'5',
+			IR.NUM_6      :'6',
+			IR.NUM_7      :'7',
+			IR.NUM_8      :'8',
+			IR.NUM_9      :'9',
+			IR.FAVORITES  :'FAVORITES',
+			IR.SEARCH     :'SEARCH',
+			IR.BROWSE     :'BROWSE',
+			IR.SHUFFLE    :'SHUFFLE',
+			IR.REPEAT     :'REPEAT',
+			IR.NOW_PLAYING:'NOW PLAYING',
+			IR.SIZE       :'SIZE',
+			IR.BRIGHTNESS :'BRIGHTNESS'
+		}
+
 		print 'time    %d' % time
 		print 'format  %d' % format
 		print 'nr bits %d' % nr_bits
-		if code in self.ir_codes:
-			print 'ir code %s' % self.ir_codes[code]
+		if code in ir_codes_debug:
+			print 'ir code %s' % ir_codes_debug[code]
 		else:
-			print 'ir code %d' % code
+			print 'UNKNOWN ir code %d' % code
+			return
 
-
+		self.queue.put(Remote(code))
 
 class Wire:
-	host       = ''
-	port       = 0
-	sock       = None
 	connection = None
-	address    = None
-	listener   = None
-	reactor    = None
 
 	def __init__(self, port):
-		self.port = port
-		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		print('Waiting for port %d to become available. No timeout' % self.port)
+		print('Waiting for port %d to become available. No timeout' % port)
 		while 1:
 			try:
-				self.sock.bind((self.host, self.port))
+				sock.bind(('', port))
 				break
 			except socket.error, msg:
 				pass
 		print('Accepting')
 
-		self.sock.listen(1)
-		self.connection, self.address = self.sock.accept()
+		sock.listen(1)
+		self.connection, address = sock.accept()
 		print('Connected')
-
-		self.reactor  = Reactor()
-		self.listener = Listener(self.connection, self.reactor)
-		self.listener.start()
-		print('Listening')
 
 	def close(self):
 		self.connection.close() # this will cause self.listener to terminate
