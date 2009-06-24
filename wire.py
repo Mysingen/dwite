@@ -8,6 +8,7 @@ from remote import IR, Remote
 class Receiver(Thread):
 	connection = None
 	queue      = None
+	alive      = True
 
 	def __new__(cls, wire, queue):
 		object = super(Receiver, cls).__new__(
@@ -23,7 +24,7 @@ class Receiver(Thread):
 	def run(self):
 		print('Listening')
 		try:
-			while 1:
+			while self.alive:
 				data = self.wire.connection.recv(1024)
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
@@ -32,6 +33,10 @@ class Receiver(Thread):
 		except Exception, msg:
 			print msg
 			return
+		print 'Deaf & Dead'
+
+	def stop(self):
+		self.alive = False
 
 	def handle(self, data, dlen):
 		if data[0:4] == 'HELO':
@@ -107,6 +112,7 @@ class Receiver(Thread):
 		reason = struct.unpack('B', data[0])
 		if reason == 1:
 			print 'Player is going out for an upgrade'
+		self.alive = False
 
 	def handle_ir(self, data):
 		time    = struct.unpack('L', data[0:4])[0]
@@ -181,3 +187,12 @@ class Wire:
 
 	def close(self):
 		self.connection.close() # this will cause self.listener to terminate
+
+	def send_grfe(self, bitmap, transition):
+		cmd      = 'grfe'
+		offset   = struct.pack('H', socket.htons(0)) # must be zero. why?
+		distance = struct.pack('B', 32) # 32 is Y space. not properly understood
+		payload  = cmd + offset + transition + distance + bitmap
+		length   = socket.htons(len(payload))
+		length   = struct.pack('H', length)
+		self.connection.send(length + payload)

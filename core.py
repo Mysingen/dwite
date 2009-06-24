@@ -14,8 +14,7 @@ import Image
 import ImageDraw
 import ImageFont
 
-from canvas  import Canvas, TextRender
-from canvas  import *
+from canvas  import Canvas, TextRender, Display
 from wire    import Wire, Receiver
 from remote  import IR, Remote
 from browser import Browser, DirTree
@@ -24,44 +23,50 @@ def main():
 	queue    = Queue(100)
 	wire     = Wire(port=3483)
 	receiver = Receiver(wire, queue) # receiver will send messages to the queue
-	canvas   = Canvas(wire)
+	canvas   = Canvas()
 	render   = TextRender(canvas, '/Library/Fonts/Arial.ttf', 27)
 	browser  = Browser(DirTree('/', None, os.getcwd()))
 
 	receiver.start()
 
 	while 1:
+		msg = None
 		try:
 			msg = queue.get(block=False)
+		except Exception, e:
+			time.sleep(0.01)
+			continue
+
+		try:
 			if isinstance(msg, Remote):
-				transition = TRANSITION_NONE
+				transition = Display.TRANSITION_NONE
 				if msg.code == IR.UP:
 					if browser.up():
-						transition = TRANSITION_SCROLL_DOWN
+						transition = Display.TRANSITION_SCROLL_DOWN
 					else:
-						transition = TRANSITION_BOUNCE_DOWN
+						transition = Display.TRANSITION_BOUNCE_DOWN
 				if msg.code == IR.DOWN:
 					if browser.down():
-						transition = TRANSITION_SCROLL_UP
+						transition = Display.TRANSITION_SCROLL_UP
 					else:
-						transition = TRANSITION_BOUNCE_UP
+						transition = Display.TRANSITION_BOUNCE_UP
 				if msg.code == IR.LEFT:
 					if browser.leave():
-						transition = TRANSITION_SCROLL_RIGHT
+						transition = Display.TRANSITION_SCROLL_RIGHT
 					else:
-						transition = TRANSITION_BOUNCE_RIGHT
+						transition = Display.TRANSITION_BOUNCE_RIGHT
 				if msg.code == IR.RIGHT:
 					if browser.enter():
-						transition = TRANSITION_SCROLL_LEFT
+						transition = Display.TRANSITION_SCROLL_LEFT
 					else:
-						transition = TRANSITION_BOUNCE_LEFT
-				render.render(str(browser), transition)
-				continue
+						transition = Display.TRANSITION_BOUNCE_LEFT
+				render.render(str(browser))
+				canvas.redraw()
+				wire.send_grfe(canvas.bitmap, transition)
 		except Exception, e:
-			pass
-
-#		render.render(str(browser), transition)
-#		render.tick()
-		time.sleep(0.01)
+			print e
+			break
+	
+	receiver.stop()
 
 main()

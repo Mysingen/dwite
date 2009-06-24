@@ -1,6 +1,5 @@
 import sys
 import struct
-import socket
 
 from datetime import datetime, timedelta
 
@@ -9,30 +8,10 @@ import Image
 import ImageDraw
 import ImageFont
 
-TRANSITION_NONE         = ' '
-TRANSITION_SCROLL_UP    = 'd'
-TRANSITION_SCROLL_DOWN  = 'u'
-TRANSITION_SCROLL_LEFT  = 'r'
-TRANSITION_SCROLL_RIGHT = 'l'
-TRANSITION_BOUNCE_UP    = 'U'
-TRANSITION_BOUNCE_DOWN  = 'D'
-TRANSITION_BOUNCE_LEFT  = 'R'
-TRANSITION_BOUNCE_RIGHT = 'L'
-
-def send_grfe(s, bitmap, transition):
-	cmd      = 'grfe'
-	offset   = struct.pack('H', socket.htons(0)) # must be zero. why?
-	distance = struct.pack('B', 32) # 32 is Y space. not properly understood
-	payload  = cmd + offset + transition + distance + bitmap
-	length   = socket.htons(len(payload))
-	length   = struct.pack('H', length)
-
-	s.send(length + payload)
-
 class Canvas:
+	bitmap   = ''   # Suitable for output to SqueezeBox with the GRFE command
 	image    = None # private member
 	drawable = None # an ImageDraw object for others to interact with
-	medium   = None # we always initialize this to a "wire" medium. i.e. a socket
 
 	# the full SqueezeBox display is divided into stripes. depending on what is
 	# to be done, it should be thought of either as 320 vertical stripes of 1x32,
@@ -41,15 +20,17 @@ class Canvas:
 	# neither is a useful concept for "artistic" compositing. for that we keep a
 	# PIL drawable that some other class can render content onto.
 
-	def __init__(self, medium):
-		self.medium   = medium
+	def __init__(self):
 		self.image    = Image.new('1', (320, 32), 0)
 		self.drawable = ImageDraw.Draw(self.image)
+
+	def __str__(self):
+		return self.bitmap
 
 	def clear(self):
 		self.drawable.rectangle((0,0,320,32), fill=0)
 	
-	def redraw(self, transition):
+	def redraw(self):
 		# SqueezeBox expects each 8 bit part of each vertical stripe to be sent
 		# in big endian bit order. unfortunately, this conflicts with the natural
 		# traverse order of drawables, but we can easily prepare the entire image
@@ -68,8 +49,7 @@ class Canvas:
 				stripe = stripe | (data[j * 320 + i] << j)
 			pack.append(struct.pack('L', stripe))
 
-		bitmap = ''.join(pack) # ready for transmission
-		send_grfe(self.medium.connection, bitmap, transition)
+		self.bitmap = ''.join(pack) # ready for transmission
 
 class Render:
 	canvas  = None
@@ -92,11 +72,10 @@ class TextRender(Render):
 		self.canvas = canvas
 		self.font   = ImageFont.truetype(font_path, size)
 
-	def render(self, text, transition):
+	def render(self, text):
 		self.text = text
 		self.canvas.clear()
 		self.canvas.drawable.text((0,0), self.text, font=self.font, fill=1)
-		self.canvas.redraw(transition)
 
 	def tick(self):
 		now = datetime.now()
@@ -106,3 +85,14 @@ class TextRender(Render):
 		self.canvas.drawable.text((0,0), self.text, font=self.font, fill=1)
 		self.canvas.redraw(TRANSITION_NONE)
 		self.timeout = now + timedelta(milliseconds=500)
+
+class Display:
+	TRANSITION_NONE         = ' '
+	TRANSITION_SCROLL_UP    = 'd'
+	TRANSITION_SCROLL_DOWN  = 'u'
+	TRANSITION_SCROLL_LEFT  = 'r'
+	TRANSITION_SCROLL_RIGHT = 'l'
+	TRANSITION_BOUNCE_UP    = 'U'
+	TRANSITION_BOUNCE_DOWN  = 'D'
+	TRANSITION_BOUNCE_LEFT  = 'R'
+	TRANSITION_BOUNCE_RIGHT = 'L'
