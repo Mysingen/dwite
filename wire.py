@@ -30,7 +30,7 @@ class Receiver(Thread):
 				data = self.wire.connection.recv(1024)
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
-				print '\n%s %d %d' % (data[0:4], dlen, len(data))
+#				print '\n%s %d %d' % (data[0:4], dlen, len(data))
 				self.handle(data, dlen)
 		except Exception, msg:
 			print msg
@@ -174,7 +174,7 @@ class Receiver(Thread):
 			if (delta.days == 0
 			and delta.seconds == 0
 			and delta.microseconds < 100000):
-				print 'delta   %s' % str(delta)
+#				print 'delta   %s' % str(delta)
 				stress = self.last_ir[2] + 1
 		self.last_ir = (code, now, stress)
 

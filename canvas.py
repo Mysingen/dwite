@@ -62,29 +62,73 @@ class Render:
 
 	# subclasses must implement the tick() method
 	def tick(self):
-		raise Exception, 'Your Render (sub)class instance has no tick() method'
+		raise Exception, 'Your Render instance has no tick() method'
+
+class Window:
+	size    = 0
+	slack   = 0 # the space to keep unpainted when the window contents wrap around
+	start   = 0
+	current = 0
+	content = 0 # set by the user
+
+	def __init__(self, size, slack, content, start):
+		self.size    = size
+		self.slack   = slack
+		self.start   = start
+		self.content = content
+		self.current = self.start
+
+	def get(self):
+		if self.current + self.content + self.slack < self.size:
+			return (self.current, self.current + self.content + self.slack)
+		return (self.current, - 1)
+
+	def advance(self, amount):
+		prospect = (self.current - amount) + self.content + self.slack
+		if prospect <= 0:
+			self.current = prospect
+		else:
+			self.current = self.current - amount
+		return self.get()
 
 class TextRender(Render):
-	font = None
-	text = None
+	canvas  = None
+	font    = None
+	text    = None
+	window  = None
+	timeout = None
 
 	def __init__(self, canvas, font_path, size):
 		self.canvas = canvas
 		self.font   = ImageFont.truetype(font_path, size)
 
-	def render(self, text):
+	def render(self, text, position):
 		self.text = text
+		(x,y) = self.canvas.drawable.textsize(self.text, font=self.font)
+		if x > 318:
+			if position < 0:
+				position = 320 - x
+			self.window  = Window(320, 10, x, position)
+			self.timeout = datetime.now() + timedelta(milliseconds=1000)
+		else:
+			self.window  = None
+			self.timeout = None
 		self.canvas.clear()
-		self.canvas.drawable.text((0,0), self.text, font=self.font, fill=1)
+		self.canvas.drawable.text((position,0), self.text, font=self.font, fill=1)
 
 	def tick(self):
+		if not self.window:
+			return False
 		now = datetime.now()
 		if now < self.timeout:
-			return
+			return False
+		(x, xx) = self.window.advance(5)
 		self.canvas.clear()
-		self.canvas.drawable.text((0,0), self.text, font=self.font, fill=1)
-		self.canvas.redraw(TRANSITION_NONE)
-		self.timeout = now + timedelta(milliseconds=500)
+		self.canvas.drawable.text((x,0), self.text, font=self.font, fill=1)
+		if xx >= 0:
+			self.canvas.drawable.text((xx,0), self.text, font=self.font, fill=1)
+		self.timeout = now + timedelta(milliseconds=100)
+		return True
 
 class Display:
 	TRANSITION_NONE         = ' '

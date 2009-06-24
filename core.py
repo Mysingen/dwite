@@ -6,6 +6,7 @@ import struct
 import array
 import time
 import os
+import traceback
 
 from Queue import Queue
 
@@ -28,18 +29,25 @@ def main():
 	browser  = Browser(DirTree('/', None, os.getcwd()))
 
 	receiver.start()
+	render.render(str(browser), 2)
+	canvas.redraw()
+	wire.send_grfe(canvas.bitmap, Display.TRANSITION_NONE)
 
 	while 1:
 		msg = None
 		try:
 			msg = queue.get(block=False)
 		except Exception, e:
+			if render.tick():
+				canvas.redraw()
+				wire.send_grfe(canvas.bitmap, Display.TRANSITION_NONE)
 			time.sleep(0.01)
 			continue
 
 		try:
 			if isinstance(msg, RemoteEvent):
 				transition = Display.TRANSITION_NONE
+				position   = 2
 				if msg.code == IR.UP:
 					if browser.up():
 						transition = Display.TRANSITION_SCROLL_DOWN
@@ -60,10 +68,13 @@ def main():
 						transition = Display.TRANSITION_SCROLL_LEFT
 					else:
 						transition = Display.TRANSITION_BOUNCE_LEFT
-				render.render(str(browser))
+						position   = -1
+				render.render(str(browser), position)
 				canvas.redraw()
 				wire.send_grfe(canvas.bitmap, transition)
 		except Exception, e:
+			tb = sys.exc_info()[2]
+			traceback.print_tb(tb)
 			print e
 			break
 	
