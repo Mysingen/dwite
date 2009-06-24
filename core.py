@@ -15,6 +15,7 @@ import ImageDraw
 import ImageFont
 
 from canvas  import Canvas, TextRender
+from canvas  import *
 from wire    import Wire, Receiver
 from remote  import IR, Remote
 from browser import Browser, DirTree
@@ -33,18 +34,34 @@ def main():
 		try:
 			msg = queue.get(block=False)
 			if isinstance(msg, Remote):
+				transition = TRANSITION_NONE
 				if msg.code == IR.UP:
-					browser.up()
+					if browser.up():
+						transition = TRANSITION_SCROLL_UP
+					else:
+						transition = TRANSITION_BOUNCE_DOWN
 				if msg.code == IR.DOWN:
-					browser.down()
+					if browser.down():
+						transition = TRANSITION_SCROLL_DOWN
+					else:
+						transition = TRANSITION_BOUNCE_UP
 				if msg.code == IR.LEFT:
-					browser.leave()
+					if browser.leave():
+						transition = TRANSITION_SCROLL_LEFT
+					else:
+						transition = TRANSITION_BOUNCE_LEFT
 				if msg.code == IR.RIGHT:
-					browser.enter()
+					if browser.enter():
+						transition = TRANSITION_SCROLL_RIGHT
+					else:
+						transition = TRANSITION_BOUNCE_RIGHT
+				render.render(str(browser), transition)
+				continue
 		except Exception, e:
 			pass
 
-		render.render(str(browser))
-		render.tick()
+#		render.render(str(browser), transition)
+#		render.tick()
+		time.sleep(0.01)
 
 main()

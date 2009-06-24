@@ -95,7 +95,12 @@ class Browser:
 	def up(self):
 		if self.current > 0:
 			self.current = self.current - 1
+			return True
+		return False
 	
 	def down(self):
 		if self.current < len(self.cwd.children) - 1:
 			self.current = self.current + 1
+			return True
+		return False
+
