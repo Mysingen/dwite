@@ -32,9 +32,10 @@ class IR:
 	SIZE        = 133728630
 	BRIGHTNESS  = 4211378550
 
-class Remote:
-	code = -1
-	time = 0
+class RemoteEvent:
+	code   = -1 # valid values taken from the IR codes above
+	stress = 0  # valid values >= 1
 	
-	def __init__(self, code):
-		self.code = code
+	def __init__(self, code, stress):
+		self.code   = code
+		self.stress = stress

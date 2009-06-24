@@ -16,7 +16,7 @@ import ImageFont
 
 from canvas  import Canvas, TextRender, Display
 from wire    import Wire, Receiver
-from remote  import IR, Remote
+from remote  import IR, RemoteEvent
 from browser import Browser, DirTree
 
 def main():
@@ -38,7 +38,7 @@ def main():
 			continue
 
 		try:
-			if isinstance(msg, Remote):
+			if isinstance(msg, RemoteEvent):
 				transition = Display.TRANSITION_NONE
 				if msg.code == IR.UP:
 					if browser.up():

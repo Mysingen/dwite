@@ -2,13 +2,15 @@ import socket
 import struct
 
 from threading import Thread
+from datetime  import datetime, timedelta
 
-from remote import IR, Remote
+from remote import IR, RemoteEvent
 
 class Receiver(Thread):
 	connection = None
 	queue      = None
 	alive      = True
+	last_ir    = (-1, datetime.now, 0) # IR code, wallclock time, stress
 
 	def __new__(cls, wire, queue):
 		object = super(Receiver, cls).__new__(
@@ -32,7 +34,6 @@ class Receiver(Thread):
 				self.handle(data, dlen)
 		except Exception, msg:
 			print msg
-			return
 		print 'Deaf & Dead'
 
 	def stop(self):
@@ -115,7 +116,7 @@ class Receiver(Thread):
 		self.alive = False
 
 	def handle_ir(self, data):
-		time    = struct.unpack('L', data[0:4])[0]
+		stamp   = struct.unpack('L', data[0:4])[0]
 		format  = struct.unpack('B', data[4:5])[0]
 		nr_bits = struct.unpack('B', data[5:6])[0]
 		code    = struct.unpack('L', data[6:10])[0]
@@ -155,16 +156,37 @@ class Receiver(Thread):
 			IR.BRIGHTNESS :'BRIGHTNESS'
 		}
 
-		print 'time    %d' % time
-		print 'format  %d' % format
-		print 'nr bits %d' % nr_bits
+#		print 'stamp   %d' % stamp
+#		print 'format  %d' % format
+#		print 'nr bits %d' % nr_bits
 		if code in ir_codes_debug:
-			print 'ir code %s' % ir_codes_debug[code]
+#			print 'ir code %s' % ir_codes_debug[code]
+			pass
 		else:
 			print 'UNKNOWN ir code %d' % code
 			return
 
-		self.queue.put(Remote(code))
+		now    = datetime.now()
+		stress = 1
+		if self.last_ir[0] == code:
+			delta = now - self.last_ir[1]
+			# if delta is less than 0.1 seconds, then the key is kept pressed.
+			if (delta.days == 0
+			and delta.seconds == 0
+			and delta.microseconds < 100000):
+				print 'delta   %s' % str(delta)
+				stress = self.last_ir[2] + 1
+		self.last_ir = (code, now, stress)
+
+		# accelerate the frequency of events as the user keeps a key pressed for
+		# longer times. if stress is past some particular level and a multiple of
+		# something specific to that level, then send an event.
+		acceleration = [ 1,  8, 15, 22, 29, 36, 43,
+		                48, 53, 58, 63, 68, 73, 78,
+		                81, 84, 87, 91, 94, 97, 100]
+		
+		if stress in acceleration or stress > 100:
+			self.queue.put(RemoteEvent(code, stress))
 
 class Wire:
 	connection = None
