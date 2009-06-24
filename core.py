@@ -37,24 +37,24 @@ def main():
 				transition = TRANSITION_NONE
 				if msg.code == IR.UP:
 					if browser.up():
-						transition = TRANSITION_SCROLL_UP
+						transition = TRANSITION_SCROLL_DOWN
 					else:
 						transition = TRANSITION_BOUNCE_DOWN
 				if msg.code == IR.DOWN:
 					if browser.down():
-						transition = TRANSITION_SCROLL_DOWN
+						transition = TRANSITION_SCROLL_UP
 					else:
 						transition = TRANSITION_BOUNCE_UP
 				if msg.code == IR.LEFT:
 					if browser.leave():
-						transition = TRANSITION_SCROLL_LEFT
-					else:
-						transition = TRANSITION_BOUNCE_LEFT
-				if msg.code == IR.RIGHT:
-					if browser.enter():
 						transition = TRANSITION_SCROLL_RIGHT
 					else:
 						transition = TRANSITION_BOUNCE_RIGHT
+				if msg.code == IR.RIGHT:
+					if browser.enter():
+						transition = TRANSITION_SCROLL_LEFT
+					else:
+						transition = TRANSITION_BOUNCE_LEFT
 				render.render(str(browser), transition)
 				continue
 		except Exception, e:
