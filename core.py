@@ -33,6 +33,9 @@ def main():
 	canvas.redraw()
 	wire.send_grfe(canvas.bitmap, Display.TRANSITION_NONE)
 
+	brightness = [65535, 0, 1, 3, 4]
+	bi = 4
+
 	while 1:
 		msg = None
 		try:
@@ -69,6 +72,11 @@ def main():
 					else:
 						transition = Display.TRANSITION_BOUNCE_LEFT
 						position   = -1
+				if msg.code == IR.BRIGHTNESS:
+					bi = bi - 1
+					if bi < 0:
+						bi = 4
+					wire.send_grfb(brightness[bi])
 				render.render(str(browser), position)
 				canvas.redraw()
 				wire.send_grfe(canvas.bitmap, transition)

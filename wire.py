@@ -10,7 +10,7 @@ class Receiver(Thread):
 	connection = None
 	queue      = None
 	alive      = True
-	last_ir    = (-1, datetime.now, 0) # IR code, wallclock time, stress
+	last_ir    = (-1, datetime.now(), 0) # IR code, wallclock time, stress
 
 	def __new__(cls, wire, queue):
 		object = super(Receiver, cls).__new__(
@@ -213,8 +213,15 @@ class Wire:
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
 		offset   = struct.pack('H', socket.htons(0)) # must be zero. why?
-		distance = struct.pack('B', 32) # 32 is Y space. not properly understood
+		distance = struct.pack('B', 32) # 32 is Y-axis. not properly understood
 		payload  = cmd + offset + transition + distance + bitmap
+		length   = socket.htons(len(payload))
+		length   = struct.pack('H', length)
+		self.connection.send(length + payload)
+
+	def send_grfb(self, brightness):
+		cmd      = 'grfb'
+		payload  = cmd + struct.pack('H', socket.htons(brightness))
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
 		self.connection.send(length + payload)
