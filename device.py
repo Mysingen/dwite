@@ -85,7 +85,6 @@ class Classic(Device):
 					stress = last_tactile[1] + 1
 				else:
 					continue
-			print('stress: %s %d' % (IR.codes_debug[msg.code], stress))
 
 			# abort handling early if the stress level isn't high enough. note
 			# that the stress is always "enough" if stress is zero or the event
@@ -103,9 +102,9 @@ class Classic(Device):
 						continue
 					
 					if msg.code == IR.UP:
-						self.menu.draw(self.menu.down())
-					elif msg.code == IR.DOWN:
 						self.menu.draw(self.menu.up())
+					elif msg.code == IR.DOWN:
+						self.menu.draw(self.menu.down())
 					elif msg.code == IR.RIGHT:
 						self.menu.draw(self.menu.enter())
 					elif msg.code == IR.LEFT:

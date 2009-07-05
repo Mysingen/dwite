@@ -112,14 +112,14 @@ class Menu:
 	def up(self):
 		if self.current > 0:
 			self.current = self.current - 1
-			return TRANSITION.SCROLL_UP
-		return TRANSITION.BOUNCE_UP
+			return TRANSITION.SCROLL_DOWN
+		return TRANSITION.BOUNCE_DOWN
 	
 	def down(self):
 		if self.current < len(self.cwd.children) - 1:
 			self.current = self.current + 1
-			return TRANSITION.SCROLL_DOWN
-		return TRANSITION.BOUNCE_DOWN
+			return TRANSITION.SCROLL_UP
+		return TRANSITION.BOUNCE_UP
 
 	def draw(self, transition):
 		if self.cwd.children[self.current].draw(self.display.canvas):
