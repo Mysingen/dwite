@@ -1,13 +1,18 @@
 import os
 import os.path
 
+from render  import TextRender
+from display import TRANSITION
+
 class Tree:
 	label  = None
 	parent = None
+	render = None
 
 	def __init__(self, label, parent):
 		self.label  = label
 		self.parent = parent
+		self.render = TextRender('/Library/Fonts/Arial.ttf', 27)
 
 	def __str__(self):
 		return self.label
@@ -19,12 +24,19 @@ class Tree:
 			return -1
 		return 1
 
+	def draw(self, canvas):
+		return self.render.draw(canvas, self.label, 2)
+
+	def tick(self, canvas):
+		return self.render.tick(canvas)
+
 class FileTree(Tree):
-	path = None
-	
+	path   = None
+
 	def __init__(self, label, parent, path):
 		Tree.__init__(self, label, parent)
 		self.path = path
+		render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
 
 class DirTree(FileTree):
 	children = []
@@ -52,15 +64,20 @@ class DirTree(FileTree):
 			self.children.append(Tree('<EMPTY>', self))
 		return self
 
-class Browser:
+class Menu:
+	display = None # a Display instance that hides all device specific details
 	root    = None # must always point to a Tree instance that implements ls()
 	cwd     = None # must always point to a Tree instance that implements ls()
-	current = 0 # index into cwd.children[]
+	current = 0    # index into cwd.children[]
 	
-	def __init__(self, root):
+	def __init__(self, display, root=None):
+		self.display = display
+		if not root:
+			root = DirTree('/', None, os.getcwd())
 		self.root = root
 		self.cwd  = self.root
 		self.cwd.ls()
+		self.draw(TRANSITION.NONE)
 	
 	def __str__(self):
 		return str(self.cwd.children[self.current])
@@ -76,31 +93,38 @@ class Browser:
 			self.cwd.children[self.current].ls()
 		except Exception, msg:
 			# self.current has no listable content and can thus not be entered
-			return False
+			return TRANSITION.BOUNCE_LEFT
 		self.cwd     = self.cwd.children[self.current]
 		self.current = 0
 		print 'enter %s' % str(self.cwd.path)
-		return True
+		return TRANSITION.SCROLL_LEFT
 
 	def leave(self):
 		try:
 			self.cwd.parent.ls()
 		except Exception, msg:
-			return False
+			return TRANSITION.BOUNCE_RIGHT
 		self.current = self.cwd.parent.children.index(self.cwd)
 		self.cwd     = self.cwd.parent
 		print 'return %s' % str(self.cwd.path)
-		return True
+		return TRANSITION.SCROLL_RIGHT
 	
 	def up(self):
 		if self.current > 0:
 			self.current = self.current - 1
-			return True
-		return False
+			return TRANSITION.SCROLL_UP
+		return TRANSITION.BOUNCE_UP
 	
 	def down(self):
 		if self.current < len(self.cwd.children) - 1:
 			self.current = self.current + 1
-			return True
-		return False
+			return TRANSITION.SCROLL_DOWN
+		return TRANSITION.BOUNCE_DOWN
 
+	def draw(self, transition):
+		if self.cwd.children[self.current].draw(self.display.canvas):
+			self.display.show(transition)
+	
+	def tick(self):
+		if self.cwd.children[self.current].tick(self.display.canvas):
+			self.display.show(TRANSITION.NONE)

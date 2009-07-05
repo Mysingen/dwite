@@ -1,16 +1,19 @@
 import socket
 import struct
+import select
+import sys
+import traceback
 
 from threading import Thread
-from datetime  import datetime, timedelta
+from datetime  import datetime
 
-from remote import IR, RemoteEvent
+from tactile import IR, TactileEvent
 
 class Receiver(Thread):
-	connection = None
-	queue      = None
-	alive      = True
-	last_ir    = (-1, datetime.now(), 0) # IR code, wallclock time, stress
+	wire    = None
+	queue   = None
+	alive   = True
+	last_ir = None # tuple: (IR code, wallclock time, stress)
 
 	def __new__(cls, wire, queue):
 		object = super(Receiver, cls).__new__(
@@ -27,12 +30,21 @@ class Receiver(Thread):
 		print('Listening')
 		try:
 			while self.alive:
-				data = self.wire.connection.recv(1024)
+				if select.select([self.wire.socket],[],[], 0.1) == ([],[],[]):
+					# a lack of events is treated as if the user released a button
+					if self.last_ir != None:
+						print 'wire RELEASE'
+						self.last_ir = None
+						self.queue.put(TactileEvent(IR.RELEASE))
+						continue
+				data = self.wire.socket.recv(1024)
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
 #				print '\n%s %d %d' % (data[0:4], dlen, len(data))
 				self.handle(data, dlen)
 		except Exception, msg:
+			tb = sys.exc_info()[2]
+			traceback.print_tb(tb)
 			print msg
 		print 'Deaf & Dead'
 
@@ -121,94 +133,48 @@ class Receiver(Thread):
 		nr_bits = struct.unpack('B', data[5:6])[0]
 		code    = struct.unpack('L', data[6:10])[0]
 		
-		ir_codes_debug = {
-			IR.SLEEP      :'SLEEP',
-			IR.POWER      :'POWER',
-			IR.HARD_POWER :'HARD POWER DOWN?',
-			IR.REWIND     :'REWIND',
-			IR.PAUSE      :'PAUSE',
-			IR.FORWARD    :'FORWARD',
-			IR.ADD        :'ADD',
-			IR.PLAY       :'PLAY',
-			IR.UP         :'UP',
-			IR.LEFT       :'LEFT',
-			IR.RIGHT      :'RIGHT',
-			IR.DOWN       :'DOWN',
-			IR.VOLUME_DOWN:'VOLUME-',
-			IR.VOLUME_UP  :'VOLUME+',
-			IR.NUM_0      :'0',
-			IR.NUM_1      :'1',
-			IR.NUM_2      :'2',
-			IR.NUM_3      :'3',
-			IR.NUM_4      :'4',
-			IR.NUM_5      :'5',
-			IR.NUM_6      :'6',
-			IR.NUM_7      :'7',
-			IR.NUM_8      :'8',
-			IR.NUM_9      :'9',
-			IR.FAVORITES  :'FAVORITES',
-			IR.SEARCH     :'SEARCH',
-			IR.BROWSE     :'BROWSE',
-			IR.SHUFFLE    :'SHUFFLE',
-			IR.REPEAT     :'REPEAT',
-			IR.NOW_PLAYING:'NOW PLAYING',
-			IR.SIZE       :'SIZE',
-			IR.BRIGHTNESS :'BRIGHTNESS'
-		}
-
-#		print 'stamp   %d' % stamp
-#		print 'format  %d' % format
-#		print 'nr bits %d' % nr_bits
-		if code in ir_codes_debug:
-#			print 'ir code %s' % ir_codes_debug[code]
-			pass
-		else:
+		if code not in IR.codes_debug:
+			print 'stamp   %d' % stamp
+			print 'format  %d' % format
+			print 'nr bits %d' % nr_bits
 			print 'UNKNOWN ir code %d' % code
+			self.last_ir = None
+			self.queue.put(TactileEvent(IR.RELEASE))
 			return
 
-		now    = datetime.now()
-		stress = 1
-		if self.last_ir[0] == code:
-			delta = now - self.last_ir[1]
-			# if delta is less than 0.1 seconds, then the key is kept pressed.
-			if (delta.days == 0
-			and delta.seconds == 0
-			and delta.microseconds < 100000):
-#				print 'delta   %s' % str(delta)
-				stress = self.last_ir[2] + 1
+		now = datetime.now()
+		stress = 0
+		if self.last_ir and self.last_ir[0] == code:
+			# the same key is kept pressed. don't send a new event.
+			stress = self.last_ir[2] + 1
+			print('wire stress %s %d' % (IR.codes_debug[code], stress))
+		else:
+			print('wire put %s' % IR.codes_debug[code])
+			self.queue.put(TactileEvent(code))
+		# either way track what happened.
 		self.last_ir = (code, now, stress)
 
-		# accelerate the frequency of events as the user keeps a key pressed for
-		# longer times. if stress is past some particular level and a multiple of
-		# something specific to that level, then send an event.
-		acceleration = [ 1,  8, 15, 22, 29, 36, 43,
-		                48, 53, 58, 63, 68, 73, 78,
-		                81, 84, 87, 91, 94, 97, 100]
-		
-		if stress in acceleration or stress > 100:
-			self.queue.put(RemoteEvent(code, stress))
-
 class Wire:
-	connection = None
+	socket = None
 
 	def __init__(self, port):
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 		print('Waiting for port %d to become available. No timeout' % port)
 		while 1:
 			try:
-				sock.bind(('', port))
+				self.socket.bind(('', port))
 				break
 			except socket.error, msg:
 				pass
 		print('Accepting')
 
-		sock.listen(1)
-		self.connection, address = sock.accept()
+		self.socket.listen(1)
+		self.socket, address = self.socket.accept()
 		print('Connected')
 
 	def close(self):
-		self.connection.close() # this will cause self.listener to terminate
+		self.socket.close() # this will cause self.listener to terminate
 
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
@@ -217,11 +183,11 @@ class Wire:
 		payload  = cmd + offset + transition + distance + bitmap
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
-		self.connection.send(length + payload)
+		self.socket.send(length + payload)
 
 	def send_grfb(self, brightness):
 		cmd      = 'grfb'
 		payload  = cmd + struct.pack('H', socket.htons(brightness))
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
-		self.connection.send(length + payload)
+		self.socket.send(length + payload)
