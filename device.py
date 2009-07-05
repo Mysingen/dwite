@@ -93,30 +93,37 @@ class Classic(Device):
 			if not self.enough_stress(msg.code, stress):
 				last_tactile = (msg, stress)
 				continue
-			print('ENOUGH')
+#			print('ENOUGH')
 
 			try:
 				if isinstance(msg, TactileEvent):
 					if msg.code == IR.RELEASE:
 						# whatever button was pressed has been released
 						last_tactile = None
-						print('Classic RELEASE')
 						continue
 					
 					if msg.code == IR.UP:
-						self.menu.draw(self.menu.up())
-					elif msg.code == IR.DOWN:
 						self.menu.draw(self.menu.down())
+					elif msg.code == IR.DOWN:
+						self.menu.draw(self.menu.up())
 					elif msg.code == IR.RIGHT:
 						self.menu.draw(self.menu.enter())
 					elif msg.code == IR.LEFT:
 						self.menu.draw(self.menu.leave())
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
+					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
+						self.alive = False
+					else:
+						raise Exception, ('Unhandled code %s'
+						                  % IR.codes_debug[msg.code])
 
 					last_tactile = (msg, stress)
 
-			except Exception, e:
-				traceback.print_tb(sys.exc_info()[2])
-				print e
+			except:
+				info = sys.exc_info()
+				traceback.print_tb(info[2])
+				print info[1]
 				self.alive = False
+
+		print('device is Dead')

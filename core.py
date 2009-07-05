@@ -6,25 +6,31 @@ import struct
 import array
 import time
 import traceback
+import threading
 
 from device  import Classic
 from wire    import Wire, Receiver
 
 def main():
-	wire     = Wire(port=3483)
-	device   = Classic(wire)
-	receiver = Receiver(wire, device.queue)
+	try:
+		wire     = Wire(port=3483)
+		device   = Classic(wire)
+		receiver = Receiver(wire, device.queue)
+	except: # user pressed CTRL-C before the subsystems could initialize fully?
+		return
 
 	device.start()
 	receiver.start()
 
 	try:
-		while True:
-			time.sleep(0.01)
-	except Exception, e:
-		tb = sys.exc_info()[2]
-		traceback.print_tb(tb)
-		print e
+		while len(threading.enumerate()) > 1:
+			#print threading.enumerate()
+			time.sleep(0.5)
+	except:
+		print('') # print the diagnostic on a clean, new line
+		info = sys.exc_info()
+		traceback.print_tb(info[2])
+		print info[1]
 
 	receiver.stop()
 	device.stop()

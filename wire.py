@@ -30,23 +30,30 @@ class Receiver(Thread):
 		print('Listening')
 		try:
 			while self.alive:
-				if select.select([self.wire.socket],[],[], 0.1) == ([],[],[]):
+				sock = self.wire.socket
+				events = select.select([sock],[],[sock], 0.1)
+				if len(events[2]) > 0:
+					#print('wire EXCEPTIONAL EVENT')
+					break
+				if events == ([],[],[]):
 					# a lack of events is treated as if the user released a button
 					if self.last_ir != None:
-						print 'wire RELEASE'
 						self.last_ir = None
 						self.queue.put(TactileEvent(IR.RELEASE))
-						continue
+					continue
 				data = self.wire.socket.recv(1024)
+				if len(data) < 8:
+					#print('Useless message received. length = %d' % len(data))
+					break
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
 #				print '\n%s %d %d' % (data[0:4], dlen, len(data))
 				self.handle(data, dlen)
-		except Exception, msg:
-			tb = sys.exc_info()[2]
-			traceback.print_tb(tb)
-			print msg
-		print 'Deaf & Dead'
+		except:
+			info = sys.exc_info()
+			traceback.print_tb(info[2])
+			print info[1]
+		print 'wire is Deaf & Dead'
 
 	def stop(self):
 		self.alive = False
@@ -147,9 +154,9 @@ class Receiver(Thread):
 		if self.last_ir and self.last_ir[0] == code:
 			# the same key is kept pressed. don't send a new event.
 			stress = self.last_ir[2] + 1
-			print('wire stress %s %d' % (IR.codes_debug[code], stress))
+			#print('wire stress %s %d' % (IR.codes_debug[code], stress))
 		else:
-			print('wire put %s' % IR.codes_debug[code])
+			#print('wire put %s' % IR.codes_debug[code])
 			self.queue.put(TactileEvent(code))
 		# either way track what happened.
 		self.last_ir = (code, now, stress)
@@ -172,9 +179,6 @@ class Wire:
 		self.socket.listen(1)
 		self.socket, address = self.socket.accept()
 		print('Connected')
-
-	def close(self):
-		self.socket.close() # this will cause self.listener to terminate
 
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
