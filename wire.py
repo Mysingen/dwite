@@ -262,18 +262,18 @@ class Wire:
 		length  = struct.pack('H', socket.htons(len(payload)))
 		self.socket.send(length + payload)
 
-	# 'old' is a tuple of integers: (0..128, 0..128)
-	# 'new' is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
-	def send_audg(self, old, dvc, preamp, new):
+	# channels is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
+	# dvc (digital volume control?) is boolean
+	# preamp must fit in a uint8
+	def send_audg(self, dvc, preamp, channels):
 		cmd     = 'audg'
-		old_l   = struct.pack('L',  socket.htons(old[0]))
-		old_r   = struct.pack('L',  socket.htons(old[1]))
-		new_l   = struct.pack('HH', socket.htons(new[0][0]),
-		                            socket.htons(new[0][1]))
-		new_r   = struct.pack('HH', socket.htons(new[1][0]),
-		                            socket.htons(new[1][0]))
+		old     = struct.pack('LL', 0, 0)
+		new_l   = struct.pack('HH', socket.htons(channels[0][0]),
+		                            socket.htons(channels[0][1]))
+		new_r   = struct.pack('HH', socket.htons(channels[1][0]),
+		                            socket.htons(channels[1][0]))
 		dvc     = struct.pack('B',  dvc)
 		preamp  = struct.pack('B',  preamp)
-		payload = cmd + old_l + old_r + dvc + preamp + new_l + new_r
+		payload = cmd + old + dvc + preamp + new_l + new_r
 		length  = struct.pack('H', socket.htons(len(payload)))
 		self.socket.send(length + payload)

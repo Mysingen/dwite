@@ -200,24 +200,23 @@ class Player:
 		return (channel[0], channel[1] - decrement)
 
 	def volume_up(self):
-		l = self.increase_volume(self.volume_l, 3000)
-		r = self.increase_volume(self.volume_r, 3000)
+		l = self.increase_volume(self.volume_l, 2500)
+		r = self.increase_volume(self.volume_r, 2500)
 		if l[0] > 5 or r[0] > 5:
 			return
 		self.volume_l = l
 		self.volume_r = r
-		print self.volume_l
-		self.wire.send_audg((0,0), False, 0, (self.volume_l, self.volume_r))
+		self.wire.send_audg(True, 0, (self.volume_l, self.volume_r))
 
 	def volume_down(self):
-		l = self.decrease_volume(self.volume_l, 6000)
-		r = self.decrease_volume(self.volume_r, 6000)
+		l = self.decrease_volume(self.volume_l, 4000)
+		r = self.decrease_volume(self.volume_r, 4000)
 		if l[0] < 0 or r[0] < 0:
-			return
+			l = (0,0)
+			r = (0,0)
 		self.volume_l = l
 		self.volume_r = r
-		print self.volume_l
-		self.wire.send_audg((0,0), False, 0, (self.volume_l, self.volume_r))
+		self.wire.send_audg(True, 0, (self.volume_l, self.volume_r))
 	
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
