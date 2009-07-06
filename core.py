@@ -17,6 +17,9 @@ def main():
 		device   = Classic(wire)
 		receiver = Receiver(wire, device.queue)
 	except: # user pressed CTRL-C before the subsystems could initialize fully?
+		info = sys.exc_info()
+		traceback.print_tb(info[2])
+		print info[1]
 		return
 
 	device.start()
@@ -27,7 +30,6 @@ def main():
 			#print threading.enumerate()
 			time.sleep(0.5)
 	except:
-		print('') # print the diagnostic on a clean, new line
 		info = sys.exc_info()
 		traceback.print_tb(info[2])
 		print info[1]

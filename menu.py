@@ -31,12 +31,15 @@ class Tree:
 		return self.render.tick(canvas)
 
 class FileTree(Tree):
-	path   = None
+	path = None
 
 	def __init__(self, label, parent, path):
 		Tree.__init__(self, label, parent)
 		self.path = path
 		render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
+
+	def play(self, player):
+		return player.play_file(self.path)
 
 class DirTree(FileTree):
 	children = []
@@ -120,6 +123,16 @@ class Menu:
 			self.current = self.current + 1
 			return TRANSITION.SCROLL_UP
 		return TRANSITION.BOUNCE_UP
+
+	def play(self, player):
+		try:
+			if self.cwd.children[self.current].play(player):
+				# should temporarily replace the child with a PlayingTree object
+				# that renders progress bars and stuff.
+				return TRANSITION.NONE
+		except:
+			pass # no play() method or some other trouble.
+		return TRANSITION.BOUNCE_LEFT
 
 	def draw(self, transition):
 		if self.cwd.children[self.current].draw(self.display.canvas):

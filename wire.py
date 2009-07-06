@@ -47,7 +47,7 @@ class Receiver(Thread):
 					break
 				dlen = struct.unpack('L', data[4:8])
 				dlen = socket.ntohl(dlen[0])
-#				print '\n%s %d %d' % (data[0:4], dlen, len(data))
+				#print '\n%s %d %d' % (data[0:4], dlen, len(data))
 				self.handle(data, dlen)
 		except:
 			info = sys.exc_info()
@@ -72,6 +72,10 @@ class Receiver(Thread):
 
 		if data[0:4] == 'BYE!':
 			self.handle_bye(data[8:])
+			return
+		
+		if data[0:4] == 'STAT':
+			self.handle_stat(data[8:], dlen)
 			return
 
 		print 'unknown message'
@@ -161,6 +165,47 @@ class Receiver(Thread):
 		# either way track what happened.
 		self.last_ir = (code, now, stress)
 
+	def handle_stat(self, data, dlen):
+		print('len = %d/%d' % (dlen, len(data)))
+
+		event    = data[0:4]
+		crlfs    = struct.unpack('B', data[4])[0]
+		mas_init = data[5]
+		mas_mode = struct.unpack('B', data[6:7])[0]
+		in_size  = struct.unpack('L', data[7:11])[0]
+		in_fill  = struct.unpack('L', data[11:15])[0]
+		received = struct.unpack('Q', data[15:23])[0]
+		wifi_pow = struct.unpack('H', data[23:25])[0]
+		jiffies  = struct.unpack('L', data[25:29])[0]
+		out_size = struct.unpack('L', data[29:33])[0]
+		out_fill = struct.unpack('L', data[33:37])[0]
+		seconds  = struct.unpack('L', data[37:41])[0]
+		voltage  = struct.unpack('H', data[41:43])[0]
+		msecs    = struct.unpack('L', data[43:47])[0]
+		stamp    = struct.unpack('L', data[47:51])[0]
+
+#		error    = struct.unpack('H', data[51:53])[0]
+		
+		print('Event    = %s' % event)
+		print('CRLFs    = %d' % crlfs)
+		print('MAS init = %c' % mas_init)
+		print('MAS mode = %d' % mas_mode)
+		print('In buff  = %d' % in_size)
+		print('In fill  = %d' % in_fill)
+		print('Received = %d' % received)
+		if wifi_pow <= 100:
+			print('WiFi pow = %d' % wifi_pow)
+		else:
+			print('Connection = Wired')
+		print('Jiffies  = %d' % jiffies)
+		print('Out buff = %d' % out_size)
+		print('Out fill = %d' % out_fill)
+		print('Elapsed  = %d.%d' % (seconds, msecs))
+		print('Voltage  = %d' % voltage)
+		print('Stamp    = %d' % stamp)
+#		print('Error    = %d' % error)
+		
+
 class Wire:
 	socket = None
 
@@ -174,11 +219,11 @@ class Wire:
 				break
 			except socket.error, msg:
 				pass
-		print('Accepting')
+		print('Accepting on %d' % port)
 
 		self.socket.listen(1)
 		self.socket, address = self.socket.accept()
-		print('Connected')
+		print('Connected on %d' % port)
 
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
@@ -194,4 +239,10 @@ class Wire:
 		payload  = cmd + struct.pack('H', socket.htons(brightness))
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
+		self.socket.send(length + payload)
+
+	def send_strm(self, parameters):
+		cmd     = 'strm'
+		payload = cmd + parameters
+		length = struct.pack('H', socket.htons(len(payload)))
 		self.socket.send(length + payload)

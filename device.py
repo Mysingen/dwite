@@ -1,14 +1,13 @@
 import traceback
 import sys
 
-import tactile
-
 from threading import Thread
 from Queue     import Queue
 
 from display   import Display
 from tactile   import IR, TactileEvent
 from menu      import Menu
+from player    import Player
 
 class Device(Thread):
 	volume  = (0,0) # don't know yet what to put here
@@ -47,25 +46,28 @@ def init_acceleration_maps():
 class Classic(Device):
 	display      = None
 	menu         = None
-	acceleration = None # hash: different messages need different acceleration
+	acceleration = None # dict: different messages need different acceleration
 	                    # maps so keep a mapping from message codes to arrays of
 		                # stress levels. mostly (only?) used for tactile events.
+	player       = None
 
 	def __init__(self, wire):
 		Device.__init__(self, wire)
 		self.display      = Display((320,32), self.wire)
 		self.menu         = Menu(self.display)
 		self.acceleration = init_acceleration_maps()
+		self.player       = Player(self.wire)
 
 	def enough_stress(self, code, stress):
+		if stress == 0:
+			return True # special case to catch all untracked codes
 		if code in self.acceleration:
 			# return true if the stress level is in the acceleration array for
 			# the given code, or if the stress level is off the chart.
 			if (stress in self.acceleration[code]
 			or  stress > self.acceleration[code][-1]):
 				return True
-			return False
-		return True # always return True for untracked codes
+		return False
 
 	def run(self):
 		last_tactile = None # tuple: (msg, stress)
@@ -92,7 +94,6 @@ class Classic(Device):
 			if not self.enough_stress(msg.code, stress):
 				last_tactile = (msg, stress)
 				continue
-#			print('ENOUGH')
 
 			try:
 				if isinstance(msg, TactileEvent):
@@ -111,6 +112,8 @@ class Classic(Device):
 						self.menu.draw(self.menu.leave())
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
+					elif msg.code == IR.PLAY:
+						self.menu.draw(self.menu.play(self.player))
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
 						self.alive = False
 					else:
@@ -125,4 +128,5 @@ class Classic(Device):
 				print info[1]
 				self.alive = False
 
+		self.player.stop()
 		print('device is Dead')
