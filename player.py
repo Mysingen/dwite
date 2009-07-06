@@ -172,12 +172,14 @@ class MP3_Decoder(Decoder):
 		return self.file.read(4096)
 
 class Player:
+	mac_addr = None # used when telling the device how to present itself
 	streamer = None
 	wire     = None
 	volume_l = (0,0) # 16bit.16bit expressed as uints
 	volume_r = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	
-	def __init__(self, wire):
+	def __init__(self, wire, mac_addr):
+		self.mac_addr = mac_addr
 		self.wire     = wire
 		self.streamer = Streamer(port=3484)
 		self.streamer.start()

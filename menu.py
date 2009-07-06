@@ -84,15 +84,6 @@ class Menu:
 		self.cwd.ls()
 		self.draw(TRANSITION.NONE)
 	
-	def __str__(self):
-		return str(self.cwd.children[self.current])
-	
-	def dump(self):
-		print self.cwd
-		print self.current
-		for f in self.cwd:
-			print '\t' + str(f)
-	
 	def enter(self):
 		try:
 			self.cwd.children[self.current].ls()

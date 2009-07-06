@@ -8,7 +8,8 @@ import time
 from threading import Thread
 from datetime  import datetime
 
-from tactile import IR, TactileEvent
+from tactile  import IR, TactileEvent
+from protocol import ID, HeloEvent
 
 class Receiver(Thread):
 	wire    = None
@@ -88,11 +89,11 @@ class Receiver(Thread):
 		mac_addr = tuple(struct.unpack('B', c)[0] for c in data[2:8])
 
 		if revision != 2:
-			uuid = '%s' % struct.unpack('B', data[8:24])
+			uuid = struct.unpack('16B', data[8:24])
 			data = data[24:]
 			len  = len - 16
 		else:
-			uuid = '-1'
+			uuid = [-1]
 			data = data[8:]
 
 		if len >= 10:
@@ -101,38 +102,31 @@ class Receiver(Thread):
 			wlan_chn = -1
 
 		if len >= 18:
-			byt_recv_hi = socket.ntohl(struct.unpack('L', data[2:6])[0])
-			byt_recv_lo = socket.ntohl(struct.unpack('L', data[6:10])[0])
+			recv_hi = socket.ntohl(struct.unpack('L', data[2:6])[0])
+			recv_lo = socket.ntohl(struct.unpack('L', data[6:10])[0])
 		else:
-			byt_recv = -1
-	
+			recv_hi = 0
+			recv_lo = 0
+
 		if len >= 20:
 			language = '%s' % data[10:12]
 		else:
 			language = 'None'
-		
-		device_ids = {
-			2:'SqueezeBox',
-			3:'SoftSqueeze',
-			4:'SqueezeBox 2',
-			5:'Transporter',
-			6:'SoftSqueeze 3',
-			7:'Receiver',
-			8:'SqueezeSlave',
-			9:'Controller'
-		}
-		
-		if id in device_ids:
-			print 'ID       %s' % device_ids[id]
-		else:
-			print 'ID       %d undefined' % id
-	
-		print 'Revision     %d' % revision
-		print 'MAC address  %2x:%2x:%2x:%2x:%2x:%2x' % mac_addr
-		print 'uuid         %s' % uuid
-		print 'WLAN channel %s' % wlan_chn
-		print 'Bytes RX     %s' % byt_recv
-		print 'Language     %s' % language
+
+		# pretty silly if you ask me. why not just cook a new device number?
+		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
+			id = ID.SQUEEZEBOX3
+
+		if id not in ID.debug:
+			print('Received HELO from unknown device ID %d' % id)
+			return
+
+		mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
+		uuid     = ''.join([str(i) for i in uuid])
+
+		event = HeloEvent(id, revision, mac_addr, uuid, language)
+		#print('Put %s on queue' % str(event))
+		self.queue.put(event)
 
 	def handle_bye(self, data):
 		reason = struct.unpack('B', data[0])
@@ -160,7 +154,7 @@ class Receiver(Thread):
 		if self.last_ir and self.last_ir[0] == code:
 			# the same key is kept pressed. don't send a new event.
 			stress = self.last_ir[2] + 1
-			#print('wire stress %s %d' % (IR.codes_debug[code], stress))
+			print('wire stress %s %d' % (IR.codes_debug[code], stress))
 		else:
 			#print('wire put %s' % IR.codes_debug[code])
 			self.queue.put(TactileEvent(code))
@@ -215,13 +209,12 @@ class Wire:
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 		print('Waiting for port %d to become available. No timeout' % port)
-		while 1:
+		while True:
 			try:
 				self.socket.bind(('', port))
 				break
-			except socket.error, msg:
-				time.sleep(0.1) # avoid spending 99% CPU time
-				pass
+			except:
+				time.sleep(0.2) # avoid spending 99% CPU time
 		print('Accepting on %d' % port)
 
 		self.socket.listen(1)

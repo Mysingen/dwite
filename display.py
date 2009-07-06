@@ -15,7 +15,7 @@ class BRIGHTNESS:
 # no instantiation of TRANSITION is needed since it only carries contstants that
 # share a name space.
 class TRANSITION:
-	NONE         = ' '
+	NONE         = 'c'
 	SCROLL_UP    = 'd'
 	SCROLL_DOWN  = 'u'
 	SCROLL_LEFT  = 'r'

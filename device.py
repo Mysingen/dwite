@@ -15,15 +15,15 @@ class Device(Thread):
 	alive   = True  # controls the main loop
 	wire    = None  # must have a wire to send actual commands to the device
 
-	def __new__(cls, wire):
+	def __new__(cls, wire, queue):
 		object = super(Device, cls).__new__(cls, None, Device.run, 'Device', (),{})
-		Device.__init__(object, wire)
+		Device.__init__(object, wire, queue)
 		return object
 
-	def __init__(self, wire):
+	def __init__(self, wire, queue):
 		Thread.__init__(self)
 		self.wire  = wire
-		self.queue = Queue(100)
+		self.queue = queue
 
 	def run(self):
 		raise Excepion, 'Device subclasses must implement run()'
@@ -53,12 +53,17 @@ class Classic(Device):
 		                # stress levels. mostly (only?) used for tactile events.
 	player       = None
 
-	def __init__(self, wire):
-		Device.__init__(self, wire)
+	def __new__(cls, wire, queue, mac_addr):
+		object = Device.__new__(cls, wire, queue)
+		Classic.__init__(object, wire, queue, mac_addr)
+		return object
+
+	def __init__(self, wire, queue, mac_addr):
+#		Device.__init__(self, wire, queue)
 		self.display      = Display((320,32), self.wire)
 		self.menu         = Menu(self.display)
 		self.acceleration = init_acceleration_maps()
-		self.player       = Player(self.wire)
+		self.player       = Player(self.wire, mac_addr)
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -80,7 +85,7 @@ class Classic(Device):
 
 			try:
 				# regrettably, the timeout value is hand tuned...
-				msg = self.queue.get(block=True, timeout=0.03)
+				msg = self.queue.get(block=True, timeout=0.1)
 			except Exception, e:
 				# no message in the queue. tick the current menu render
 				self.menu.tick()
