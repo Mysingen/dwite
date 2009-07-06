@@ -35,11 +35,13 @@ def init_acceleration_maps():
 	maps    = {}
 	default = [0,7,14,21,28,35,42,47,52,57,62,67,72,77,80,83,86,89,92,95,98]
 
-	maps[IR.UP]         = default
-	maps[IR.DOWN]       = default
-	maps[IR.LEFT]       = default
-	maps[IR.RIGHT]      = default
-	maps[IR.BRIGHTNESS] = [0,10,20,30,40,50,60,70,75,80,85,90,95,100,105,110,115]
+	maps[IR.UP]          = default
+	maps[IR.DOWN]        = default
+	maps[IR.LEFT]        = default
+	maps[IR.RIGHT]       = default
+	maps[IR.BRIGHTNESS]  = [0,10,20,30,40,50,60,70,75,80,85,90,95,100,105,110,115]
+	maps[IR.VOLUME_UP]   = default
+	maps[IR.VOLUME_DOWN] = default
 
 	return maps
 
@@ -114,6 +116,10 @@ class Classic(Device):
 						self.display.next_brightness()
 					elif msg.code == IR.PLAY:
 						self.menu.draw(self.menu.play(self.player))
+					elif msg.code == IR.VOLUME_UP:
+						self.player.volume_up()
+					elif msg.code == IR.VOLUME_DOWN:
+						self.player.volume_down()
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
 						self.alive = False
 					else:
@@ -128,5 +134,5 @@ class Classic(Device):
 				print info[1]
 				self.alive = False
 
-		self.player.stop()
+		self.player.close()
 		print('device is Dead')

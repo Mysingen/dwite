@@ -52,7 +52,7 @@ class Streamer(Thread):
 			except:
 				pass
 
-	def feed(decoder):
+	def feed(self, decoder):
 		self.decoder = decoder
 
 	def run(self):
@@ -67,18 +67,19 @@ class Streamer(Thread):
 			if events == ([],[],[]):
 				continue
 			if len(events[0]) > 0:
-				print('reading')
 				data = self.socket.recv(1024)
 				print data
 				continue
 			if len(events[1]) > 0:
-				print('writing')
 				if left == 0:
 					data = self.decoder.read()
 					left = len(data)
 				try:
-					left = left - self.socket.write(data)
+					left = left - self.socket.send(data)
 				except:
+					info = sys.exc_info()
+					traceback.print_tb(info[2])
+					print(info[1])
 					pass # try again. if the user gives up, 'alive' will go False.
 		print('streamer is dead')
 
@@ -100,7 +101,7 @@ class StreamCommand:
 	in_threshold = struct.pack('B', 10) # KBytes of input data to buffer before
 	                    # autostarting and/or notifying the server of buffer
 	                    # status
-	spdif        = struct.pack('B', 0) # 0=auto, 1=enable, 2=disable
+	spdif        = struct.pack('B', 1) # 0=auto, 1=enable, 2=disable
 	fade_time    = struct.pack('B', 0) # seconds to spend on fading between songs
 	fade_type    = '0'  # '0'=none, '1'=cross, '2'=in, '3'=out, '4'=in&out
 	flags        = struct.pack('B', 0) # uint8:
@@ -111,7 +112,7 @@ class StreamCommand:
 	out_threshold = struct.pack('B', 1) # 0.1 seconds of decoded audio to buffer
 	                    # before starting playback.
 	reserved      = struct.pack('B', 0)
-	gain          = struct.pack('L', socket.htons(0)) # playback gain in 16.16
+	gain          = struct.pack('HH', 0, 0) # playback gain in 16.16 fixed point
 	                    # fixed point. 0=none
 	server_port   = struct.pack('H', socket.htons(3484)) # where to get the data
 	                    # stream (server port number)
@@ -149,7 +150,7 @@ class Decoder:
 	file = None
 
 	def open(self, path):
-		self.file = file.open(path, 'rb')
+		self.file = open(path, 'rb')
 
 	# translate time (floating point seconds) to an offset into the file and let
 	# further read()'s continue from there.
@@ -157,6 +158,10 @@ class Decoder:
 		raise Exception, 'Your decoder must implement seek()'
 
 class MP3_Decoder(Decoder):
+
+	def __init__(self, path):
+		self.open(path)
+
 	def time_to_offset(self, time):
 		return 0
 
@@ -169,14 +174,50 @@ class MP3_Decoder(Decoder):
 class Player:
 	streamer = None
 	wire     = None
+	volume_l = (0,0) # 16bit.16bit expressed as uints
+	volume_r = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	
 	def __init__(self, wire):
 		self.wire     = wire
 		self.streamer = Streamer(port=3484)
 		self.streamer.start()
+		self.mute(False, False)
 	
-	def stop(self):
+	def close(self):
 		self.streamer.stop()
+
+	def mute(self, analog, digital):
+		self.wire.send_aude(not analog, not digital) # not mute == enable
+
+	def increase_volume(self, channel, increment):
+		if channel[1] + increment > 65535:
+			return (channel[0] + 1, (channel[1] + increment) - 65535)
+		return (channel[0], channel[1] + increment)
+
+	def decrease_volume(self, channel, decrement):
+		if channel[1] - decrement < 0:
+			return (channel[0] - 1, 65535 + (channel[1] - decrement))
+		return (channel[0], channel[1] - decrement)
+
+	def volume_up(self):
+		l = self.increase_volume(self.volume_l, 3000)
+		r = self.increase_volume(self.volume_r, 3000)
+		if l[0] > 5 or r[0] > 5:
+			return
+		self.volume_l = l
+		self.volume_r = r
+		print self.volume_l
+		self.wire.send_audg((0,0), False, 0, (self.volume_l, self.volume_r))
+
+	def volume_down(self):
+		l = self.decrease_volume(self.volume_l, 6000)
+		r = self.decrease_volume(self.volume_r, 6000)
+		if l[0] < 0 or r[0] < 0:
+			return
+		self.volume_l = l
+		self.volume_r = r
+		print self.volume_l
+		self.wire.send_audg((0,0), False, 0, (self.volume_l, self.volume_r))
 	
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
@@ -190,12 +231,15 @@ class Player:
 		try:
 			audio = MP3(path)
 			print(audio.info.pprint())
+			self.streamer.feed(MP3_Decoder(path))
 			strm = StreamCommand()
 			strm.command      = 's'
 			strm.autostart    = '1'
 			strm.format       = 'm'
 			strm.in_threshold = struct.pack('B', self.get_in_threshold(path))
 			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % '00:19:e3:07:e5:cb'
+			if len(strm.http_get) % 2 != 0:
+				strm.http_get = strm.http_get + '\n' # SqueezeCenter does, but why?
 			self.wire.send_strm(strm.serialize())
 			return True
 		except:

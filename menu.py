@@ -1,5 +1,7 @@
 import os
 import os.path
+import traceback
+import sys
 
 from render  import TextRender
 from display import TRANSITION
@@ -132,6 +134,10 @@ class Menu:
 				return TRANSITION.NONE
 		except:
 			pass # no play() method or some other trouble.
+			info = sys.exc_info()
+			traceback.print_tb(info[2])
+			print info[1]
+
 		return TRANSITION.BOUNCE_LEFT
 
 	def draw(self, transition):
