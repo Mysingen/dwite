@@ -96,12 +96,13 @@ class Receiver(Thread):
 			data = data[8:]
 
 		if len >= 10:
-			wlan_chn = struct.unpack('H', data[0:2])[0]
+			wlan_chn = socket.ntohs(struct.unpack('H', data[0:2])[0])
 		else:
 			wlan_chn = -1
 
 		if len >= 18:
-			byt_recv = struct.unpack('Q', data[2:10])[0]
+			byt_recv_hi = socket.ntohl(struct.unpack('L', data[2:6])[0])
+			byt_recv_lo = socket.ntohl(struct.unpack('L', data[6:10])[0])
 		else:
 			byt_recv = -1
 	
@@ -140,10 +141,10 @@ class Receiver(Thread):
 		self.alive = False
 
 	def handle_ir(self, data):
-		stamp   = struct.unpack('L', data[0:4])[0]
+		stamp   = socket.ntohl(struct.unpack('L', data[0:4])[0])
 		format  = struct.unpack('B', data[4:5])[0]
 		nr_bits = struct.unpack('B', data[5:6])[0]
-		code    = struct.unpack('L', data[6:10])[0]
+		code    = socket.ntohl(struct.unpack('L', data[6:10])[0])
 		
 		if code not in IR.codes_debug:
 			print 'stamp   %d' % stamp
@@ -151,7 +152,7 @@ class Receiver(Thread):
 			print 'nr bits %d' % nr_bits
 			print 'UNKNOWN ir code %d' % code
 			self.last_ir = None
-			self.queue.put(TactileEvent(IR.RELEASE))
+#			self.queue.put(TactileEvent(IR.RELEASE))
 			return
 
 		now = datetime.now()
@@ -167,25 +168,24 @@ class Receiver(Thread):
 		self.last_ir = (code, now, stress)
 
 	def handle_stat(self, data, dlen):
-		return
 		print('len = %d/%d' % (dlen, len(data)))
 
 		event    = data[0:4]
 		crlfs    = struct.unpack('B', data[4])[0]
 		mas_init = data[5]
 		mas_mode = struct.unpack('B', data[6:7])[0]
-		in_size  = struct.unpack('L', data[7:11])[0]
-		in_fill  = struct.unpack('L', data[11:15])[0]
-		received = struct.unpack('Q', data[15:23])[0]
-		wifi_pow = struct.unpack('H', data[23:25])[0]
-		jiffies  = struct.unpack('L', data[25:29])[0]
-		out_size = struct.unpack('L', data[29:33])[0]
-		out_fill = struct.unpack('L', data[33:37])[0]
-		seconds  = struct.unpack('L', data[37:41])[0]
-		voltage  = struct.unpack('H', data[41:43])[0]
-		msecs    = struct.unpack('L', data[43:47])[0]
-		stamp    = struct.unpack('L', data[47:51])[0]
-
+		in_size  = socket.ntohl(struct.unpack('L', data[ 7:11])[0])
+		in_fill  = socket.ntohl(struct.unpack('L', data[11:15])[0])
+		recv_hi  = socket.ntohl(struct.unpack('L', data[15:19])[0])
+		recv_lo  = socket.ntohl(struct.unpack('L', data[19:23])[0])
+		wifi_pow = socket.ntohs(struct.unpack('H', data[23:25])[0])
+		jiffies  = socket.ntohl(struct.unpack('L', data[25:29])[0])
+		out_size = socket.ntohl(struct.unpack('L', data[29:33])[0])
+		out_fill = socket.ntohl(struct.unpack('L', data[33:37])[0])
+		seconds  = socket.ntohl(struct.unpack('L', data[37:41])[0])
+		voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
+		msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
+		stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
 #		error    = struct.unpack('H', data[51:53])[0]
 		
 		print('Event    = %s' % event)
@@ -194,7 +194,7 @@ class Receiver(Thread):
 		print('MAS mode = %d' % mas_mode)
 		print('In buff  = %d' % in_size)
 		print('In fill  = %d' % in_fill)
-		print('Received = %d' % received)
+		print('Received = %d %d' % (recv_hi, recv_lo))
 		if wifi_pow <= 100:
 			print('WiFi pow = %d' % wifi_pow)
 		else:
@@ -220,7 +220,7 @@ class Wire:
 				self.socket.bind(('', port))
 				break
 			except socket.error, msg:
-				time.sleep(0.1)
+				time.sleep(0.1) # avoid spending 99% CPU time
 				pass
 		print('Accepting on %d' % port)
 
@@ -229,7 +229,7 @@ class Wire:
 		print('Connected on %d' % port)
 
 	def close(self):
-		self.socket.shutdown(socket.SHUT_RDWR)
+#		self.socket.shutdown(socket.SHUT_RDWR)
 		self.socket.close()
 
 	def send_grfe(self, bitmap, transition):

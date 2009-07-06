@@ -116,7 +116,7 @@ class StreamCommand:
 	                    # fixed point. 0=none
 	server_port   = struct.pack('H', socket.htons(3484)) # where to get the data
 	                    # stream (server port number)
-	server_ip     = struct.pack('L', socket.htons(0)) # where to get the data
+	server_ip     = struct.pack('L', socket.htonl(0)) # where to get the data
 	                    # stream (server address). zero makes it use the same
 	                    # as the control server
 	http_get      = 'GET /stream.mp3?player=%s HTTP/1.0\n'
