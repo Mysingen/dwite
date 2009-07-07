@@ -31,6 +31,8 @@ class Receiver(Thread):
 	def run(self):
 		print('Listening')
 		try:
+			i = 0
+			data = ''
 			while self.alive:
 				sock = self.wire.socket
 				events = select.select([sock],[],[sock], 0.1)
@@ -42,15 +44,18 @@ class Receiver(Thread):
 					if self.last_ir != None:
 						self.last_ir = None
 						self.queue.put(TactileEvent(IR.RELEASE))
+#					if i % 10 == 0:
+#						self.wire.send_stat()
 					continue
-				data = self.wire.socket.recv(1024)
+				data = data + self.wire.socket.recv(1024)
 				if len(data) < 8:
-					#print('Useless message received. length = %d' % len(data))
+					print('Useless message received. length = %d' % len(data))
 					break
-				dlen = struct.unpack('L', data[4:8])
-				dlen = socket.ntohl(dlen[0])
-				#print '\n%s %d %d' % (data[0:4], dlen, len(data))
-				self.handle(data, dlen)
+				while len(data) >= 8:
+					dlen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+					print '\n%s %d %d' % (data[0:4], dlen, len(data))
+					self.handle(data[:8+dlen], dlen)
+					data = data[8+dlen:]
 		except:
 			info = sys.exc_info()
 			traceback.print_tb(info[2])
@@ -61,8 +66,12 @@ class Receiver(Thread):
 		self.alive = False
 
 	def handle(self, data, dlen):
+
 		if data[0:4] == 'HELO':
-			self.handle_helo(data[8:], dlen)
+			if   dlen == 10:
+				self.handle_helo_10(data[8:], dlen)
+			elif dlen == 36:
+				self.handle_helo_36(data[8:], dlen)
 			return
 
 		if data[0:4] == 'ANIC':
@@ -82,8 +91,62 @@ class Receiver(Thread):
 
 		print 'unknown message'
 		print ['%x' % ord(c) for c in data]
+		sys.exit(1)
 
-	def handle_helo(self, data, len):
+	def handle_helo_10(self, data, dlen):
+		id       = ord(data[0])
+		revision = ord(data[1])
+
+		tmp      = struct.unpack('6BH', data[2:])
+		mac_addr = tuple(tmp[0:6])
+		wlan_chn = socket.ntohs(tmp[6])
+
+		# pretty silly if you ask me. why not just cook a new device number?
+		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
+			id = ID.SQUEEZEBOX3
+		
+		mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
+		
+		print('id       : %s' % ID.debug[id])
+		print('revision : %d' % revision)
+		print('mac addr : %s' % mac_addr)
+		print('wlan chn : %d' % wlan_chn)
+		
+		event = HeloEvent(id, revision, mac_addr, 1234, 'EN')
+		self.queue.put(event)
+		
+
+	def handle_helo_36(self, data, dlen):
+		id       = ord(data[0])
+		revision = ord(data[1])
+
+		tmp      = struct.unpack('6B16BHLL2s', data[2:])
+		mac_addr = tuple(tmp[0:6])
+		uuid     = ''.join(str(i) for i in tmp[6:22])
+		wlan_chn = socket.ntohs(tmp[22])
+		recv_hi  = socket.ntohl(tmp[23])
+		recv_lo  = socket.ntohl(tmp[24])
+		language = tmp[25]
+
+		# pretty silly if you ask me. why not just cook a new device number?
+		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
+			id = ID.SQUEEZEBOX3
+		
+		mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
+		
+		print('id       : %s' % ID.debug[id])
+		print('revision : %d' % revision)
+		print('mac addr : %s' % mac_addr)
+		print('uuid     : %s' % uuid)
+		print('wlan chn : %d' % wlan_chn)
+		print('recv_hi  : %d' % recv_hi)
+		print('recv_lo  : %d' % recv_lo)
+		print('lang     : %s' % language)
+		
+		event = HeloEvent(id, revision, mac_addr, uuid, language)
+		self.queue.put(event)
+
+	def handle_helo_bak(self, data, len):
 		id       = ord(data[0])
 		revision = ord(data[1])
 		mac_addr = tuple(struct.unpack('B', c)[0] for c in data[2:8])
@@ -162,12 +225,10 @@ class Receiver(Thread):
 		self.last_ir = (code, now, stress)
 
 	def handle_stat(self, data, dlen):
-		print('len = %d/%d' % (dlen, len(data)))
-
 		event    = data[0:4]
 		crlfs    = struct.unpack('B', data[4])[0]
-		mas_init = data[5]
-		mas_mode = struct.unpack('B', data[6:7])[0]
+		mas_init = struct.unpack('B', data[5])[0]
+		mas_mode = struct.unpack('B', data[6])[0]
 		in_size  = socket.ntohl(struct.unpack('L', data[ 7:11])[0])
 		in_fill  = socket.ntohl(struct.unpack('L', data[11:15])[0])
 		recv_hi  = socket.ntohl(struct.unpack('L', data[15:19])[0])
@@ -181,10 +242,14 @@ class Receiver(Thread):
 		msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
 		stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
 #		error    = struct.unpack('H', data[51:53])[0]
+
+		tail = None
+		if dlen > 51:
+			tail = struct.unpack('B'*(dlen-51), data[51:])
 		
 		print('Event    = %s' % event)
 		print('CRLFs    = %d' % crlfs)
-		print('MAS init = %c' % mas_init)
+		print('MAS init = %d' % mas_init)
 		print('MAS mode = %d' % mas_mode)
 		print('In buff  = %d' % in_size)
 		print('In fill  = %d' % in_fill)
@@ -200,7 +265,9 @@ class Receiver(Thread):
 		print('Voltage  = %d' % voltage)
 		print('Stamp    = %d' % stamp)
 #		print('Error    = %d' % error)
-		
+
+		if tail:
+			print('Unhandled tail: %s' % str(tail))
 
 class Wire:
 	socket = None

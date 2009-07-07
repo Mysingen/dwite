@@ -65,8 +65,12 @@ class Streamer(Thread):
 				print('streamer EXCEPTIONAL EVENT')
 				break
 			if events == ([],[],[]):
+#				sys.stdout.write('.')
+#				sys.stdout.flush()
 				continue
 			if len(events[0]) > 0:
+#				sys.stdout.write('o')
+#				sys.stdout.flush()
 				data = self.socket.recv(4096)
 				if data.startswith('GET /stream') and len(data) < 4096:
 					self.handle_http_get(data, len(data))
@@ -76,13 +80,18 @@ class Streamer(Thread):
 					                 + 'len=%d\n' % len(data)
 					                 + 'data=%s\n' % data )
 			if len(events[1]) > 0:
+#				sys.stdout.flush()
 				if self.state != STREAMING:
 					print('streamer can write but isn\'t streaming!')
 					time.sleep(0.1)
 					continue
 				if left == 0:
+#					sys.stdout.write('O')
 					data = self.decoder.read()
 					left = len(data)
+				else:
+#					sys.stdout.write('*')
+					pass
 				try:
 					left = left - self.socket.send(data[-left:])
 				except:
@@ -96,8 +105,8 @@ class Streamer(Thread):
 		# device supposedly expects an HTTP response
 		if self.decoder:
 			response = ( 'HTTP/1.0 200 OK\r\n'
-			           + 'X-Time-To-Serve: 00:00:01\r\n'
-			           + 'Content-Type: application/octet-stream\r\n' )
+			           + 'Content-Type: application/octet-stream\r\n'
+			           + '\r\n')
 			self.decoder.salt(response)
 			self.state = STREAMING
 		else:
@@ -176,14 +185,13 @@ class Decoder:
 		self.salt = data
 
 	def read(self):
-		data = ''
 		if self.salt:
 			data = self.salt
 			self.salt = None
 			return data
 		if self.file:
-			data = data + self.file.read(4096)
-		return data
+			return self.file.read(4096)
+		return ''
 
 	# translate time (floating point seconds) to an offset into the file and let
 	# further read()'s continue from there.
@@ -234,11 +242,11 @@ class Player:
 	def volume_up(self):
 		l = self.increase_volume(self.volume_l, 2500)
 		r = self.increase_volume(self.volume_r, 2500)
-		if l[0] > 5 or r[0] > 5:
+		if l[0] > 50000 or r[0] > 50000:
 			return
 		self.volume_l = l
 		self.volume_r = r
-		self.wire.send_audg(True, 0, (self.volume_l, self.volume_r))
+		self.wire.send_audg(False, 128, (self.volume_l, self.volume_r))
 
 	def volume_down(self):
 		l = self.decrease_volume(self.volume_l, 4000)
@@ -248,7 +256,7 @@ class Player:
 			r = (0,0)
 		self.volume_l = l
 		self.volume_r = r
-		self.wire.send_audg(True, 0, (self.volume_l, self.volume_r))
+		self.wire.send_audg(False, 128, (self.volume_l, self.volume_r))
 	
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
