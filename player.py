@@ -4,45 +4,45 @@ import sys
 import os.path
 import struct
 import select
+import time
+import mutagen.mp3
 
 from threading import Thread
 
-from mutagen.mp3 import MP3
-
-#from wire import Streamer
+STOPPED   = 0
+STREAMING = 1
 
 # accepts connections to a socket and then feeds data on that socket.
 class Streamer(Thread):
 	socket  = None
 	decoder = None # a Decoder object
 	alive   = True
+	state   = STOPPED
 	port    = 0    # listening port
 
 	def __new__(cls, port):
-		object = Thread.__new__(cls, None, Streamer.run, 'Streamer', (), {})
+		object = super(Thread, cls).__new__(
+			cls, None, Streamer.run, 'Streamer', (), {})
 		Streamer.__init__(object, port)
 		return object
 
 	def __init__(self, port):
 		Thread.__init__(self)
-		self.port = port
-
-	def accept(self):
-		if self.socket:
-			self.socket.close()
+		self.port   = port
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		print('Waiting for port %d to become available. No timeout' % self.port)
+	def accept(self):
+		print('Streamer waiting for port %d to become available' % self.port)
 		while self.alive:
 			try:
 				self.socket.bind(('', self.port))
 				break
-			except socket.error, msg:
-				pass
+			except:
+				time.sleep(0.2)
 		print('Accepting on %d' % self.port)
 
 		self.socket.listen(1)
-		self.socket.settimeout(0.1)
+		self.socket.settimeout(0.2)
 		while self.alive:
 			try:
 				self.socket, address = self.socket.accept()
@@ -57,31 +57,51 @@ class Streamer(Thread):
 
 	def run(self):
 		self.accept()
-		
+
 		left = 0
 		while self.alive:
 			events = select.select([self.socket],[self.socket],[self.socket], 0.1)
 			if len(events[2]) > 0:
-				print('wire EXCEPTIONAL EVENT')
+				print('streamer EXCEPTIONAL EVENT')
 				break
 			if events == ([],[],[]):
 				continue
 			if len(events[0]) > 0:
-				data = self.socket.recv(1024)
-				print data
-				continue
+				data = self.socket.recv(4096)
+				if data.startswith('GET /stream') and len(data) < 4096:
+					self.handle_http_get(data, len(data))
+					continue
+				else:
+					raise Exception, ( 'streamer got weird stuff to read:\n'
+					                 + 'len=%d\n' % len(data)
+					                 + 'data=%s\n' % data )
 			if len(events[1]) > 0:
+				if self.state != STREAMING:
+					print('streamer can write but isn\'t streaming!')
+					time.sleep(0.1)
+					continue
 				if left == 0:
 					data = self.decoder.read()
 					left = len(data)
 				try:
-					left = left - self.socket.send(data)
+					left = left - self.socket.send(data[-left:])
 				except:
 					info = sys.exc_info()
 					traceback.print_tb(info[2])
 					print(info[1])
 					pass # try again. if the user gives up, 'alive' will go False.
 		print('streamer is dead')
+
+	def handle_http_get(self, data, dlen):
+		# device supposedly expects an HTTP response
+		if self.decoder:
+			response = ( 'HTTP/1.0 200 OK\r\n'
+			           + 'X-Time-To-Serve: 00:00:01\r\n'
+			           + 'Content-Type: application/octet-stream\r\n' )
+			self.decoder.salt(response)
+			self.state = STREAMING
+		else:
+			raise Exception, 'There is no decoder object to salt!'
 
 	def stop(self):
 		self.alive = False
@@ -138,19 +158,32 @@ class StreamCommand:
 		      + self.reserved
 		      + self.gain
 		      + self.server_port
-		      + self.server_ip)
-		if len(tmp) != 24:
-			raise Exception, 'strm command not 24 bytes in lenght'
+		      + self.server_ip
+		      + self.http_get)
 		return tmp
 
 # need an extra layer of protocol handlers that use decoder objects? i.e. to
 # support both files and remote streams.
 
 class Decoder:
+	salt = None
 	file = None
 
 	def open(self, path):
 		self.file = open(path, 'rb')
+
+	def salt(self, data):
+		self.salt = data
+
+	def read(self):
+		data = ''
+		if self.salt:
+			data = self.salt
+			self.salt = None
+			return data
+		if self.file:
+			data = data + self.file.read(4096)
+		return data
 
 	# translate time (floating point seconds) to an offset into the file and let
 	# further read()'s continue from there.
@@ -167,9 +200,6 @@ class MP3_Decoder(Decoder):
 
 	def seek(self, time):
 		self.file.seek(self.offset, time_to_offset(time))
-
-	def read(self):
-		return self.file.read(4096)
 
 class Player:
 	mac_addr = None # used when telling the device how to present itself
@@ -230,7 +260,7 @@ class Player:
 	
 	def play_file(self, path):
 		try:
-			audio = MP3(path)
+			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
 			self.streamer.feed(MP3_Decoder(path))
 			strm = StreamCommand()
@@ -238,9 +268,10 @@ class Player:
 			strm.autostart    = '1'
 			strm.format       = 'm'
 			strm.in_threshold = struct.pack('B', self.get_in_threshold(path))
-			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % '00:19:e3:07:e5:cb'
+			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % self.mac_addr
 			if len(strm.http_get) % 2 != 0:
 				strm.http_get = strm.http_get + '\n' # SqueezeCenter does, but why?
+			print('send_strm')
 			self.wire.send_strm(strm.serialize())
 			return True
 		except:

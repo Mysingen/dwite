@@ -55,7 +55,7 @@ class Receiver(Thread):
 			info = sys.exc_info()
 			traceback.print_tb(info[2])
 			print info[1]
-		print 'wire is Deaf & Dead'
+		print 'receiver is dead'
 
 	def stop(self):
 		self.alive = False
@@ -208,7 +208,7 @@ class Wire:
 	def __init__(self, port):
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		print('Waiting for port %d to become available. No timeout' % port)
+		print('Wire waiting for port %d to become available' % port)
 		while True:
 			try:
 				self.socket.bind(('', port))

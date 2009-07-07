@@ -16,7 +16,8 @@ class Device(Thread):
 	wire    = None  # must have a wire to send actual commands to the device
 
 	def __new__(cls, wire, queue):
-		object = super(Device, cls).__new__(cls, None, Device.run, 'Device', (),{})
+		object = super(Device, cls).__new__(
+			cls, None, Device.run, 'Device', (),{})
 		Device.__init__(object, wire, queue)
 		return object
 
@@ -54,16 +55,16 @@ class Classic(Device):
 	player       = None
 
 	def __new__(cls, wire, queue, mac_addr):
-		object = Device.__new__(cls, wire, queue)
+		object = super(Classic, cls).__new__(cls, wire, queue)
 		Classic.__init__(object, wire, queue, mac_addr)
 		return object
 
 	def __init__(self, wire, queue, mac_addr):
-#		Device.__init__(self, wire, queue)
+		Device.__init__(self, wire, queue)
 		self.display      = Display((320,32), self.wire)
 		self.menu         = Menu(self.display)
 		self.acceleration = init_acceleration_maps()
-		self.player       = Player(self.wire, mac_addr)
+		self.mac_addr     = mac_addr
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -77,6 +78,7 @@ class Classic(Device):
 		return False
 
 	def run(self):
+		self.player  = Player(self.wire, self.mac_addr)
 		last_tactile = None # tuple: (msg, stress)
 
 		while(self.alive):
