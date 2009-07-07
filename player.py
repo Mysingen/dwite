@@ -130,7 +130,7 @@ class StreamCommand:
 	in_threshold = struct.pack('B', 10) # KBytes of input data to buffer before
 	                    # autostarting and/or notifying the server of buffer
 	                    # status
-	spdif        = struct.pack('B', 1) # 0=auto, 1=enable, 2=disable
+	spdif        = struct.pack('B', 2) # 0=auto, 1=enable, 2=disable
 	fade_time    = struct.pack('B', 0) # seconds to spend on fading between songs
 	fade_type    = '0'  # '0'=none, '1'=cross, '2'=in, '3'=out, '4'=in&out
 	flags        = struct.pack('B', 0) # uint8:
@@ -142,7 +142,6 @@ class StreamCommand:
 	                    # before starting playback.
 	reserved      = struct.pack('B', 0)
 	gain          = struct.pack('HH', 0, 0) # playback gain in 16.16 fixed point
-	                    # fixed point. 0=none
 	server_port   = struct.pack('H', socket.htons(3484)) # where to get the data
 	                    # stream (server port number)
 	server_ip     = struct.pack('L', socket.htonl(0)) # where to get the data
@@ -215,10 +214,12 @@ class Player:
 	wire     = None
 	volume_l = (0,0) # 16bit.16bit expressed as uints
 	volume_r = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
+	preamp   = 200
 	
 	def __init__(self, wire, mac_addr):
 		self.mac_addr = mac_addr
 		self.wire     = wire
+		self.stop_playback()
 		self.streamer = Streamer(port=3484)
 		self.streamer.start()
 		self.mute(False, False)
@@ -240,23 +241,27 @@ class Player:
 		return (channel[0], channel[1] - decrement)
 
 	def volume_up(self):
-		l = self.increase_volume(self.volume_l, 2500)
-		r = self.increase_volume(self.volume_r, 2500)
-		if l[0] > 50000 or r[0] > 50000:
-			return
-		self.volume_l = l
-		self.volume_r = r
-		self.wire.send_audg(False, 128, (self.volume_l, self.volume_r))
+# 		l = self.increase_volume(self.volume_l, 2500)
+# 		r = self.increase_volume(self.volume_r, 2500)
+# 		if l[0] > 50000 or r[0] > 50000:
+# 			return
+# 		self.volume_l = l
+# 		self.volume_r = r
+		if self.preamp < 255:
+			self.preamp = self.preamp + 1
+		self.wire.send_audg(False, self.preamp, (self.volume_l, self.volume_r))
 
 	def volume_down(self):
-		l = self.decrease_volume(self.volume_l, 4000)
-		r = self.decrease_volume(self.volume_r, 4000)
-		if l[0] < 0 or r[0] < 0:
-			l = (0,0)
-			r = (0,0)
-		self.volume_l = l
-		self.volume_r = r
-		self.wire.send_audg(False, 128, (self.volume_l, self.volume_r))
+# 		l = self.decrease_volume(self.volume_l, 4000)
+# 		r = self.decrease_volume(self.volume_r, 4000)
+# 		if l[0] < 0 or r[0] < 0:
+# 			l = (0,0)
+# 			r = (0,0)
+# 		self.volume_l = l
+# 		self.volume_r = r
+		if self.preamp > 0:
+			self.preamp = self.preamp - 1
+		self.wire.send_audg(False, self.preamp, (self.volume_l, self.volume_r))
 	
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
@@ -288,3 +293,8 @@ class Player:
 			traceback.print_tb(info[2])
 			print info[1]
 		return False
+
+	def stop_playback(self):
+		strm = StreamCommand()
+		strm.command = 'q'
+		self.wire.send_strm(strm.serialize())

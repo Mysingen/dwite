@@ -89,6 +89,10 @@ class Receiver(Thread):
 			self.handle_stat(data[8:], dlen)
 			return
 
+		if data[0:4] == 'RESP':
+			self.handle_resp(data[8:], dlen)
+			return
+
 		print 'unknown message'
 		print ['%x' % ord(c) for c in data]
 		sys.exit(1)
@@ -114,7 +118,6 @@ class Receiver(Thread):
 		
 		event = HeloEvent(id, revision, mac_addr, 1234, 'EN')
 		self.queue.put(event)
-		
 
 	def handle_helo_36(self, data, dlen):
 		id       = ord(data[0])
@@ -268,6 +271,12 @@ class Receiver(Thread):
 
 		if tail:
 			print('Unhandled tail: %s' % str(tail))
+
+	def handle_resp(self, data, dlen):
+		# data is always an HTTP header. In fact the very same one we sent
+		# on the streaming socket, unless the device is streaming from some
+		# other source. simply discard the data for now.
+		pass
 
 class Wire:
 	socket = None
