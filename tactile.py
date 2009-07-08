@@ -1,5 +1,10 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 class IR:
-	RELEASE     = 0 # never sent by device. infer key release events from timings
 	SLEEP       = 1988737095
 	POWER       = 1988706495
 	HARD_POWER  = 63232

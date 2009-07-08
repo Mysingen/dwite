@@ -1,3 +1,9 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 import socket
 import struct
 import select
@@ -271,7 +277,7 @@ class Wire:
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
 		offset   = struct.pack('H', socket.htons(0)) # must be zero. why?
-		distance = struct.pack('B', 32) # 32 is Y-axis. not properly understood
+		distance = struct.pack('B', 32) # 32 is Y-axis. not well understood
 		payload  = cmd + offset + transition + distance + bitmap
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
@@ -302,12 +308,11 @@ class Wire:
 	# dvc (digital volume control?) is boolean
 	# preamp must fit in a uint8
 	def send_audg(self, dvc, preamp, channels, legacy=None):
-		print('AUDG %d %d.%d %d.%d' % (preamp, channels[0][0], channels[0][1], channels[1][0], channels[1][1]))
 		cmd     = 'audg'
 		if legacy:
-			old     = struct.pack('LL', legacy[0],legacy[1])
+			old = struct.pack('LL', legacy[0],legacy[1])
 		else:
-			old     = struct.pack('LL', 0,0)
+			old = struct.pack('LL', 0,0)
 		new_l   = struct.pack('HH', socket.htons(channels[0][0]),
 		                            socket.htons(channels[0][1]))
 		new_r   = struct.pack('HH', socket.htons(channels[1][0]),

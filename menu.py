@@ -1,3 +1,9 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 import os
 import os.path
 import traceback
@@ -124,8 +130,8 @@ class Menu:
 	def play(self, player):
 		try:
 			if self.cwd.children[self.current].play(player):
-				# should temporarily replace the child with a PlayingTree object
-				# that renders progress bars and stuff.
+				# should temporarily replace the child with a NowPlayingTree
+				# object that renders progress bars and stuff.
 				return TRANSITION.NONE
 		except:
 			pass # no play() method or some other trouble.

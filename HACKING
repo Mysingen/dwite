@@ -1,0 +1,118 @@
+Dwite is a library that takes care of interaction with a SqueezeBox of the
+"classic" generation (i.e. SqueezeBox2 is supported, but not SqueezeBox1).
+Note that while Dwite knows how to stream content to a box, it does not
+manage the end user's media library and it doesn't provide a host-side UI for
+the user.
+
+Dwite is written in Python simply because it is such a lovely language. The
+intention is to keep it small enough that it can serve as a reference when
+rewriting in C, if necessary. Such a rewrite would not appear to be needed
+for performance reasons unless you expect it to run well on a 100MHz machine
+of the early 90's or something like that. Then again, that might be exactly
+the point...
+
+Dependencies
+============
+PIL - To render bitmaps from TTF fonts and things like that.
+Mutagen - To extract media file meta data.
+
+The code is not validated against Python 3.0, but I have avoided things that
+I know would break.
+
+Class & module hierarchies
+==========================
+
+core.py
+-------
+Bootstrap for the entire system. Controls whole system liveness.
+
+Wire/Receiver
+-------------
+Some of the oldest code in the program and it shows. These two handle all
+sending and receiving of SlimProto messages over the wire. I will try to
+move protocol matter out and into the protocol.py module. Not sure where
+to put the rest of the stuff since the functionality is needed before a
+Device object can be created.
+
+protocol.py
+-----------
+Just started work on collecting all SlimProt handling in a dedicated module.
+It is obviously very far from done and it needs some careful thinking so that
+it does not have to import any other module in the program. Otherwise there
+will be awkward situations where some other module cannot import it without
+causing an import loop, which Python will reject.
+
+Device
+------
+The topmost container that holds all state pertaining to a physical device.
+Some state is left out and must be specified in subclasses. There is, for
+instance, no "display" member because some models don't have one. A Device
+is essentially the main loop of the program. The stuff that goes on in core
+is just a bootstrap to get everything up and running.
+
+Classic(Device)
+---------------
+Subclass of Device that handles the "classic" model, including the "SB2" and
+"SB3" models previously sold by SlimDevices.
+
+tactile.py
+----------
+IR code definitions and an event class to pass the codes around between the
+various work threads in the program. I chose to not create a "Remote" class
+because e.g. the Trasporter has a bunch of buttons on the device itself and
+those will eventually be mapped up in here as well.
+
+Display
+-------
+A container class that represents the box's display. It knows how to send
+bitmaps to a physical display and handles intrinsics such as brightness and
+transition styles (i.e. scroll and bump). Visualization control will go in
+here at some point. Graphics that require host-side rendering don't belong
+in this class.
+
+Menu
+----
+Uses a set of classes that represent various kinds of tree nodes. The topmost
+tree class just contains a label (to show on a Display) and a reference
+"upwards" to a parent node.
+
+Subclasses of the Tree class are used to represent file system directories,
+info about media files, screen savers and all kinds of stuff. Container
+classes must implement the ls() method.
+
+Given a bunch of container and leaf nodes, the Menu can browse the content by
+entering & leaving containers, et.c. The currently displayed entry is tracked
+with an index against the containers array of children. When a container is
+left, the label of the container is searched for in the parent node to find
+the new index value.
+
+Tree nodes are expected to know which render object to use when visualizing
+themselves.
+
+The most important class member is perhaps tick(), which has to be called
+periodically to drive any render pipelines that Menu nodes have set up.
+
+Canvas
+------
+Uses PIL classes to draw and manipulate bitmaps that can be sent to a device.
+Its primary purpose is to transform bitmaps to draw correctly on screeen. At
+some point it may be interesting to create abstractions for image compositing
+in here as well.
+
+Render
+------
+Timekeeping Canvas user. Must be subclassed. All subclasses must implement
+the tick() method. tick() must be called periodically while the render is
+active. Look at the TextRender subclass for a reasonably simple example (it
+automatically scrolls strings that are too long to fit on the Canvas).
+
+Player/Decoder/Streamer
+-----------------------
+Player uses various Decoder objects to feed Streamer with data to send over
+the data connection to a device. It also sends SlimProt messages on the
+control connection to put manipulat the device state. Some things should be
+left in here (volume control and other state manipulation) while much of the
+data streaming stuff should perhaps be removed entirely and put in a wholly
+separate content manager system. That would require an RPC mechanism between
+the device and content managers and is currently under consideration. Let the
+mess stick around for a while longer.

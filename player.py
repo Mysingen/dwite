@@ -1,3 +1,9 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 import socket
 import traceback
 import sys
@@ -60,7 +66,8 @@ class Streamer(Thread):
 
 		left = 0
 		while self.alive:
-			events = select.select([self.socket],[self.socket],[self.socket], 0.1)
+			events = select.select(
+				[self.socket],[self.socket],[self.socket], 0.1)
 			if len(events[2]) > 0:
 				print('streamer EXCEPTIONAL EVENT')
 				break
@@ -98,7 +105,7 @@ class Streamer(Thread):
 					info = sys.exc_info()
 					traceback.print_tb(info[2])
 					print(info[1])
-					pass # try again. if the user gives up, 'alive' will go False.
+					pass # try again. if user gives up, 'alive' goes False
 		print('streamer is dead')
 
 	def handle_http_get(self, data, dlen):
@@ -269,7 +276,7 @@ class Player:
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
 		if size < 10*1024:
-			tmp = size / 1024 # size is a natural number, so the result is too
+			tmp = size / 1024 # 'size' is a natural number; the result is too
 			if tmp > 0:
 				return tmp - 1
 		return 10 # I'm just guessing

@@ -1,10 +1,17 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 from canvas import Canvas
 
-# no intanciation of BRIGHTNESS is needed since it only carries constants that
-# share a name space.
+# no intantiation of BRIGHTNESS is needed since it only carries constants
+# that share a name space.
 class BRIGHTNESS:
 	# syntactic sugar for the valid indeces into the brightness map. the map
-	# holds the actual hardware codes that a Display instance knows how to treat.
+	# holds the actual hardware codes that a Display instance knows how to
+	# treat.
 	OFF   = 0
 	ONE   = 1
 	TWO   = 2
@@ -12,8 +19,8 @@ class BRIGHTNESS:
 	FULL  = 4
 	map   = [65535, 0, 1, 3, 4]
 
-# no instantiation of TRANSITION is needed since it only carries contstants that
-# share a name space.
+# no instantiation of TRANSITION is needed since it only carries contstants
+# that share a name space.
 class TRANSITION:
 	NONE         = 'c'
 	SCROLL_UP    = 'd'
@@ -26,7 +33,6 @@ class TRANSITION:
 	BOUNCE_RIGHT = 'L'
 
 class Display:
-	# class members
 	wire       = None
 	brightness = BRIGHTNESS.FULL
 	

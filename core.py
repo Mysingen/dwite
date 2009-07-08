@@ -1,4 +1,8 @@
-#!/usr/local/bin/python
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
 
 import socket
 import sys
@@ -19,7 +23,7 @@ def main():
 		queue    = Queue(100)
 		wire     = Wire(port=3483)
 		receiver = Receiver(wire, queue)
-	except: # user pressed CTRL-C before the subsystems could initialize fully?
+	except: # user pressed CTRL-C before the subsystems could initialize?
 		info = sys.exc_info()
 		traceback.print_tb(info[2])
 		print info[1]

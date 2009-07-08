@@ -1,3 +1,9 @@
+# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 3, as published
+# by the Free Software Foundation.
+
 import traceback
 import sys
 
@@ -15,7 +21,7 @@ class Device(Thread):
 	alive   = True  # controls the main loop
 	wire    = None  # must have a wire to send actual commands to the device
 	menu    = None  # all devices must have a menu system
-	guid    = None  # string that uniqely identifies the device. usualy MAC addr.
+	guid    = None  # string. uniqely identifies the device. usualy MAC addr.
 	player  = None
 
 	def __new__(cls, wire, queue, guid):
@@ -54,8 +60,8 @@ def init_acceleration_maps():
 class Classic(Device):
 	display      = None
 	acceleration = None # dict: different messages need different acceleration
-	                    # maps so keep a mapping from message codes to arrays of
-		                # stress levels. mostly (only?) used for tactile events.
+	                    # maps so keep a mapping from message codes to arrays
+	                    # of stress levels. only used for tactile events.
 
 	def __new__(cls, wire, queue, guid):
 		object = super(Classic, cls).__new__(cls, wire, queue, guid)
@@ -72,8 +78,8 @@ class Classic(Device):
 		if stress == 0:
 			return True # special case to catch all untracked codes
 		if code in self.acceleration:
-			# return true if the stress level is in the acceleration array for
-			# the given code, or if the stress level is off the chart.
+			# return true if the stress level is in the acceleration array
+			# for the given code, or if the stress level is off the chart.
 			if (stress in self.acceleration[code]
 			or  stress > self.acceleration[code][-1]):
 				return True
@@ -81,8 +87,9 @@ class Classic(Device):
 
 	def run(self):
 		# Python limit: the player cannot be created in __init__() because
-		# the threading goes bananas. player contains more threads and threads
-		# cannot be created "inside" the creation procedures of other threads.
+		# the threading would goes bananas. player contains more threads and
+		# threads cannot be created "inside" the creation procedures of other
+		# threads.
 		self.player  = Player(self.wire, self.guid)
 
 		while(self.alive):
