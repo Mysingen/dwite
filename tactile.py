@@ -34,7 +34,6 @@ class IR:
 	BRIGHTNESS  = 1988691195
 
 	codes_debug = {
-		RELEASE    :'RELEASE',
 		SLEEP      :'SLEEP',
 		POWER      :'POWER',
 		HARD_POWER :'HARD POWER DOWN?',
@@ -70,7 +69,9 @@ class IR:
 	}
 
 class TactileEvent:
-	code = 0 # valid values taken from the IR codes above
-	
-	def __init__(self, code):
-		self.code = code
+	code   = 0 # valid values taken from the IR codes above
+	stress = 0
+
+	def __init__(self, code, stress=0):
+		self.code   = code
+		self.stress = stress

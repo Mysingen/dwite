@@ -39,13 +39,13 @@ class Device(Thread):
 
 def init_acceleration_maps():
 	maps    = {}
-	default = [0,7,14,21,28,35,42,47,52,57,62,67,72,77,80,83,86,89,92,95,98]
+	default = [0,5,10,15,18,21,24,27,30,32,34,36,38,40]
 
 	maps[IR.UP]          = default
 	maps[IR.DOWN]        = default
 	maps[IR.LEFT]        = default
 	maps[IR.RIGHT]       = default
-	maps[IR.BRIGHTNESS]  = [0,10,20,30,40,50,60,70,75,80,85,90,95,100,105,110,115]
+	maps[IR.BRIGHTNESS]  = default
 	maps[IR.VOLUME_UP]   = default
 	maps[IR.VOLUME_DOWN] = default
 
@@ -84,11 +84,9 @@ class Classic(Device):
 		# the threading goes bananas. player contains more threads and threads
 		# cannot be created "inside" the creation procedures of other threads.
 		self.player  = Player(self.wire, self.guid)
-		last_tactile = None # tuple: (msg, stress)
 
 		while(self.alive):
-			msg    = None
-			stress = 0
+			msg = None
 
 			try:
 				# waking up 50 times per second costs less than 1% CPU of a
@@ -96,33 +94,21 @@ class Classic(Device):
 				# to get good resolution in all ticking activities.
 				msg = self.queue.get(block=True, timeout=0.02)
 			except Exception, e:
-				# no message in the queue. tick the current menu render
-				#if last_tactile:
-				#	msg    = last_tactile[0]
-				#	stress = last_tactile[1] + 1
-				#else:
-				#	continue
-				pass
+				pass # most likely, it's just the timeout that triggered.
 
 			self.menu.tick()
 
 			if not msg:
 				continue
 
-			# abort handling early if the stress level isn't high enough. note
-			# that the stress is always "enough" if stress is zero or the event
-			# doesn't have a stress map at all.
-			if not self.enough_stress(msg.code, stress):
-				last_tactile = (msg, stress)
+			# abort handling early if the stress level isn't high enough.
+			# note that the stress is always "enough" if stress is zero or
+			# the event doesn't have a stress map at all.
+			if not self.enough_stress(msg.code, msg.stress):
 				continue
 
 			try:
 				if isinstance(msg, TactileEvent):
-					if msg.code == IR.RELEASE:
-						# whatever button was pressed has been released
-						last_tactile = None
-						continue
-					
 					if msg.code == IR.UP:
 						self.menu.draw(self.menu.up())
 					elif msg.code == IR.DOWN:
@@ -144,8 +130,6 @@ class Classic(Device):
 					else:
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[msg.code])
-
-					last_tactile = (msg, stress)
 
 			except:
 				info = sys.exc_info()

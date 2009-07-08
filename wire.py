@@ -15,7 +15,7 @@ class Receiver(Thread):
 	wire    = None
 	queue   = None
 	alive   = True
-	last_ir = None # tuple: (IR code, wallclock time, stress)
+	last_ir = None # tuple: (IR code, time stamp, stress)
 
 	def __new__(cls, wire, queue):
 		object = super(Receiver, cls).__new__(
@@ -35,25 +35,22 @@ class Receiver(Thread):
 			data = ''
 			while self.alive:
 				sock = self.wire.socket
-				events = select.select([sock],[],[sock], 0.1)
+				events = select.select([sock],[],[sock], 0.5)
 				if len(events[2]) > 0:
-					#print('wire EXCEPTIONAL EVENT')
+					print('wire EXCEPTIONAL EVENT')
 					break
 				if events == ([],[],[]):
-					# a lack of events is treated as if the user released a button
-					if self.last_ir != None:
-						self.last_ir = None
-						self.queue.put(TactileEvent(IR.RELEASE))
-#					if i % 10 == 0:
-#						self.wire.send_stat()
+					# do nothing. the select() timeout is just there to make
+					# sure we can break the loop when self.alive goes false.
 					continue
+
 				data = data + self.wire.socket.recv(1024)
 				if len(data) < 8:
 					print('Useless message received. length = %d' % len(data))
 					break
 				while len(data) >= 8:
 					dlen = socket.ntohl(struct.unpack('L', data[4:8])[0])
-					print '\n%s %d %d' % (data[0:4], dlen, len(data))
+					#print '\n%s %d %d' % (data[0:4], dlen, len(data))
 					self.handle(data[:8+dlen], dlen)
 					data = data[8+dlen:]
 		except:
@@ -93,8 +90,8 @@ class Receiver(Thread):
 			self.handle_resp(data[8:], dlen)
 			return
 
-		print 'unknown message'
-		print ['%x' % ord(c) for c in data]
+		print('unknown message %s' % data[:4])
+		print('payload=%s' % str(['%x' % ord(c) for c in data[4:]]))
 		sys.exit(1)
 
 	def handle_helo_10(self, data, dlen):
@@ -149,51 +146,6 @@ class Receiver(Thread):
 		event = HeloEvent(id, revision, mac_addr, uuid, language)
 		self.queue.put(event)
 
-	def handle_helo_bak(self, data, len):
-		id       = ord(data[0])
-		revision = ord(data[1])
-		mac_addr = tuple(struct.unpack('B', c)[0] for c in data[2:8])
-
-		if revision != 2:
-			uuid = struct.unpack('16B', data[8:24])
-			data = data[24:]
-			len  = len - 16
-		else:
-			uuid = [-1]
-			data = data[8:]
-
-		if len >= 10:
-			wlan_chn = socket.ntohs(struct.unpack('H', data[0:2])[0])
-		else:
-			wlan_chn = -1
-
-		if len >= 18:
-			recv_hi = socket.ntohl(struct.unpack('L', data[2:6])[0])
-			recv_lo = socket.ntohl(struct.unpack('L', data[6:10])[0])
-		else:
-			recv_hi = 0
-			recv_lo = 0
-
-		if len >= 20:
-			language = '%s' % data[10:12]
-		else:
-			language = 'None'
-
-		# pretty silly if you ask me. why not just cook a new device number?
-		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
-			id = ID.SQUEEZEBOX3
-
-		if id not in ID.debug:
-			print('Received HELO from unknown device ID %d' % id)
-			return
-
-		mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
-		uuid     = ''.join([str(i) for i in uuid])
-
-		event = HeloEvent(id, revision, mac_addr, uuid, language)
-		#print('Put %s on queue' % str(event))
-		self.queue.put(event)
-
 	def handle_bye(self, data):
 		reason = struct.unpack('B', data[0])
 		if reason == 1:
@@ -212,20 +164,26 @@ class Receiver(Thread):
 			print 'nr bits %d' % nr_bits
 			print 'UNKNOWN ir code %d' % code
 			self.last_ir = None
-			#self.queue.put(TactileEvent(IR.RELEASE))
 			return
 
-		now = datetime.now()
 		stress = 0
 		if self.last_ir and self.last_ir[0] == code:
-			# the same key is kept pressed. don't send a new event.
-			stress = self.last_ir[2] + 1
-			#print('wire stress %s %d' % (IR.codes_debug[code], stress))
-		else:
-			#print('wire put %s' % IR.codes_debug[code])
-			self.queue.put(TactileEvent(code))
-		# either way track what happened.
-		self.last_ir = (code, now, stress)
+			# the same key was pressed again. if it was done fast enough,
+			# then we *guess* that the user is keeping it pressed, rather
+			# than hitting it again real fast. unfortunately the remotes
+			# don't generate key release events.
+			print('Stamp %d, diff %d' % (stamp, stamp - self.last_ir[1]))
+			if stamp - self.last_ir[1] < 130: # milliseconds
+				# the threshold can't be set below 108 which seems to be the
+				# rate at which the SB3 generates remote events. at the same
+				# time it is quite impossible to manually hit keys faster
+				# than once per 140ms, so 130ms should be a good threshold.
+				stress = self.last_ir[2] + 1
+			else:
+				stress = 0
+		self.last_ir = (code, stamp, stress)
+		print('wire put %s %d' % (IR.codes_debug[code], stress))
+		self.queue.put(TactileEvent(code, stress))
 
 	def handle_stat(self, data, dlen):
 		event    = data[0:4]
