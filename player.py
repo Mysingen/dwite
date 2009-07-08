@@ -214,7 +214,7 @@ class Player:
 	wire     = None
 	volume_l = (0,0) # 16bit.16bit expressed as uints
 	volume_r = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
-	preamp   = 200
+	preamp   = 255
 	
 	def __init__(self, wire, mac_addr):
 		self.mac_addr = mac_addr
@@ -241,27 +241,27 @@ class Player:
 		return (channel[0], channel[1] - decrement)
 
 	def volume_up(self):
-# 		l = self.increase_volume(self.volume_l, 2500)
-# 		r = self.increase_volume(self.volume_r, 2500)
-# 		if l[0] > 50000 or r[0] > 50000:
-# 			return
-# 		self.volume_l = l
-# 		self.volume_r = r
-		if self.preamp < 255:
-			self.preamp = self.preamp + 1
-		self.wire.send_audg(False, self.preamp, (self.volume_l, self.volume_r))
+		l = self.increase_volume(self.volume_l, 2500)
+		r = self.increase_volume(self.volume_r, 2500)
+		if l[0] > 50000 or r[0] > 50000:
+			return
+		self.volume_l = l
+		self.volume_r = r
+		#if self.preamp < 255:
+		#	self.preamp = self.preamp + 1
+		self.wire.send_audg(True, self.preamp, (self.volume_l, self.volume_r))
 
 	def volume_down(self):
-# 		l = self.decrease_volume(self.volume_l, 4000)
-# 		r = self.decrease_volume(self.volume_r, 4000)
-# 		if l[0] < 0 or r[0] < 0:
-# 			l = (0,0)
-# 			r = (0,0)
-# 		self.volume_l = l
-# 		self.volume_r = r
-		if self.preamp > 0:
-			self.preamp = self.preamp - 1
-		self.wire.send_audg(False, self.preamp, (self.volume_l, self.volume_r))
+		l = self.decrease_volume(self.volume_l, 4000)
+		r = self.decrease_volume(self.volume_r, 4000)
+		if l[0] < 0 or r[0] < 0:
+			l = (0,0)
+			r = (0,0)
+		self.volume_l = l
+		self.volume_r = r
+		#if self.preamp > 0:
+		#	self.preamp = self.preamp - 1
+		self.wire.send_audg(True, self.preamp, (self.volume_l, self.volume_r))
 	
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)

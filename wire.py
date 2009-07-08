@@ -212,7 +212,7 @@ class Receiver(Thread):
 			print 'nr bits %d' % nr_bits
 			print 'UNKNOWN ir code %d' % code
 			self.last_ir = None
-#			self.queue.put(TactileEvent(IR.RELEASE))
+			#self.queue.put(TactileEvent(IR.RELEASE))
 			return
 
 		now = datetime.now()
@@ -220,7 +220,7 @@ class Receiver(Thread):
 		if self.last_ir and self.last_ir[0] == code:
 			# the same key is kept pressed. don't send a new event.
 			stress = self.last_ir[2] + 1
-			print('wire stress %s %d' % (IR.codes_debug[code], stress))
+			#print('wire stress %s %d' % (IR.codes_debug[code], stress))
 		else:
 			#print('wire put %s' % IR.codes_debug[code])
 			self.queue.put(TactileEvent(code))
@@ -249,7 +249,9 @@ class Receiver(Thread):
 		tail = None
 		if dlen > 51:
 			tail = struct.unpack('B'*(dlen-51), data[51:])
-		
+
+		return
+
 		print('Event    = %s' % event)
 		print('CRLFs    = %d' % crlfs)
 		print('MAS init = %d' % mas_init)
@@ -334,9 +336,13 @@ class Wire:
 	# channels is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
 	# dvc (digital volume control?) is boolean
 	# preamp must fit in a uint8
-	def send_audg(self, dvc, preamp, channels):
+	def send_audg(self, dvc, preamp, channels, legacy=None):
+		print('AUDG %d %d.%d %d.%d' % (preamp, channels[0][0], channels[0][1], channels[1][0], channels[1][1]))
 		cmd     = 'audg'
-		old     = struct.pack('LL', 0, 0)
+		if legacy:
+			old     = struct.pack('LL', legacy[0],legacy[1])
+		else:
+			old     = struct.pack('LL', 0,0)
 		new_l   = struct.pack('HH', socket.htons(channels[0][0]),
 		                            socket.htons(channels[0][1]))
 		new_r   = struct.pack('HH', socket.htons(channels[1][0]),
