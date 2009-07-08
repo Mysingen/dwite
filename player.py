@@ -212,9 +212,9 @@ class Player:
 	mac_addr = None # used when telling the device how to present itself
 	streamer = None
 	wire     = None
-	volume_l = (0,0) # 16bit.16bit expressed as uints
-	volume_r = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
-	preamp   = 255
+	gain_l   = (0,0) # 16bit.16bit expressed as uints
+	gain_r   = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
+	preamp   = 0
 	
 	def __init__(self, wire, mac_addr):
 		self.mac_addr = mac_addr
@@ -223,6 +223,7 @@ class Player:
 		self.streamer = Streamer(port=3484)
 		self.streamer.start()
 		self.mute(False, False)
+		self.set_volume(255, (2,25000), (2,25000))
 	
 	def close(self):
 		self.streamer.stop()
@@ -230,39 +231,40 @@ class Player:
 	def mute(self, analog, digital):
 		self.wire.send_aude(not analog, not digital) # not mute == enable
 
-	def increase_volume(self, channel, increment):
-		if channel[1] + increment > 65535:
-			return (channel[0] + 1, (channel[1] + increment) - 65535)
-		return (channel[0], channel[1] + increment)
+	def increase_gain(self, gain, increment):
+		if gain[1] + increment > 65535:
+			new_gain = (gain[0] + 1, (gain[1] + increment) - 65535)
+		else:
+			new_gain = (gain[0], gain[1] + increment)
+		if new_gain[0] > 65535:
+			return (65535,65535)
+		return new_gain
 
-	def decrease_volume(self, channel, decrement):
-		if channel[1] - decrement < 0:
-			return (channel[0] - 1, 65535 + (channel[1] - decrement))
-		return (channel[0], channel[1] - decrement)
+	def decrease_gain(self, gain, decrement):
+		if gain[1] - decrement < 0:
+			new_gain = (gain[0] - 1, 65535 + (gain[1] - decrement))
+		else:
+			new_gain = (gain[0], gain[1] - decrement)
+		if new_gain[0] < 0:
+			return (0,0)
+		return new_gain
 
 	def volume_up(self):
-		l = self.increase_volume(self.volume_l, 2500)
-		r = self.increase_volume(self.volume_r, 2500)
-		if l[0] > 50000 or r[0] > 50000:
-			return
-		self.volume_l = l
-		self.volume_r = r
-		#if self.preamp < 255:
-		#	self.preamp = self.preamp + 1
-		self.wire.send_audg(True, self.preamp, (self.volume_l, self.volume_r))
+		left  = self.increase_gain(self.gain_l, 2500)
+		right = self.increase_gain(self.gain_r, 2500)
+		self.set_volume(self.preamp, left, right)
 
 	def volume_down(self):
-		l = self.decrease_volume(self.volume_l, 4000)
-		r = self.decrease_volume(self.volume_r, 4000)
-		if l[0] < 0 or r[0] < 0:
-			l = (0,0)
-			r = (0,0)
-		self.volume_l = l
-		self.volume_r = r
-		#if self.preamp > 0:
-		#	self.preamp = self.preamp - 1
-		self.wire.send_audg(True, self.preamp, (self.volume_l, self.volume_r))
+		left  = self.decrease_gain(self.gain_l, 4000)
+		right = self.decrease_gain(self.gain_r, 4000)
+		self.set_volume(self.preamp, left, right)
 	
+	def set_volume(self, preamp, gain_left, gain_right):
+		self.preamp = preamp
+		self.gain_l = gain_left
+		self.gain_r = gain_right
+		self.wire.send_audg(True, preamp, (gain_left, gain_right))
+
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
 		if size < 10*1024:
