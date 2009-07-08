@@ -14,17 +14,22 @@ class Device(Thread):
 	queue   = None  # let other threads post events here
 	alive   = True  # controls the main loop
 	wire    = None  # must have a wire to send actual commands to the device
+	menu    = None  # all devices must have a menu system
+	guid    = None  # string that uniqely identifies the device. usualy MAC addr.
+	player  = None
 
-	def __new__(cls, wire, queue):
+	def __new__(cls, wire, queue, guid):
 		object = super(Device, cls).__new__(
 			cls, None, Device.run, 'Device', (),{})
-		Device.__init__(object, wire, queue)
+		Device.__init__(object, wire, queue, guid)
 		return object
 
-	def __init__(self, wire, queue):
+	def __init__(self, wire, queue, guid):
 		Thread.__init__(self)
 		self.wire  = wire
 		self.queue = queue
+		self.guid  = guid
+		self.menu  = Menu()
 
 	def run(self):
 		raise Excepion, 'Device subclasses must implement run()'
@@ -48,23 +53,20 @@ def init_acceleration_maps():
 
 class Classic(Device):
 	display      = None
-	menu         = None
 	acceleration = None # dict: different messages need different acceleration
 	                    # maps so keep a mapping from message codes to arrays of
 		                # stress levels. mostly (only?) used for tactile events.
-	player       = None
 
-	def __new__(cls, wire, queue, mac_addr):
-		object = super(Classic, cls).__new__(cls, wire, queue)
-		Classic.__init__(object, wire, queue, mac_addr)
+	def __new__(cls, wire, queue, guid):
+		object = super(Classic, cls).__new__(cls, wire, queue, guid)
+		Classic.__init__(object, wire, queue, guid)
 		return object
 
-	def __init__(self, wire, queue, mac_addr):
-		Device.__init__(self, wire, queue)
+	def __init__(self, wire, queue, guid):
 		self.display      = Display((320,32), self.wire)
-		self.menu         = Menu(self.display)
 		self.acceleration = init_acceleration_maps()
-		self.mac_addr     = mac_addr
+
+		self.menu.set_display(self.display)
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -78,7 +80,10 @@ class Classic(Device):
 		return False
 
 	def run(self):
-		self.player  = Player(self.wire, self.mac_addr)
+		# Python limit: the player cannot be created in __init__() because
+		# the threading goes bananas. player contains more threads and threads
+		# cannot be created "inside" the creation procedures of other threads.
+		self.player  = Player(self.wire, self.guid)
 		last_tactile = None # tuple: (msg, stress)
 
 		while(self.alive):

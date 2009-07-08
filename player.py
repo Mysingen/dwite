@@ -209,21 +209,22 @@ class MP3_Decoder(Decoder):
 		self.file.seek(self.offset, time_to_offset(time))
 
 class Player:
-	mac_addr = None # used when telling the device how to present itself
+	guid     = None # used when telling the device how to present itself
 	streamer = None
 	wire     = None
 	gain_l   = (0,0) # 16bit.16bit expressed as uints
 	gain_r   = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	preamp   = 0
 	
-	def __init__(self, wire, mac_addr):
-		self.mac_addr = mac_addr
+	def __init__(self, wire, guid):
+		self.guid     = guid
 		self.wire     = wire
-		self.stop_playback()
 		self.streamer = Streamer(port=3484)
-		self.streamer.start()
+
+		self.stop_playback()
 		self.mute(False, False)
 		self.set_volume(255, (2,25000), (2,25000))
+		self.streamer.start()
 	
 	def close(self):
 		self.streamer.stop()
@@ -283,9 +284,10 @@ class Player:
 			strm.autostart    = '1'
 			strm.format       = 'm'
 			strm.in_threshold = struct.pack('B', self.get_in_threshold(path))
-			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % self.mac_addr
-			if len(strm.http_get) % 2 != 0:
-				strm.http_get = strm.http_get + '\n' # SqueezeCenter does, but why?
+			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % self.guid
+# SqueezeCenter does this, but why? keep around if it turns out to be needed.
+#			if len(strm.http_get) % 2 != 0:
+#				strm.http_get = strm.http_get + '\n'
 			print('send_strm')
 			self.wire.send_strm(strm.serialize())
 			return True

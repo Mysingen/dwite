@@ -38,7 +38,6 @@ class FileTree(Tree):
 	def __init__(self, label, parent, path):
 		Tree.__init__(self, label, parent)
 		self.path = path
-		render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
 
 	def play(self, player):
 		return player.play_file(self.path)
@@ -48,7 +47,8 @@ class DirTree(FileTree):
 
 	def __init__(self, label, parent, path):
 		FileTree.__init__(self, label, parent, path)
-		
+		self.render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
+
 		if not os.path.isdir(self.path):
 			raise Exception, 'DirTree(): %s is not a directory' % path
 
@@ -70,18 +70,23 @@ class DirTree(FileTree):
 		return self
 
 class Menu:
-	display = None # a Display instance that hides all device specific details
 	root    = None # must always point to a Tree instance that implements ls()
 	cwd     = None # must always point to a Tree instance that implements ls()
 	current = 0    # index into cwd.children[]
-	
-	def __init__(self, display, root=None):
+	display = None # a menu needs a drawable device in order to draw itself.
+
+	# todo: split out display handling into a subclass DrawableMenu?
+
+	def __init__(self, display=None, root=None):
 		self.display = display
 		if not root:
 			root = DirTree('/', None, os.getcwd())
 		self.root = root
 		self.cwd  = self.root
 		self.cwd.ls()
+	
+	def set_display(self, display):
+		self.display = display
 		self.draw(TRANSITION.NONE)
 	
 	def enter(self):
@@ -132,9 +137,13 @@ class Menu:
 		return TRANSITION.BOUNCE_LEFT
 
 	def draw(self, transition):
+		if not self.display:
+			return
 		if self.cwd.children[self.current].draw(self.display.canvas):
 			self.display.show(transition)
 	
 	def tick(self):
+		if not self.display:
+			return
 		if self.cwd.children[self.current].tick(self.display.canvas):
 			self.display.show(TRANSITION.NONE)
