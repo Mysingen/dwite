@@ -77,8 +77,7 @@ class Menu:
 
 	# todo: split out display handling into a subclass DrawableMenu?
 
-	def __init__(self, display=None, root=None):
-		self.display = display
+	def __init__(self, root=None):
 		if not root:
 			root = DirTree('/', None, os.getcwd())
 		self.root = root

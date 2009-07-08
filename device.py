@@ -91,16 +91,23 @@ class Classic(Device):
 			stress = 0
 
 			try:
-				# regrettably, the timeout value is hand tuned...
-				msg = self.queue.get(block=True, timeout=0.1)
+				# waking up 50 times per second costs less than 1% CPU of a
+				# single core in an Intel Core2 Duo system, so lets do that
+				# to get good resolution in all ticking activities.
+				msg = self.queue.get(block=True, timeout=0.02)
 			except Exception, e:
 				# no message in the queue. tick the current menu render
-				self.menu.tick()
-				if last_tactile:
-					msg    = last_tactile[0]
-					stress = last_tactile[1] + 1
-				else:
-					continue
+				#if last_tactile:
+				#	msg    = last_tactile[0]
+				#	stress = last_tactile[1] + 1
+				#else:
+				#	continue
+				pass
+
+			self.menu.tick()
+
+			if not msg:
+				continue
 
 			# abort handling early if the stress level isn't high enough. note
 			# that the stress is always "enough" if stress is zero or the event

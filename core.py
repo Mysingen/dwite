@@ -36,8 +36,8 @@ def main():
 			continue
 
 		# in the following, if a device class instance is created, the queue
-		# on which protocol events is given over to that instance. from then
-		# on, the main loop cannot see what is going on on the protocol wire!
+		# for protocol events is given over to that instance. from then on
+		# the main loop cannot see what is going on on the protocol wire!
 
 		if isinstance(msg, HeloEvent):
 			if (msg.id == ID.SQUEEZEBOX3
