@@ -90,6 +90,10 @@ class Receiver(Thread):
 			self.handle_resp(data[8:], dlen)
 			return
 
+		if data[0:4] == 'UREQ':
+			self.handle_ureq(data[8:], dlen)
+			return
+
 		print('unknown message %s' % data[:4])
 		print('payload=%s' % str(['%x' % ord(c) for c in data[4:]]))
 		sys.exit(1)
@@ -237,6 +241,9 @@ class Receiver(Thread):
 		# on the streaming socket, unless the device is streaming from some
 		# other source. simply discard the data for now.
 		pass
+
+	def handle_ureq(self, data, dlen):
+		print('UREQ handling not implemented')
 
 class Wire:
 	socket = None

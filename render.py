@@ -56,12 +56,10 @@ class TextRender(Render):
 		key = (font_path, size)
 		if key in singleton:
 			object = singleton[key]
-			print '1'
 		else:
 			object = super(TextRender, cls.__new__(cls))
 			TextRender.__init__(object, font_path, size)
 			singleton[key] = object
-			print '2'
 		return object
 
 	def __init__(self, font_path, size):
