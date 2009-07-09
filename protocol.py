@@ -218,3 +218,26 @@ class Aude(Command):
 		         + struct.pack('B', self.digital) )
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+class Audg(Command):
+	# gains are integer tuples: (16bit,16bit)
+	# dvc (digital volume control?) is boolean
+	# preamp must fit in a uint8
+	# legacy is the old-style gain control. not used, send junk
+	left     = (0,0)
+	right    = (0,0)
+	dvc      = False
+	preamp   = 255  # default to maximum
+	legacy   = struct.pack('LL', 0, 0)
+	
+	def serialize(self):
+		cmd    = 'audg'
+		params = ( self.legacy
+		         + struct.pack('B', self.dvc)
+		         + struct.pack('B', self.preamp)
+		         + struct.pack('HH', socket.htons(self.left[0]),
+		                             socket.htons(self.left[1]))
+		         + struct.pack('HH', socket.htons(self.right[0]),
+		                             socket.htons(self.right[1])) )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params

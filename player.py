@@ -15,7 +15,7 @@ import mutagen.mp3
 
 from threading import Thread
 
-from protocol import Strm, Aude
+from protocol import Strm, Aude, Audg
 
 STOPPED   = 0
 STREAMING = 1
@@ -221,7 +221,13 @@ class Player:
 		self.preamp = preamp
 		self.gain_l = gain_left
 		self.gain_r = gain_right
-		self.wire.send_audg(True, preamp, (gain_left, gain_right))
+
+		audg        = Audg()
+		audg.dvc    = True
+		audg.left   = gain_left
+		audg.right  = gain_right
+		audg.preamp = preamp
+		self.wire.send(audg.serialize())
 
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)

@@ -301,25 +301,6 @@ class Wire:
 		self.socket.send(data)
 		self.lock.release()
 
-	# channels is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
-	# dvc (digital volume control?) is boolean
-	# preamp must fit in a uint8
-	def send_audg(self, dvc, preamp, channels, legacy=None):
-		cmd     = 'audg'
-		if legacy:
-			old = struct.pack('LL', legacy[0],legacy[1])
-		else:
-			old = struct.pack('LL', 0,0)
-		new_l   = struct.pack('HH', socket.htons(channels[0][0]),
-		                            socket.htons(channels[0][1]))
-		new_r   = struct.pack('HH', socket.htons(channels[1][0]),
-		                            socket.htons(channels[1][0]))
-		dvc     = struct.pack('B',  dvc)
-		preamp  = struct.pack('B',  preamp)
-		payload = cmd + old + dvc + preamp + new_l + new_r
-		length  = struct.pack('H', socket.htons(len(payload)))
-		self.send(length + payload)
-
 	def send_updn(self, parameters):
 		cmd     = 'updn'
 		payload = cmd + parameters
