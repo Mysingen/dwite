@@ -4,7 +4,8 @@
 # under the terms of the GNU General Public License version 3, as published
 # by the Free Software Foundation.
 
-from canvas import Canvas
+from canvas   import Canvas
+from protocol import Grfe
 
 # no intantiation of BRIGHTNESS is needed since it only carries constants
 # that share a name space.
@@ -35,6 +36,7 @@ class TRANSITION:
 class Display:
 	wire       = None
 	brightness = BRIGHTNESS.FULL
+	canvas     = None
 	
 	def __init__(self, size, wire):
 		self.wire   = wire
@@ -54,4 +56,7 @@ class Display:
 
 	def show(self, transition):
 		self.canvas.prepare_transmission()
-		self.wire.send_grfe(self.canvas.bitmap, transition)
+		grfe = Grfe()
+		grfe.transition = transition
+		grfe.bitmap     = self.canvas.bitmap
+		self.wire.send(grfe.serialize())

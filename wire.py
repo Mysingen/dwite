@@ -301,27 +301,12 @@ class Wire:
 		self.socket.send(data)
 		self.lock.release()
 
-	def send_grfe(self, bitmap, transition):
-		cmd      = 'grfe'
-		offset   = struct.pack('H', socket.htons(0)) # must be zero. why?
-		distance = struct.pack('B', 32) # 32 is Y-axis. not well understood
-		payload  = cmd + offset + transition + distance + bitmap
-		length   = socket.htons(len(payload))
-		length   = struct.pack('H', length)
-		self.send(length + payload)
-
 	def send_grfb(self, brightness):
 		cmd      = 'grfb'
 		payload  = cmd + struct.pack('H', socket.htons(brightness))
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
 		self.send(length + payload)
-
-#	def send_strm(self, parameters):
-#		cmd     = 'strm'
-#		payload = cmd + parameters
-#		length = struct.pack('H', socket.htons(len(payload)))
-#		self.send(length + payload)
 
 	def send_aude(self, analog, digital):
 		cmd     = 'aude'

@@ -178,10 +178,22 @@ class Strm(Command):
 		      + struct.pack('L', socket.htonl(self.server_ip)) )
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
-		parameters = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
-		             % self.player_guid )
-		length     = struct.pack('H', socket.htons(len(cmd + parameters)))
-		return length + cmd + parameters
+		params = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
+		         % self.player_guid )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
 
 class Grfe(Command):
-	pass
+	offset     = 0    # only non-zero for the Transporter
+	transition = 'c'  # default is no transition effect
+	distance   = 32   # transition start on the Y-axis. not well understood
+	bitmap     = None # 4 * 320 chars for an SB2/3 display
+
+	def serialize(self):
+		cmd    = 'grfe'
+		params = ( struct.pack('H', socket.htons(self.offset))
+		         + self.transition
+		         + struct.pack('B', self.distance)
+		         + self.bitmap )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
