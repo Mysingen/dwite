@@ -241,3 +241,10 @@ class Audg(Command):
 		                             socket.htons(self.right[1])) )
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+class Updn(Command):
+	def serialize(self):
+		cmd    = 'updn'
+		params = ' '
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params

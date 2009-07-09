@@ -16,7 +16,7 @@ from threading import Thread, Lock
 from datetime  import datetime
 
 from tactile  import IR, TactileEvent
-from protocol import ID, Helo
+from protocol import ID, Helo, Updn
 
 class Receiver(Thread):
 	wire    = None
@@ -259,7 +259,7 @@ class Receiver(Thread):
 	def handle_ureq(self, data, dlen):
 		print('UREQ handling not implemented')
 		time.sleep(1.0)
-		self.wire.send_updn(' ')
+		self.wire.send(Updn().serialize())
 
 class Wire:
 	socket = None
@@ -300,9 +300,3 @@ class Wire:
 		self.lock.acquire()
 		self.socket.send(data)
 		self.lock.release()
-
-	def send_updn(self, parameters):
-		cmd     = 'updn'
-		payload = cmd + parameters
-		length  = struct.pack('H', socket.htons(len(payload)))
-		self.send(length + payload)
