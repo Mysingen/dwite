@@ -108,14 +108,14 @@ class Classic(Device):
 			if not msg:
 				continue
 
-			# abort handling early if the stress level isn't high enough.
-			# note that the stress is always "enough" if stress is zero or
-			# the event doesn't have a stress map at all.
-			if not self.enough_stress(msg.code, msg.stress):
-				continue
-
 			try:
 				if isinstance(msg, TactileEvent):
+					# abort handling if the stress level isn't high enough.
+					# note that the stress is always "enough" if stress is
+					# zero or the event doesn't have a stress map at all.
+					if not self.enough_stress(msg.code, msg.stress):
+						continue
+
 					if msg.code == IR.UP:
 						self.menu.draw(self.menu.up())
 					elif msg.code == IR.DOWN:

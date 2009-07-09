@@ -16,7 +16,7 @@ from Queue   import Queue
 
 from device   import Classic
 from wire     import Wire, Receiver
-from protocol import ID, HeloEvent
+from protocol import ID, Helo
 
 def main():
 	try:
@@ -43,7 +43,7 @@ def main():
 		# for protocol events is given over to that instance. from then on
 		# the main loop cannot see what is going on on the protocol wire!
 
-		if isinstance(msg, HeloEvent):
+		if isinstance(msg, Helo):
 			if (msg.id == ID.SQUEEZEBOX3
 			or  msg.id == ID.SOFTSQUEEZE):
 				device = Classic(wire, queue, msg.mac_addr)

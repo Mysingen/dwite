@@ -15,6 +15,8 @@ import mutagen.mp3
 
 from threading import Thread
 
+from protocol import Strm
+
 STOPPED   = 0
 STREAMING = 1
 
@@ -121,61 +123,6 @@ class Streamer(Thread):
 
 	def stop(self):
 		self.alive = False
-
-class StreamCommand:
-	command   = '?' # 's'tart, 'p'ause, 'u'npause, 'q'uit, 'f'lush
-	autostart = '?' # '0'=no, '1'=yes, '2'=extern no, '3'=extern yes
-	                # ("extern" as in "extern source". e.g. internet radio.)
-	format    = '?' # 'm'peg, 'p'cm, 'p'=wav/aif, 'f'lc, 'w'ma/asx, 'o'gg
-
-	pcm_sample_size = '?' # '0'=8, '1'=16, '2'=24, '3'=32
-	pcm_sample_rate = '?' # '0'=11, '1'=22, '2'=32, '3'=44.1, '4'=48,
-	                      # '5'=8,  '6'=12, '7'=16, '8'=24,   '9'=96 (KHz)
-	pcm_channels    = '?' # '1'=mono, '2'=stereo
-	pcm_endianness  = '?' #	'0'=big, '1'=little
-
-	in_threshold = struct.pack('B', 10) # KBytes of input data to buffer before
-	                    # autostarting and/or notifying the server of buffer
-	                    # status
-	spdif        = struct.pack('B', 2) # 0=auto, 1=enable, 2=disable
-	fade_time    = struct.pack('B', 0) # seconds to spend on fading between songs
-	fade_type    = '0'  # '0'=none, '1'=cross, '2'=in, '3'=out, '4'=in&out
-	flags        = struct.pack('B', 0) # uint8:
-	                    # 0x80=loop forever
-	                    # 0x40=don't restart the decoder (when do you?)
-	                    # 0x02=invert polarity (right)
-	                    # 0x01=invert polarity (left)
-	out_threshold = struct.pack('B', 1) # 0.1 seconds of decoded audio to buffer
-	                    # before starting playback.
-	reserved      = struct.pack('B', 0)
-	gain          = struct.pack('HH', 0, 0) # playback gain in 16.16 fixed point
-	server_port   = struct.pack('H', socket.htons(3484)) # where to get the data
-	                    # stream (server port number)
-	server_ip     = struct.pack('L', socket.htonl(0)) # where to get the data
-	                    # stream (server address). zero makes it use the same
-	                    # as the control server
-	http_get      = 'GET /stream.mp3?player=%s HTTP/1.0\n'
-
-	def serialize(self):
-		tmp = (self.command
-		      + self.autostart
-		      + self.format
-		      + self.pcm_sample_size
-		      + self.pcm_sample_rate
-		      + self.pcm_channels
-		      + self.pcm_endianness
-		      + self.in_threshold
-		      + self.spdif
-		      + self.fade_time
-		      + self.fade_type
-		      + self.flags
-		      + self.out_threshold
-		      + self.reserved
-		      + self.gain
-		      + self.server_port
-		      + self.server_ip
-		      + self.http_get)
-		return tmp
 
 # need an extra layer of protocol handlers that use decoder objects? i.e. to
 # support both files and remote streams.
@@ -286,17 +233,17 @@ class Player:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
 			self.streamer.feed(MP3_Decoder(path))
-			strm = StreamCommand()
-			strm.command      = 's'
-			strm.autostart    = '1'
-			strm.format       = 'm'
-			strm.in_threshold = struct.pack('B', self.get_in_threshold(path))
-			strm.http_get = 'GET /stream.mp3?player=%s HTTP/1.0\n' % self.guid
+			strm = Strm()
+			strm.operation    = Strm.OP_START
+			strm.autostart    = Strm.AUTOSTART_YES
+			strm.format       = Strm.FORMAT_MPEG
+			strm.in_threshold = self.get_in_threshold(path)
+			strm.player_guid  = self.guid
 # SqueezeCenter does this, but why? keep around if it turns out to be needed.
 #			if len(strm.http_get) % 2 != 0:
 #				strm.http_get = strm.http_get + '\n'
 			print('send_strm')
-			self.wire.send_strm(strm.serialize())
+			self.wire.send(strm.serialize())
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
@@ -306,6 +253,6 @@ class Player:
 		return False
 
 	def stop_playback(self):
-		strm = StreamCommand()
-		strm.command = 'q'
-		self.wire.send_strm(strm.serialize())
+		strm = Strm()
+		strm.operation = Strm.OP_STOP
+		self.wire.send(strm.serialize())

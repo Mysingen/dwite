@@ -10,12 +10,13 @@ import select
 import sys
 import traceback
 import time
+import errno
 
-from threading import Thread
+from threading import Thread, Lock
 from datetime  import datetime
 
 from tactile  import IR, TactileEvent
-from protocol import ID, HeloEvent
+from protocol import ID, Helo
 
 class Receiver(Thread):
 	wire    = None
@@ -50,7 +51,18 @@ class Receiver(Thread):
 					# sure we can break the loop when self.alive goes false.
 					continue
 
-				data = data + self.wire.socket.recv(1024)
+				try:
+					self.wire.lock.acquire()
+					data = data + self.wire.socket.recv(1024)
+					self.wire.lock.release()
+				except socket.error, e:
+					if e[0] == errno.ECONNRESET:
+						self.wire.lock.release()
+						self.wire.accept()
+						continue
+					print('Receiver: Unhandled exception %s' % str(e))
+					continue
+
 				if len(data) < 8:
 					print('Useless message received. length = %d' % len(data))
 					break
@@ -112,10 +124,6 @@ class Receiver(Thread):
 		mac_addr = tuple(tmp[0:6])
 		wlan_chn = socket.ntohs(tmp[6])
 
-		# pretty silly if you ask me. why not just cook a new device number?
-		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
-			id = ID.SQUEEZEBOX3
-		
 		mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
 		
 		print('id       : %s' % ID.debug[id])
@@ -123,7 +131,7 @@ class Receiver(Thread):
 		print('mac addr : %s' % mac_addr)
 		print('wlan chn : %d' % wlan_chn)
 		
-		event = HeloEvent(id, revision, mac_addr, 1234, 'EN')
+		event = Helo(id, revision, mac_addr, 1234, 'EN')
 		self.queue.put(event)
 
 	def handle_helo_36(self, data, dlen):
@@ -138,7 +146,7 @@ class Receiver(Thread):
 		recv_lo  = socket.ntohl(tmp[24])
 		language = tmp[25]
 
-		# pretty silly if you ask me. why not just cook a new device number?
+		# why not just cook a new device number?
 		if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
 			id = ID.SQUEEZEBOX3
 		
@@ -153,7 +161,7 @@ class Receiver(Thread):
 		print('recv_lo  : %d' % recv_lo)
 		print('lang     : %s' % language)
 		
-		event = HeloEvent(id, revision, mac_addr, uuid, language)
+		event = Helo(id, revision, mac_addr, uuid, language)
 		self.queue.put(event)
 
 	def handle_bye(self, data):
@@ -250,11 +258,23 @@ class Receiver(Thread):
 
 	def handle_ureq(self, data, dlen):
 		print('UREQ handling not implemented')
+		time.sleep(1.0)
+		self.wire.send_updn(' ')
 
 class Wire:
 	socket = None
+	port   = 0
 
 	def __init__(self, port):
+		self.port = port
+		self.lock = Lock()
+		self.accept(port)
+
+	def accept(self, port=0):
+		self.lock.acquire()
+		if port == 0 and self.port != 0:
+			port = self.port
+
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 		print('Wire waiting for port %d to become available' % port)
@@ -269,10 +289,17 @@ class Wire:
 		self.socket.listen(1)
 		self.socket, address = self.socket.accept()
 		print('Connected on %d' % port)
+		self.lock.release()
 
 	def close(self):
-#		self.socket.shutdown(socket.SHUT_RDWR)
+		self.lock.acquire()
 		self.socket.close()
+		self.lock.release()
+
+	def send(self, data):
+		self.lock.acquire()
+		self.socket.send(data)
+		self.lock.release()
 
 	def send_grfe(self, bitmap, transition):
 		cmd      = 'grfe'
@@ -281,20 +308,20 @@ class Wire:
 		payload  = cmd + offset + transition + distance + bitmap
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
-		self.socket.send(length + payload)
+		self.send(length + payload)
 
 	def send_grfb(self, brightness):
 		cmd      = 'grfb'
 		payload  = cmd + struct.pack('H', socket.htons(brightness))
 		length   = socket.htons(len(payload))
 		length   = struct.pack('H', length)
-		self.socket.send(length + payload)
+		self.send(length + payload)
 
-	def send_strm(self, parameters):
-		cmd     = 'strm'
-		payload = cmd + parameters
-		length = struct.pack('H', socket.htons(len(payload)))
-		self.socket.send(length + payload)
+#	def send_strm(self, parameters):
+#		cmd     = 'strm'
+#		payload = cmd + parameters
+#		length = struct.pack('H', socket.htons(len(payload)))
+#		self.send(length + payload)
 
 	def send_aude(self, analog, digital):
 		cmd     = 'aude'
@@ -302,7 +329,7 @@ class Wire:
 		spdif   = struct.pack('B', digital)
 		payload = cmd + spdif + dac
 		length  = struct.pack('H', socket.htons(len(payload)))
-		self.socket.send(length + payload)
+		self.send(length + payload)
 
 	# channels is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
 	# dvc (digital volume control?) is boolean
@@ -321,4 +348,10 @@ class Wire:
 		preamp  = struct.pack('B',  preamp)
 		payload = cmd + old + dvc + preamp + new_l + new_r
 		length  = struct.pack('H', socket.htons(len(payload)))
-		self.socket.send(length + payload)
+		self.send(length + payload)
+
+	def send_updn(self, parameters):
+		cmd     = 'updn'
+		payload = cmd + parameters
+		length  = struct.pack('H', socket.htons(len(payload)))
+		self.send(length + payload)
