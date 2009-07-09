@@ -206,3 +206,15 @@ class Grfb(Command):
 		params = struct.pack('H', socket.htons(self.brightness))
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+class Aude(Command):
+	# what to enable/disable? true/false
+	analog  = True
+	digital = True
+	
+	def serialize(self):
+		cmd    = 'aude'
+		params = ( struct.pack('B', self.analog)
+		         + struct.pack('B', self.digital) )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params

@@ -301,21 +301,6 @@ class Wire:
 		self.socket.send(data)
 		self.lock.release()
 
-#	def send_grfb(self, brightness):
-#		cmd      = 'grfb'
-#		payload  = cmd + struct.pack('H', socket.htons(brightness))
-#		length   = socket.htons(len(payload))
-#		length   = struct.pack('H', length)
-#		self.send(length + payload)
-
-	def send_aude(self, analog, digital):
-		cmd     = 'aude'
-		dac     = struct.pack('B', analog)
-		spdif   = struct.pack('B', digital)
-		payload = cmd + spdif + dac
-		length  = struct.pack('H', socket.htons(len(payload)))
-		self.send(length + payload)
-
 	# channels is a tuple of integer tuples: ((16bit,16bit), (16bit,16bit))
 	# dvc (digital volume control?) is boolean
 	# preamp must fit in a uint8

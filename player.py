@@ -15,7 +15,7 @@ import mutagen.mp3
 
 from threading import Thread
 
-from protocol import Strm
+from protocol import Strm, Aude
 
 STOPPED   = 0
 STREAMING = 1
@@ -184,7 +184,10 @@ class Player:
 		self.streamer.stop()
 
 	def mute(self, analog, digital):
-		self.wire.send_aude(not analog, not digital) # not mute == enable
+		aude         = Aude()
+		aude.analog  = not analog  # not mute == enable
+		aude.digital = not digital
+		self.wire.send(aude.serialize())
 
 	def increase_gain(self, gain, increment):
 		if gain[1] + increment > 65535:
