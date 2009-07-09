@@ -5,7 +5,7 @@
 # by the Free Software Foundation.
 
 from canvas   import Canvas
-from protocol import Grfe
+from protocol import Grfe, Grfb
 
 # no intantiation of BRIGHTNESS is needed since it only carries constants
 # that share a name space.
@@ -46,7 +46,9 @@ class Display:
 		if brightness < BRIGHTNESS.OFF or brightness > BRIGHTNESS.FULL:
 			raise Exception, 'Unknown brightness code %d' % brightness
 		self.brightness = brightness
-		self.wire.send_grfb(BRIGHTNESS.map[self.brightness])
+		grfb = Grfb()
+		grfb.brightness = BRIGHTNESS.map[self.brightness]
+		self.wire.send(grfb.serialize())
 	
 	def next_brightness(self):
 		if self.brightness - 1 < BRIGHTNESS.OFF:

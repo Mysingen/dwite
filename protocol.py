@@ -185,7 +185,7 @@ class Strm(Command):
 
 class Grfe(Command):
 	offset     = 0    # only non-zero for the Transporter
-	transition = 'c'  # default is no transition effect
+	transition = None
 	distance   = 32   # transition start on the Y-axis. not well understood
 	bitmap     = None # 4 * 320 chars for an SB2/3 display
 
@@ -195,5 +195,14 @@ class Grfe(Command):
 		         + self.transition
 		         + struct.pack('B', self.distance)
 		         + self.bitmap )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
+
+class Grfb(Command):
+	brightness = None
+
+	def serialize(self):
+		cmd    = 'grfb'
+		params = struct.pack('H', socket.htons(self.brightness))
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params

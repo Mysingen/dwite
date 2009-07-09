@@ -301,12 +301,12 @@ class Wire:
 		self.socket.send(data)
 		self.lock.release()
 
-	def send_grfb(self, brightness):
-		cmd      = 'grfb'
-		payload  = cmd + struct.pack('H', socket.htons(brightness))
-		length   = socket.htons(len(payload))
-		length   = struct.pack('H', length)
-		self.send(length + payload)
+#	def send_grfb(self, brightness):
+#		cmd      = 'grfb'
+#		payload  = cmd + struct.pack('H', socket.htons(brightness))
+#		length   = socket.htons(len(payload))
+#		length   = struct.pack('H', length)
+#		self.send(length + payload)
 
 	def send_aude(self, analog, digital):
 		cmd     = 'aude'
