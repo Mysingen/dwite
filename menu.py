@@ -141,7 +141,7 @@ class Menu:
 
 		return TRANSITION.BOUNCE_LEFT
 
-	def draw(self, transition):
+	def draw(self, transition=TRANSITION.NONE):
 		if not self.display:
 			return
 		if self.cwd.children[self.current].draw(self.display.canvas):

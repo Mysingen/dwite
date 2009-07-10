@@ -10,7 +10,7 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
-from protocol  import Tactile
+from protocol  import Helo, Tactile
 from display   import Display
 from tactile   import IR
 from menu      import Menu
@@ -110,6 +110,9 @@ class Classic(Device):
 				continue
 
 			try:
+				if isinstance(msg, Helo):
+					# always draw on screen when a device reconnects
+					self.menu.draw()
 				if isinstance(msg, Tactile):
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is

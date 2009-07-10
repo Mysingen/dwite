@@ -39,9 +39,11 @@ class ID:
 # on the control connection's socket.
 
 class Message:
-	pass
+	head = None # string
 
 class Helo(Message):
+	head = 'HELO'
+
 	def __init__(self, id, revision, mac_addr, uuid, language):
 		self.id       = id       # integer
 		self.revision = revision # integer
@@ -54,10 +56,13 @@ class Helo(Message):
 		                           self.mac_addr, self.uuid, self.language)
 
 class Anic(Message):
+	head = 'ANIC'
+
 	def __str__(self):
 		return 'ANIC: -'
 
 class Tactile(Message):
+	head   = 'IR  '
 	code   = 0 # valid values taken from tactile.IR
 	stress = 0 # integer
 
@@ -69,6 +74,7 @@ class Tactile(Message):
 		return 'IR  : %s %d' % (IR.codes_debug[self.code], self.stress)
 
 class Bye(Message):
+	head   = 'BYE '
 	reason = 0 # integer
 
 	def __init__(self, reason):
@@ -80,6 +86,7 @@ class Bye(Message):
 		return 'BYE : %d' % self.reason
 
 class Stat(Message):
+	head     = 'STAT'
 	event    = None # 4 byte string
 	crlfs    = 0    # uint8
 	mas_init = 0    # uint8
@@ -127,6 +134,7 @@ class Stat(Message):
 		return 'STAT: %s%s%s%s' % (tmp1, tmp2, tmp3, tmp4)
 
 class Resp(Message):
+	head        = 'RESP'
 	http_header = None # string
 	
 	def __init__(self, http_header):
@@ -136,6 +144,8 @@ class Resp(Message):
 		return 'RESP: %s' % self.http_header
 
 class Ureq(Message):
+	head = 'UREQ'
+
 	def __str__(self):
 		return 'UREQ: -'
 
@@ -430,7 +440,7 @@ def parse_ir(data, dlen):
 		# then we *guess* that the user is keeping it pressed, rather
 		# than hitting it again real fast. unfortunately the remotes
 		# don't generate key release events.
-		print('Stamp %d, diff %d' % (stamp, stamp - last_ir[1]))
+		#print('Stamp %d, diff %d' % (stamp, stamp - last_ir[1]))
 		if stamp - last_ir[1] < 130: # milliseconds
 			# the threshold can't be set below 108 which seems to be the
 			# rate at which the SB3 generates remote events. at the same

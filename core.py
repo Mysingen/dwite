@@ -15,26 +15,27 @@ import threading
 from Queue   import Queue
 
 from device   import Classic
-from wire     import Wire, Receiver
+from wire     import Wire
 from protocol import ID, Helo
 
 def main():
 	try:
-		queue    = Queue(100)
-		wire     = Wire(port=3483)
-		receiver = Receiver(wire, queue)
+		queue = Queue(100)
+		wire  = Wire(3483, queue)
+		wire.start()
 	except: # user pressed CTRL-C before the subsystems could initialize?
 		info = sys.exc_info()
 		traceback.print_tb(info[2])
 		print info[1]
 		return
-	receiver.start()
+
+	device = None
 
 	# wait for a HELO message from a device so that we know what device class
 	# to instantiate:
 	while True:
 		try:
-			msg = queue.get(block=True, timeout=0.1)
+			msg = queue.get(block=True, timeout=0.5)
 		except:
 			# no message in the queue. try again
 			continue
@@ -61,7 +62,7 @@ def main():
 		traceback.print_tb(info[2])
 		print info[1]
 
-	receiver.stop()
+	wire.stop()
 	device.stop()
 
 main()

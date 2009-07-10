@@ -17,101 +17,111 @@ from datetime  import datetime
 
 from protocol import *
 
-class Receiver(Thread):
-	wire    = None
-	queue   = None
-	alive   = True
+STOPPED  = 0
+STARTING = 1
+RUNNING  = 2
 
-	def __new__(cls, wire, queue):
-		object = super(Receiver, cls).__new__(
-			cls, None, Receiver.run, 'Receiver', (), {})
-		Receiver.__init__(object, wire, queue)
+class Wire(Thread):
+	state    = STOPPED
+	socket   = None
+	port     = 0
+	receiver = None
+
+	def __new__(cls, port, queue):
+		object = Thread.__new__(cls, None, Wire.run, 'Wire', (), {})
+		Wire.__init__(object, port, queue)
 		return object
 
-	def __init__(self, wire, queue):
+	def __init__(self, port, queue):
 		Thread.__init__(self)
-		self.wire  = wire
+		self.state = STARTING
+		self.port  = port
 		self.queue = queue
 
+	def accept(self):
+		if self.state != STARTING:
+			print('Wire.accept() called in wrong state %d' % self.state)
+			sys.exit(1)
+		if self.socket:
+			self.socket.close()
+		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+		print('Wire waiting for port %d to become available' % self.port)
+		while True:
+			try:
+				self.socket.bind(('', self.port))
+				break
+			except:
+				time.sleep(0.5) # avoid spending 99% CPU time
+		print('Accepting on %d' % self.port)
+
+		self.socket.listen(1)
+		self.socket, address = self.socket.accept()
+		print('Connected on %d' % self.port)
+		self.state = RUNNING
+
 	def run(self):
-		print('Listening')
-		try:
-			i = 0
+		while self.state != STOPPED:
+
+			if self.state == STARTING:
+				self.accept()
+
+			print('Listening')
 			data = ''
-			while self.alive:
-				sock = self.wire.socket
-				events = select.select([sock],[],[sock], 0.5)
+			while self.state == RUNNING:
+				events = select.select([self.socket],[],[self.socket], 0.5)
 				if len(events[2]) > 0:
 					print('wire EXCEPTIONAL EVENT')
-					break
+					self.state = STOPPED
+					continue
 				if events == ([],[],[]):
 					# do nothing. the select() timeout is just there to make
-					# sure we can break the loop when self.alive goes false.
+					# sure we can break the loop when self.state goes STOPPED.
 					continue
 
 				try:
-					data = data + self.wire.socket.recv(1024)
+					data = data + self.socket.recv(1024)
 				except socket.error, e:
 					if e[0] == errno.ECONNRESET:
-						self.wire.accept()
+						self.state = STARTING
 						continue
 					print('Receiver: Unhandled exception %s' % str(e))
 					continue
 
 				while len(data) >= 8:
 					(message, data) = parse(data)
+
 					if isinstance(message, Bye):
-						self.alive = False
-						print(str(Bye))
-						break
+						self.state = STARTING
+						print(message)
+						continue
+
 					if isinstance(message, Ureq):
-						print('UREQ handling not implemented')
+						self.state = STARTING
+						print(message)
 						time.sleep(1.0)
-						self.wire.send(Updn().serialize())
+						# bypass self.send() to not drop outgoing command
+						self.socket.send(Updn().serialize())
+						continue
+
 					if isinstance(message, Helo):
 						self.queue.put(message)
-					if isinstance(message, Tactile):
-						print message
-						self.queue.put(message)
+						continue
 
-		except:
-			info = sys.exc_info()
-			traceback.print_tb(info[2])
-			print info[1]
-		print 'receiver is dead'
+					if isinstance(message, Tactile):
+						self.queue.put(message)
+						continue
+					
+					print('%s: No particular handling' % message.head)
+
+		self.socket.close()
+		print 'wire is dead'
 
 	def stop(self):
-		self.alive = False
-
-class Wire:
-	socket = None
-	port   = 0
-
-	def __init__(self, port):
-		self.port = port
-		self.accept(port)
-
-	def accept(self, port=0):
-		if port == 0 and self.port != 0:
-			port = self.port
-
-		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-		print('Wire waiting for port %d to become available' % port)
-		while True:
-			try:
-				self.socket.bind(('', port))
-				break
-			except:
-				time.sleep(0.2) # avoid spending 99% CPU time
-		print('Accepting on %d' % port)
-
-		self.socket.listen(1)
-		self.socket, address = self.socket.accept()
-		print('Connected on %d' % port)
-
-	def close(self):
-		self.socket.close()
+		self.state = STOPPED
 
 	def send(self, data):
+		if self.state != RUNNING:
+			print('Wire restarting. Dropped %s' % data[2:6])
+			return
 		self.socket.send(data)
