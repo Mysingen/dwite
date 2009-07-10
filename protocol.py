@@ -4,6 +4,7 @@
 # under the terms of the GNU General Public License version 3, as published
 # by the Free Software Foundation.
 
+import sys
 import struct
 import socket
 
@@ -131,7 +132,7 @@ class Stat(Message):
 		if self.tail:
 			tmp4 = 'Unhandled tail: %s' % str(self.tail)
 
-		return 'STAT: %s%s%s%s' % (tmp1, tmp2, tmp3, tmp4)
+		return 'STAT:\n%s%s%s%s' % (tmp1, tmp2, tmp3, tmp4)
 
 class Resp(Message):
 	head        = 'RESP'
@@ -160,10 +161,11 @@ class Strm(Command):
 	# "real" member values.
 
 	# operations
-	OP_START = 's'
-	OP_PAUSE = 'p'
-	OP_STOP  = 'q'
-	OP_FLUSH = 'f'
+	OP_START   = 's'
+	OP_PAUSE   = 'p'
+	OP_UNPAUSE = 'u'
+	OP_STOP    = 'q'
+	OP_FLUSH   = 'f'
 	
 	# autostart? ("extern" as in "extern source". e.g. internet radio.)
 	AUTOSTART_NO         = '0'
@@ -373,19 +375,19 @@ def parse(data):
 		return (parse_ir(body, dlen), rem)
 
 	if kind == 'BYE!':
-		return (parse_bye(data, dlen), rem)
+		return (parse_bye(body, dlen), rem)
 	
 	if kind == 'STAT':
-		return (parse_stat(data, dlen), rem)
+		return (parse_stat(body, dlen), rem)
 
 	if kind == 'RESP':
-		return (parse_resp(data, dlen), rem)
+		return (parse_resp(body, dlen), rem)
 
 	if kind == 'UREQ':
-		return (parse_ureq(data, dlen), rem)
+		return (parse_ureq(body, dlen), rem)
 
-	print('unknown message %s' % kind)
-	print('payload=%s' % str(['%x' % ord(c) for c in data[4:]]))
+	print('unknown message %s %d' % (kind, dlen))
+	print('payload=%s' % str(['%x' % ord(c) for c in body]))
 	sys.exit(1)
 
 def parse_helo_10(data, dlen):
