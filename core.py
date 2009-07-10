@@ -44,11 +44,11 @@ def main():
 		# the main loop cannot see what is going on on the protocol wire!
 
 		if isinstance(msg, Helo):
+			print(msg)
 			if (msg.id == ID.SQUEEZEBOX3
 			or  msg.id == ID.SOFTSQUEEZE):
 				device = Classic(wire, queue, msg.mac_addr)
 				break
-			print('HELO from %s' % str(msg))
 
 	device.start()
 

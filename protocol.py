@@ -7,6 +7,8 @@
 import struct
 import socket
 
+from tactile import IR
+
 class ID:
 	SQUEEZEBOX   = 2
 	SOFTSQUEEZE  = 3
@@ -51,9 +53,93 @@ class Helo(Message):
 		return 'HELO: %s %d %s %s %s' % (ID.debug[self.id], self.revision,
 		                           self.mac_addr, self.uuid, self.language)
 
+class Anic(Message):
+	def __str__(self):
+		return 'ANIC: -'
+
+class Tactile(Message):
+	code   = 0 # valid values taken from tactile.IR
+	stress = 0 # integer
+
+	def __init__(self, code, stress=0):
+		self.code   = code
+		self.stress = stress
+
+	def __str__(self):
+		return 'IR  : %s %d' % (IR.codes_debug[self.code], self.stress)
+
+class Bye(Message):
+	reason = 0 # integer
+
+	def __init__(self, reason):
+		self.reason = reason
+	
+	def __str__(self):
+		if reason == 1:
+			return 'BYE : Player is going out for an upgrade'
+		return 'BYE : %d' % self.reason
+
+class Stat(Message):
+	event    = None # 4 byte string
+	crlfs    = 0    # uint8
+	mas_init = 0    # uint8
+	mas_mode = 0    # uint8
+	in_size  = 0    # uint32
+	in_fill  = 0    # uint32
+	recv_hi  = 0    # uint32
+	recv_lo  = 0    # uint32
+	wifi_pow = 0    # uint16
+	jiffies  = 0    # uint32
+	out_size = 0    # uint32
+	out_fill = 0    # uint32
+	seconds  = 0    # uint32
+	voltage  = 0    # uint32
+	msecs    = 0    # uint32
+	stamp    = 0    # uint32
+	error    = 0    # uint16 (not always set in STAT message)
+	tail     = None # unhandled part of message
+
+	def __str__(self):
+		tmp1 = ( 'Event    = %s\n' % self.event
+		       + 'CRLFs    = %d\n' % self.crlfs
+		       + 'MAS init = %d\n' % self.mas_init
+	           + 'MAS mode = %d\n' % self.mas_mode
+	           + 'In buff  = %d\n' % self.in_size
+	           + 'In fill  = %d\n' % self.in_fill
+	           + 'Received = %d %d\n' % (self.recv_hi, self.recv_lo) )
+
+		if self.wifi_pow <= 100:
+			tmp2 = 'WiFi pow = %d\n' % self.wifi_pow
+		else:
+			tmp2 = 'Connection = Wired\n'
+
+		tmp3 = ( 'Jiffies  = %d\n' % self.jiffies
+		       + 'Out buff = %d\n' % self.out_size
+		       + 'Out fill = %d\n' % self.out_fill
+		       + 'Elapsed  = %d %d\n' % (self.seconds, self.msecs)
+		       + 'Voltage  = %d\n' % self.voltage
+		       + 'Stamp    = %d\n' % self.stamp
+		       + 'Error    = %d\n' % self.error )
+
+		if self.tail:
+			tmp4 = 'Unhandled tail: %s' % str(self.tail)
+
+		return 'STAT: %s%s%s%s' % (tmp1, tmp2, tmp3, tmp4)
+
+class Resp(Message):
+	http_header = None # string
+	
+	def __init__(self, http_header):
+		self.http_header = http_header
+	
+	def __str__(self):
+		return 'RESP: %s' % self.http_header
+
 class Ureq(Message):
 	def __str__(self):
 		return 'UREQ: -'
+
+
 
 class Command:
 	def serialize(self):
@@ -185,7 +271,7 @@ class Strm(Command):
 
 class Grfe(Command):
 	offset     = 0    # only non-zero for the Transporter
-	transition = None
+	transition = None # char
 	distance   = 32   # transition start on the Y-axis. not well understood
 	bitmap     = None # 4 * 320 chars for an SB2/3 display
 
@@ -199,7 +285,7 @@ class Grfe(Command):
 		return length + cmd + params
 
 class Grfb(Command):
-	brightness = None
+	brightness = None # uint16
 
 	def serialize(self):
 		cmd    = 'grfb'
@@ -248,3 +334,152 @@ class Updn(Command):
 		params = ' '
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+
+
+# returns a tuple (message, remainder) where message is a Message instance
+# and remainder is any remaining data that was not consumed by parsing.
+def parse(data):
+	if len(data) < 8:
+		raise Excpetion, 'Useless message, length = %d' % len(data)
+
+	kind = data[0:4]
+	dlen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+	body = data[8:8+dlen]
+	rem  = data[8+dlen:]
+	#print '\n%s %d %d' % (kind, dlen, len(body))
+
+	if kind == 'HELO':
+		if   dlen == 10:
+			msg = parse_helo_10(body, dlen)
+		elif dlen == 36:
+			msg = parse_helo_36(body, dlen)
+		return (msg, rem)
+
+	if kind == 'ANIC':
+		return (Anic(), rem)
+
+	if kind == 'IR  ':
+		return (parse_ir(body, dlen), rem)
+
+	if kind == 'BYE!':
+		return (parse_bye(data, dlen), rem)
+	
+	if kind == 'STAT':
+		return (parse_stat(data, dlen), rem)
+
+	if kind == 'RESP':
+		return (parse_resp(data, dlen), rem)
+
+	if kind == 'UREQ':
+		return (parse_ureq(data, dlen), rem)
+
+	print('unknown message %s' % kind)
+	print('payload=%s' % str(['%x' % ord(c) for c in data[4:]]))
+	sys.exit(1)
+
+def parse_helo_10(data, dlen):
+	id       = ord(data[0])
+	revision = ord(data[1])
+	tmp      = struct.unpack('6BH', data[2:])
+	mac_addr = tuple(tmp[0:6])
+	wlan_chn = socket.ntohs(tmp[6])
+	mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
+
+	return Helo(id, revision, mac_addr, 1234, 'EN')
+
+def parse_helo_36(data, dlen):
+	id       = ord(data[0])
+	revision = ord(data[1])
+	tmp      = struct.unpack('6B16BHLL2s', data[2:])
+	mac_addr = tuple(tmp[0:6])
+
+	# why not just cook a new device number?
+	if id == ID.SQUEEZEBOX2 and mac_addr[0:3] == (0x0,0x4,0x20):
+		id = ID.SQUEEZEBOX3
+
+	uuid     = ''.join(str(i) for i in tmp[6:22])
+	wlan_chn = socket.ntohs(tmp[22])
+	recv_hi  = socket.ntohl(tmp[23])
+	recv_lo  = socket.ntohl(tmp[24])
+	language = tmp[25]
+	mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
+
+	return Helo(id, revision, mac_addr, uuid, language)
+
+last_ir = None # tuple: (IR code, time stamp, stress)
+def parse_ir(data, dlen):
+	global last_ir
+
+	stamp   = socket.ntohl(struct.unpack('L', data[0:4])[0])
+	format  = struct.unpack('B', data[4:5])[0]
+	nr_bits = struct.unpack('B', data[5:6])[0]
+	code    = socket.ntohl(struct.unpack('L', data[6:10])[0])
+	
+	if code not in IR.codes_debug:
+		print 'stamp   %d' % stamp
+		print 'format  %d' % format
+		print 'nr bits %d' % nr_bits
+		print 'UNKNOWN ir code %d' % code
+		last_ir = None
+		return None
+
+	stress = 0
+	if last_ir and last_ir[0] == code:
+		# the same key was pressed again. if it was done fast enough,
+		# then we *guess* that the user is keeping it pressed, rather
+		# than hitting it again real fast. unfortunately the remotes
+		# don't generate key release events.
+		print('Stamp %d, diff %d' % (stamp, stamp - last_ir[1]))
+		if stamp - last_ir[1] < 130: # milliseconds
+			# the threshold can't be set below 108 which seems to be the
+			# rate at which the SB3 generates remote events. at the same
+			# time it is quite impossible to manually hit keys faster
+			# than once per 140ms, so 130ms should be a good threshold.
+			stress = last_ir[2] + 1
+		else:
+			stress = 0
+	last_ir = (code, stamp, stress)
+	return Tactile(code, stress)
+
+def parse_bye(data, dlen):
+	reason = struct.unpack('B', data[0])
+	return Bye(reason)
+
+def parse_stat(data, dlen):
+	stat = Stat()
+
+	stat.event    = data[0:4]
+	stat.crlfs    = struct.unpack('B', data[4])[0]
+	stat.mas_init = struct.unpack('B', data[5])[0]
+	stat.mas_mode = struct.unpack('B', data[6])[0]
+	stat.in_size  = socket.ntohl(struct.unpack('L', data[ 7:11])[0])
+	stat.in_fill  = socket.ntohl(struct.unpack('L', data[11:15])[0])
+	stat.recv_hi  = socket.ntohl(struct.unpack('L', data[15:19])[0])
+	stat.recv_lo  = socket.ntohl(struct.unpack('L', data[19:23])[0])
+	stat.wifi_pow = socket.ntohs(struct.unpack('H', data[23:25])[0])
+	stat.jiffies  = socket.ntohl(struct.unpack('L', data[25:29])[0])
+	stat.out_size = socket.ntohl(struct.unpack('L', data[29:33])[0])
+	stat.out_fill = socket.ntohl(struct.unpack('L', data[33:37])[0])
+	stat.seconds  = socket.ntohl(struct.unpack('L', data[37:41])[0])
+	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
+	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
+	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
+	#stat.error    = struct.unpack('H', data[51:53])[0]
+
+	# why is there almost always some crap left over after parsing STAT?
+	# error is supposed to be 16 bit, but the tail is usually 0 or 32 bits.
+	if dlen > 51:
+		tlen = dlen - 51
+		stat.tail = struct.unpack('B'*tlen, data[51:51+tlen])
+
+	return stat
+
+def parse_resp(data, dlen):
+	# data is always an HTTP header. In fact the very same one we sent
+	# on the streaming socket, unless the device is streaming from some
+	# other source. simply discard the data for now.
+	return Resp(data)
+
+def parse_ureq(data, dlen):
+	return Ureq()

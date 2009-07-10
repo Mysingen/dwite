@@ -10,8 +10,9 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
+from protocol  import Tactile
 from display   import Display
-from tactile   import IR, TactileEvent
+from tactile   import IR
 from menu      import Menu
 from player    import Player
 
@@ -109,7 +110,7 @@ class Classic(Device):
 				continue
 
 			try:
-				if isinstance(msg, TactileEvent):
+				if isinstance(msg, Tactile):
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.

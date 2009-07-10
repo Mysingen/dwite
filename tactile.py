@@ -72,11 +72,3 @@ class IR:
 		SIZE       :'SIZE',
 		BRIGHTNESS :'BRIGHTNESS'
 	}
-
-class TactileEvent:
-	code   = 0 # valid values taken from the IR codes above
-	stress = 0
-
-	def __init__(self, code, stress=0):
-		self.code   = code
-		self.stress = stress
