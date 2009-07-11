@@ -128,16 +128,42 @@ class Classic(Device):
 						self.menu.draw(self.menu.enter())
 					elif msg.code == IR.LEFT:
 						self.menu.draw(self.menu.leave())
+
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
+
 					elif msg.code == IR.PLAY:
 						self.menu.draw(self.menu.play(self.player))
+					elif msg.code == IR.PAUSE:
+						self.player.pause_playback()
+
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()
 					elif msg.code == IR.VOLUME_DOWN:
 						self.player.volume_down()
+
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
 						self.alive = False
+
+					elif msg.code == IR.NUM_1:
+						self.player.stop_playback()
+					elif msg.code == IR.NUM_2:
+						self.player.flush_buffer()
+					elif msg.code == IR.NUM_3:
+						self.player.start_playback(10)
+					elif msg.code == IR.NUM_4:
+						pass
+					elif msg.code == IR.NUM_5:
+						pass
+					elif msg.code == IR.NUM_6:
+						pass
+					elif msg.code == IR.NUM_7:
+						pass
+					elif msg.code == IR.NUM_8:
+						pass
+					elif msg.code == IR.NUM_9:
+						pass
+
 					else:
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[msg.code])

@@ -104,10 +104,11 @@ class Stat(Message):
 	voltage  = 0    # uint32
 	msecs    = 0    # uint32
 	stamp    = 0    # uint32
-	error    = 0    # uint16 (not always set in STAT message)
-	tail     = None # unhandled part of message
+	error    = 0    # uint16 (only set in STAT/STMn?)
 
 	def __str__(self):
+		return 'HEAD %s' % self.event
+
 		tmp1 = ( 'Event    = %s\n' % self.event
 		       + 'CRLFs    = %d\n' % self.crlfs
 		       + 'MAS init = %d\n' % self.mas_init
@@ -129,10 +130,7 @@ class Stat(Message):
 		       + 'Stamp    = %d\n' % self.stamp
 		       + 'Error    = %d\n' % self.error )
 
-		if self.tail:
-			tmp4 = 'Unhandled tail: %s' % str(self.tail)
-
-		return 'STAT:\n%s%s%s%s' % (tmp1, tmp2, tmp3, tmp4)
+		return 'STAT:\n%s%s%s' % (tmp1, tmp2, tmp3)
 
 class Resp(Message):
 	head        = 'RESP'
@@ -166,6 +164,8 @@ class Strm(Command):
 	OP_UNPAUSE = 'u'
 	OP_STOP    = 'q'
 	OP_FLUSH   = 'f'
+	OP_STATUS  = 't'
+	OP_SKIP    = 'a' # track or amount? probably amount. time or bytes?
 	
 	# autostart? ("extern" as in "extern source". e.g. internet radio.)
 	AUTOSTART_NO         = '0'
@@ -386,9 +386,15 @@ def parse(data):
 	if kind == 'UREQ':
 		return (parse_ureq(body, dlen), rem)
 
-	print('unknown message %s %d' % (kind, dlen))
-	print('payload=%s' % str(['%x' % ord(c) for c in body]))
-	sys.exit(1)
+	print('unknown message:')
+	for i in data:
+		if ord(i) >= 33 and ord(i) <= 126:
+			sys.stdout.write('%c ' % i)
+		else:
+			sys.stdout.write('\\%d ' % ord(i))
+	sys.stdout.write('\n')
+	sys.stdout.flush()
+	return (None, '')
 
 def parse_helo_10(data, dlen):
 	id       = ord(data[0])
@@ -477,13 +483,14 @@ def parse_stat(data, dlen):
 	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
 	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
 	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
-	#stat.error    = struct.unpack('H', data[51:53])[0]
+	if stat.event == 'STMn' and dlen >= 53:
+		stat.error = struct.unpack('H', data[51:53])[0]
+	else:
+		stat.error = 0
 
-	# why is there almost always some crap left over after parsing STAT?
-	# error is supposed to be 16 bit, but the tail is usually 0 or 32 bits.
-	if dlen > 51:
-		tlen = dlen - 51
-		stat.tail = struct.unpack('B'*tlen, data[51:51+tlen])
+	if dlen > 53:
+		# junk data. just ignore it.
+		pass
 
 	return stat
 
