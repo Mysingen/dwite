@@ -118,13 +118,13 @@ class Streamer(Thread):
 
 				if len(events[1]) > 0:
 					if left == 0:
+						sys.stdout.write('O')
+						sys.stdout.flush()
 						data = self.decoder.read()
 						if data:
 							left = len(data)
 						else:
 							left = 0
-							sys.stdout.write('O')
-							sys.stdout.flush()
 							# annoyingly, the socket is always writable when we
 							# have already written everything there is to write.
 							# unselect writable to avoid high CPU utilization.

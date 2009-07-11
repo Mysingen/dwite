@@ -349,6 +349,13 @@ class Updn(Command):
 
 
 
+# only used to debug malformed messages
+def parsable(data):
+	kind = data[0:4]
+	if kind in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ']:
+		return True
+	return False
+
 # returns a tuple (message, remainder) where message is a Message instance
 # and remainder is any remaining data that was not consumed by parsing.
 def parse(data):
@@ -387,11 +394,18 @@ def parse(data):
 		return (parse_ureq(body, dlen), rem)
 
 	print('unknown message:')
-	for i in data:
-		if ord(i) >= 33 and ord(i) <= 126:
-			sys.stdout.write('%c ' % i)
+	# look for next message in the mess:
+	for i in range(len(data) - 4):
+		if not parsable(data[i:]):
+			if ord(data[i]) >= 33 and ord(data[i]) <= 126:
+				sys.stdout.write('%c ' % data[i])
+			else:
+				sys.stdout.write('\\%d ' % ord(data[i]))
 		else:
-			sys.stdout.write('\\%d ' % ord(i))
+			sys.stdout.write('\n')
+			sys.stdout.flush()
+			print('Recovered parsable message!')
+			return (None, data[i:])
 	sys.stdout.write('\n')
 	sys.stdout.flush()
 	return (None, '')
