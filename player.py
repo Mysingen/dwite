@@ -34,7 +34,6 @@ class Streamer(Thread):
 		return object
 
 	def __init__(self, port):
-		print('INIT streamer')
 		Thread.__init__(self)
 		self.state = STARTING
 		self.port  = port
@@ -92,13 +91,13 @@ class Streamer(Thread):
 				if events == ([],[],[]):
 					# do nothing. the select() timeout is just there to make
 					# sure we can break the loop when self.state goes STOPPED.
-					sys.stdout.write('.')
-					sys.stdout.flush()
+					#sys.stdout.write('.')
+					#sys.stdout.flush()
 					continue
 
 				if len(events[0]) > 0:
-					sys.stdout.write('o')
-					sys.stdout.flush()
+					#sys.stdout.write('o')
+					#sys.stdout.flush()
 					try:
 						data = self.socket.recv(4096)
 					except socket.error, e:
@@ -118,8 +117,8 @@ class Streamer(Thread):
 
 				if len(events[1]) > 0:
 					if left == 0:
-						sys.stdout.write('O')
-						sys.stdout.flush()
+						#sys.stdout.write('O')
+						#sys.stdout.flush()
 						data = self.decoder.read()
 						if data:
 							left = len(data)
@@ -130,8 +129,8 @@ class Streamer(Thread):
 							# unselect writable to avoid high CPU utilization.
 							selected[1] = []
 					else:
-						sys.stdout.write('*')
-						sys.stdout.flush()
+						#sys.stdout.write('*')
+						#sys.stdout.flush()
 						pass
 					try:
 						left = left - self.socket.send(data[-left:])
@@ -149,11 +148,13 @@ class Streamer(Thread):
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
 		if self.decoder:
-			response = ( 'HTTP/1.0 200 OK\r\n'
-			           + 'Content-Type: application/octet-stream\r\n'
-			           + 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
-			           + 'Location: %s\r\n' % self.decoder.path
-			           + '\r\n')
+			response = (
+			    'HTTP/1.0 200 OK\r\n'
+			  + 'Content-Type: application/octet-stream\r\n'
+			  + 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
+			  + 'Location: %s\r\n' % self.decoder.path
+			  + '\r\n'
+			)
 			self.decoder.salt = response
 		else:
 			raise Exception, 'There is no decoder object to salt!'
@@ -310,9 +311,10 @@ class Player:
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
-			info = sys.exc_info()
-			traceback.print_tb(info[2])
-			print info[1]
+			pass
+			#info = sys.exc_info()
+			#traceback.print_tb(info[2])
+			#print info[1]
 		return False
 
 	def flush_buffer(self):

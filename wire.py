@@ -135,6 +135,9 @@ class Wire(Thread):
 							print(message)
 							continue
 
+						if isinstance(message, Anic):
+							continue
+
 						print('%s: No particular handling' % message.head)
 
 		self.socket.close()
