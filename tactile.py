@@ -30,7 +30,7 @@ class IR:
 	NUM_8       = 1988716695
 	NUM_9       = 1988749335
 	FAVORITES   = 1988696295
-	SEARCH      = -1 # SEARCH button not reactive in emulator
+	SEARCH      = 1988712615
 	BROWSE      = 1988718735
 	SHUFFLE     = 1988745255
 	REPEAT      = 1988704455
