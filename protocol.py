@@ -107,7 +107,7 @@ class Stat(Message):
 	error    = 0    # uint16 (only set in STAT/STMn?)
 
 	def __str__(self):
-		return 'STAT %s' % self.event
+#		return 'STAT %s' % self.event
 
 		tmp1 = ( 'Event    = %s\n' % self.event
 		       + 'CRLFs    = %d\n' % self.crlfs
@@ -165,7 +165,7 @@ class Strm(Command):
 	OP_STOP    = 'q'
 	OP_FLUSH   = 'f'
 	OP_STATUS  = 't'
-	OP_SKIP    = 'a' # track or amount? probably amount. time or bytes?
+	OP_SKIP    = 'a' # skip milliseconds in the output buffer
 	
 	# autostart? ("extern" as in "extern source". e.g. internet radio.)
 	AUTOSTART_NO         = '0'
@@ -233,7 +233,7 @@ class Strm(Command):
 	pcm_sample_rate = '?'
 	pcm_channels    = '?'
 	pcm_endianness  = '?'
-	in_threshold    = 10    # KBytes of input data to buffer before autostart
+	in_threshold    = 0     # KBytes of input data to buffer before autostart
 	                        # and/or notifying the server of buffer status
 					        # struct.pack('B', _) 
 	spdif           = SPDIF_DISABLE
@@ -241,18 +241,18 @@ class Strm(Command):
 	                        # struct.pack('B', _) 
 	fade_type       = FADE_NONE
 	flags           = 0     # struct.pack('B', _)
-	out_threshold   = 1     # tenths of seconds of decoded audio to buffer
+	out_threshold   = 0     # tenths of seconds of decoded audio to buffer
 	                        # before starting playback.
 	                        # struct.pack('B', _) 
 	reserved        = struct.pack('B', 0)
 	gain            = (0,0) # playback gain in 16.16 fixed point
 	                        # struct.pack('HH', htons(_), htons(_))
 
-	server_port     = 3484  # struct.pack('H', socket.htons(3484))
+	server_port     = 0     # struct.pack('H', socket.htons(3484))
 	server_ip       = 0     # where to get the data stream (32 bit IPv4 addr).
 	                        # zero makes it use the same as the control server.
 	                        # struct.pack('L', htonl(_))
-	player_guid     = ''
+	player_guid     = None
 
 	def serialize(self):
 		cmd = 'strm'
@@ -276,7 +276,7 @@ class Strm(Command):
 		      + struct.pack('L', socket.htonl(self.server_ip)) )
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
-		if self.operation == 's':
+		if self.operation == 's' and self.player_guid != None:
 			params = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
 			         % self.player_guid )
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
@@ -291,20 +291,14 @@ class Strm(Command):
 class StrmStop(Strm):
 	operation = Strm.OP_STOP
 
-	def serialize(self):
-		cmd    = 'strm'
-		params = self.operation + ' '*23
-		length = struct.pack('H', socket.htons(len(cmd + params)))
-		return length + cmd + params
-
 class StrmFlush(Strm):
 	operation = Strm.OP_FLUSH
+
+class StrmSkip(Strm):
+	operation = Strm.OP_SKIP
 	
-	def serialize(self):
-		cmd    = 'strm'
-		params = self.operation + ' '*23
-		length = struct.pack('H', socket.htons(len(cmd + params)))
-		return length + cmd + params
+	def __init__(self, msecs):
+		self.gain = (0, msecs) # there are many uses for this field..
 
 class Grfe(Command):
 	offset     = 0    # only non-zero for the Transporter

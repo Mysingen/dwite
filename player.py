@@ -16,7 +16,7 @@ import mutagen.mp3
 
 from threading import Thread
 
-from protocol import Strm, StrmStop, StrmFlush, Aude, Audg
+from protocol import Strm, StrmStop, StrmFlush, StrmSkip, Aude, Audg
 
 STOPPED  = 0
 STARTING = 1
@@ -52,7 +52,9 @@ class Streamer(Thread):
 				self.socket.bind(('', self.port))
 				break
 			except:
-				time.sleep(0.5)
+				self.port = self.port + 1
+				pass
+				#time.sleep(0.5)
 		print('Streamer accepting on %d' % self.port)
 
 		self.state = RUNNING
@@ -102,6 +104,7 @@ class Streamer(Thread):
 						data = self.socket.recv(4096)
 					except socket.error, e:
 						if e[0] == errno.ECONNRESET:
+							print('Streamer connection RESET')
 							self.state = STARTING
 							continue
 						print('Streamer: Unhandled exception %s' % str(e))
@@ -117,8 +120,8 @@ class Streamer(Thread):
 
 				if len(events[1]) > 0:
 					if left == 0:
-						#sys.stdout.write('O')
-						#sys.stdout.flush()
+						sys.stdout.write('O')
+						sys.stdout.flush()
 						data = self.decoder.read()
 						if data:
 							left = len(data)
@@ -129,8 +132,8 @@ class Streamer(Thread):
 							# unselect writable to avoid high CPU utilization.
 							selected[1] = []
 					else:
-						#sys.stdout.write('*')
-						#sys.stdout.flush()
+						sys.stdout.write('*')
+						sys.stdout.flush()
 						pass
 					try:
 						left = left - self.socket.send(data[-left:])
@@ -194,10 +197,10 @@ class MP3_Decoder(Decoder):
 		self.open(path)
 
 	def time_to_offset(self, time):
-		return 0
+		return 300 * 1024
 
 	def seek(self, time):
-		self.file.seek(self.offset, time_to_offset(time))
+		self.file.seek(self.time_to_offset(time))
 
 # playback states
 STOPPED   = 0
@@ -306,41 +309,59 @@ class Player:
 			print(audio.info.pprint())
 			self.streamer.feed(MP3_Decoder(path))
 			if self.playback == PLAYING:
-				self.stop_playback()
-			self.start_playback(self.get_in_threshold(path))
+				self.stream_background()
+			else:
+				self.start_playback(self.get_in_threshold(path))
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
 			pass
-			#info = sys.exc_info()
-			#traceback.print_tb(info[2])
-			#print info[1]
+			info = sys.exc_info()
+			traceback.print_tb(info[2])
+			print info[1]
 		return False
 
 	def flush_buffer(self):
 		strm = StrmFlush()
 		self.wire.send(strm.serialize())
 
+	def stream_background(self):
+		if self.streamer.state != RUNNING:
+			print('Streamer state %d != RUNNING' % self.streamer.state)
+			return
+		strm = Strm()
+		strm.operation     = Strm.OP_START
+		strm.autostart     = Strm.AUTOSTART_YES
+		strm.format        = Strm.FORMAT_MPEG
+		strm.flags         = Strm.FLAG_DEC_NO_RESTART
+#		strm.in_threshold  = in_threshold
+#		strm.out_threshold = 1
+		strm.server_port   = self.streamer.port
+		strm.player_guid   = self.guid
+		self.wire.send(strm.serialize())
+
 	def start_playback(self, in_threshold):
 		if self.streamer.state != RUNNING:
 			print('Streamer state %d != RUNNING' % self.streamer.state)
 			return
-		self.playback     = PLAYING
+		self.playback      = PLAYING
 		strm = Strm()
-		strm.operation    = Strm.OP_START
-		strm.autostart    = Strm.AUTOSTART_YES
-		strm.format       = Strm.FORMAT_MPEG
-		strm.in_threshold = in_threshold
-		strm.player_guid  = self.guid
+		strm.operation     = Strm.OP_START
+		strm.autostart     = Strm.AUTOSTART_YES
+		strm.format        = Strm.FORMAT_MPEG
+		strm.in_threshold  = in_threshold
+		strm.out_threshold = 1
+		strm.server_port   = self.streamer.port
+		strm.player_guid   = self.guid
 		self.wire.send(strm.serialize())
 
 	def stop_playback(self):
 		self.playback = STOPPED
 		strm = StrmStop()
 		self.wire.send(strm.serialize())
-		self.flush_buffer()
+		#self.flush_buffer()
 
-	def pause_playback(self):
+	def pause(self):
 		if self.playback == PLAYING:
 			self.playback = PAUSED
 			strm = Strm()
@@ -355,3 +376,20 @@ class Player:
 			return
 		print('Player in wrong state %s to (un)pause playback!'
 		     % states_debug[self.playback])
+
+	def skip(self):
+		if self.playback != PAUSED:
+			pass
+		strm = StrmSkip(999)
+		self.wire.send(strm.serialize())
+
+	def seek(self, seconds):
+		print('stop')
+		self.stop_playback()
+		self.streamer.decoder.seek(seconds)
+		while self.streamer.state != RUNNING:
+			sys.stdout.write(',')
+			sys.stdout.flush()
+			continue
+		print('start')
+		self.start_playback(10)

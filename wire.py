@@ -126,8 +126,6 @@ class Wire(Thread):
 							continue
 
 						if isinstance(message, Stat):
-							if message.event == 'STMt':
-								continue
 							print(message)
 							continue
 

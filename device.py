@@ -17,7 +17,6 @@ from menu      import Menu
 from player    import Player
 
 class Device(Thread):
-	volume  = (0,0) # don't know yet what to put here
 	queue   = None  # let other threads post events here
 	alive   = True  # controls the main loop
 	wire    = None  # must have a wire to send actual commands to the device
@@ -135,7 +134,9 @@ class Classic(Device):
 					elif msg.code == IR.PLAY:
 						self.menu.draw(self.menu.play(self.player))
 					elif msg.code == IR.PAUSE:
-						self.player.pause_playback()
+						self.player.pause()
+					elif msg.code == IR.FORWARD:
+						self.player.seek(1.0)
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()
