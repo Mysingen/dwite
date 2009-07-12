@@ -46,7 +46,7 @@ class Device(Thread):
 
 def init_acceleration_maps():
 	maps    = {}
-	default = [0,5,10,15,18,21,24,27,30,32,34,36,38,40]
+	default = [0,3,6,9,12,15,18,21,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52]
 
 	maps[IR.UP]          = default
 	maps[IR.DOWN]        = default
