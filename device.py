@@ -164,6 +164,9 @@ class Classic(Device):
 					elif msg.code == IR.NUM_9:
 						pass
 
+					elif msg.code == IR.NOW_PLAYING:
+						self.display.next_visualizer()
+
 					else:
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[msg.code])

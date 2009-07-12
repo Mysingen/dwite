@@ -372,7 +372,70 @@ class Updn(Command):
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
+class Visu(Command):
+	# kind
+	NONE     = 0
+	VUMETER  = 1
+	SPECTRUM = 2
+	WAVEFORM = 3
 
+	def serialize(self):
+		raise Exception, 'Visu must be subclassed'
+
+class VisuNone(Visu):
+	kind = Visu.NONE
+	
+	def serialize(self):
+		cmd = 'visu'
+		params = ( struct.pack('B', self.kind)
+		         + struct.pack('B', 0) )
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
+
+class VisuMeter(Visu):
+	# channels
+	STEREO = 0
+	MONO   = 1
+
+	# style
+	DIGITAL = 0
+	ANALOG  = 1
+
+	#number of parameters
+	PARAMETERS  = 6
+
+	# member values
+	kind        = Visu.VUMETER
+	channels    = STEREO
+	style       = DIGITAL
+	left_pos    = 0
+	left_width  = 0
+	right_pos   = 0
+	right_width = 0
+
+	def __init__(self, left_pos=280,left_width=18,right_pos=302,right_width=18):
+		self.left_pos    = left_pos
+		self.left_width  = left_width
+		self.right_pos   = right_pos
+		self.right_width = right_width
+
+	def __str__(self):
+		return '%d %d %d %d' % (self.left_pos, socket.htonl(self.left_width),
+		                        self.right_pos, socket.htonl(self.right_width))
+
+	def serialize(self):
+		cmd = 'visu'
+		print(self)
+		params = ( struct.pack('B', self.kind)
+		         + struct.pack('B', self.PARAMETERS)
+		         + struct.pack('l', socket.htonl(self.channels))
+		         + struct.pack('l', socket.htonl(self.style))
+		         + struct.pack('l', socket.htonl(self.left_pos))
+		         + struct.pack('l', socket.htonl(self.left_width))
+		         + struct.pack('l', socket.htonl(self.right_pos))
+		         + struct.pack('l', socket.htonl(self.right_width)) )
+		length = struct.pack('h', socket.htons(len(cmd + params)))
+		return length + cmd + params
 
 # only used to debug malformed messages
 def parsable(data):

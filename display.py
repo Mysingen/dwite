@@ -5,7 +5,7 @@
 # by the Free Software Foundation.
 
 from canvas   import Canvas
-from protocol import Grfe, Grfb
+from protocol import Grfe, Grfb, VisuNone, VisuMeter
 
 # no intantiation of BRIGHTNESS is needed since it only carries constants
 # that share a name space.
@@ -33,10 +33,17 @@ class TRANSITION:
 	BOUNCE_LEFT  = 'R'
 	BOUNCE_RIGHT = 'L'
 
+all_visualizers = [
+	VisuNone(),
+	VisuMeter(),
+	VisuMeter(0,159, 161,159)
+]
+
 class Display:
-	wire       = None
-	brightness = BRIGHTNESS.FULL
-	canvas     = None
+	wire        = None
+	brightness  = BRIGHTNESS.FULL
+	canvas      = None
+	visualizers = iter(all_visualizers)
 	
 	def __init__(self, size, wire):
 		self.wire   = wire
@@ -55,6 +62,14 @@ class Display:
 			self.set_brightness(BRIGHTNESS.FULL)
 		else:
 			self.set_brightness(self.brightness - 1)
+
+	def next_visualizer(self):
+		try:
+			visu = self.visualizers.next()
+			self.wire.send(visu.serialize())
+		except:
+			self.visualizers = iter(all_visualizers)
+			self.next_visualizer()
 
 	def show(self, transition):
 		self.canvas.prepare_transmission()

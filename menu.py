@@ -138,7 +138,7 @@ class Menu:
 			info = sys.exc_info()
 			traceback.print_tb(info[2])
 			print info[1]
-		return TRANSITION.BOUNCE_LEFT
+		return TRANSITION.BOUNCE_RIGHT
 
 	def draw(self, transition=TRANSITION.NONE):
 		if not self.display:
