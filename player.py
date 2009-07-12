@@ -16,7 +16,7 @@ import mutagen.mp3
 
 from threading import Thread
 
-from protocol import Strm, Aude, Audg
+from protocol import Strm, StrmStop, StrmFlush, Aude, Audg
 
 STOPPED  = 0
 STARTING = 1
@@ -151,6 +151,8 @@ class Streamer(Thread):
 		if self.decoder:
 			response = ( 'HTTP/1.0 200 OK\r\n'
 			           + 'Content-Type: application/octet-stream\r\n'
+			           + 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
+			           + 'Location: %s\r\n' % self.decoder.path
 			           + '\r\n')
 			self.decoder.salt = response
 		else:
@@ -165,9 +167,11 @@ class Streamer(Thread):
 class Decoder:
 	salt = None
 	file = None
+	path = None
 
 	def open(self, path):
 		self.file = open(path, 'rb')
+		self.path = path
 
 	def read(self):
 		if self.salt:
@@ -312,8 +316,7 @@ class Player:
 		return False
 
 	def flush_buffer(self):
-		strm = Strm()
-		strm.operation = Strm.OP_FLUSH
+		strm = StrmFlush()
 		self.wire.send(strm.serialize())
 
 	def start_playback(self, in_threshold):
@@ -327,16 +330,13 @@ class Player:
 		strm.format       = Strm.FORMAT_MPEG
 		strm.in_threshold = in_threshold
 		strm.player_guid  = self.guid
-# SqueezeCenter does this, but why? keep around if it turns out to be needed.
-#			if len(strm.http_get) % 2 != 0:
-#				strm.http_get = strm.http_get + '\n'
 		self.wire.send(strm.serialize())
 
 	def stop_playback(self):
 		self.playback = STOPPED
-		strm = Strm()
-		strm.operation = Strm.OP_STOP
+		strm = StrmStop()
 		self.wire.send(strm.serialize())
+		self.flush_buffer()
 
 	def pause_playback(self):
 		if self.playback == PLAYING:

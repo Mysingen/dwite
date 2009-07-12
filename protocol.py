@@ -107,7 +107,7 @@ class Stat(Message):
 	error    = 0    # uint16 (only set in STAT/STMn?)
 
 	def __str__(self):
-		return 'HEAD %s' % self.event
+		return 'STAT %s' % self.event
 
 		tmp1 = ( 'Event    = %s\n' % self.event
 		       + 'CRLFs    = %d\n' % self.crlfs
@@ -276,8 +276,33 @@ class Strm(Command):
 		      + struct.pack('L', socket.htonl(self.server_ip)) )
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
-		params = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
-		         % self.player_guid )
+		if self.operation == 's':
+			params = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
+			         % self.player_guid )
+			# SqueezeCenter does this (on the GET, but it's all the same). why?
+			#if len(params) % 2 != 0:
+			#	params = params + '\n'
+		else:
+			params = tmp
+
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
+
+class StrmStop(Strm):
+	operation = Strm.OP_STOP
+
+	def serialize(self):
+		cmd    = 'strm'
+		params = self.operation + ' '*23
+		length = struct.pack('H', socket.htons(len(cmd + params)))
+		return length + cmd + params
+
+class StrmFlush(Strm):
+	operation = Strm.OP_FLUSH
+	
+	def serialize(self):
+		cmd    = 'strm'
+		params = self.operation + ' '*23
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
@@ -356,58 +381,75 @@ def parsable(data):
 		return True
 	return False
 
+def human_readable(data):
+	buf = data[0:4]
+	buf = buf + '[' + ' '.join(['%d' % ord(c) for c in data[4:8]]) + ']'
+	for i in range(8, len(data) - 1):
+		if ((ord(data[i]) >= 65 and ord(data[i]) <= 90)
+		or  (ord(data[i]) >= 97 and ord(data[i]) <= 122)
+		or  (ord(data[i]) in [32, 45, 46, 47, 58, 95])):
+			buf = buf + '%c' % data[i]
+		else:
+			buf = buf + '\\%03d' % ord(data[i])
+	return buf
+
+def first_unprintable(data):
+	for i in range(len(data) - 1):
+		if ((ord(data[i]) not in [9, 10, 13])
+		and (ord(data[i]) < 32 or ord(data[i]) > 126)):
+			return i
+	return -1
+
 # returns a tuple (message, remainder) where message is a Message instance
 # and remainder is any remaining data that was not consumed by parsing.
 def parse(data):
-	if len(data) < 8:
+	dlen = len(data)
+	if dlen < 8:
 		raise Excpetion, 'Useless message, length = %d' % len(data)
 
 	kind = data[0:4]
-	dlen = socket.ntohl(struct.unpack('L', data[4:8])[0])
-	body = data[8:8+dlen]
-	rem  = data[8+dlen:]
-	#print '\n%s %d %d' % (kind, dlen, len(body))
+	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+	body = data[8:8+blen]
+	rem  = data[8+blen:]
+	#print '\n%s %d %d' % (kind, blen, len(body))
 
 	if kind == 'HELO':
-		if   dlen == 10:
-			msg = parse_helo_10(body, dlen)
-		elif dlen == 36:
-			msg = parse_helo_36(body, dlen)
+		if   blen == 10:
+			msg = parse_helo_10(body, blen)
+		elif blen == 36:
+			msg = parse_helo_36(body, blen)
 		return (msg, rem)
 
 	if kind == 'ANIC':
 		return (Anic(), rem)
 
 	if kind == 'IR  ':
-		return (parse_ir(body, dlen), rem)
+		return (parse_ir(body, blen), rem)
 
 	if kind == 'BYE!':
-		return (parse_bye(body, dlen), rem)
+		return (parse_bye(body, blen), rem)
 	
 	if kind == 'STAT':
-		return (parse_stat(body, dlen), rem)
+		return (parse_stat(body, blen), rem)
 
 	if kind == 'RESP':
-		return (parse_resp(body, dlen), rem)
+		# let the RESP parser figure out the real body length as it appears
+		# to often be incorrectly set.
+		(resp, blen) = parse_resp(body, blen)
+		return (resp, data[8+blen:])
 
 	if kind == 'UREQ':
-		return (parse_ureq(body, dlen), rem)
+		return (parse_ureq(body, blen), rem)
 
-	print('unknown message:')
+	print('unknown message, len %d. first 160 chars:' % dlen)
+	if dlen > 160:
+		dlen = 160
+	print(human_readable(data[:dlen]))
 	# look for next message in the mess:
 	for i in range(len(data) - 4):
-		if not parsable(data[i:]):
-			if ord(data[i]) >= 33 and ord(data[i]) <= 126:
-				sys.stdout.write('%c ' % data[i])
-			else:
-				sys.stdout.write('\\%d ' % ord(data[i]))
-		else:
-			sys.stdout.write('\n')
-			sys.stdout.flush()
-			print('Recovered parsable message!')
+		if parsable(data[i:]):
+			print('Recovered parsable message')
 			return (None, data[i:])
-	sys.stdout.write('\n')
-	sys.stdout.flush()
 	return (None, '')
 
 def parse_helo_10(data, dlen):
@@ -497,22 +539,20 @@ def parse_stat(data, dlen):
 	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
 	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
 	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
-	if stat.event == 'STMn' and dlen >= 53:
-		stat.error = struct.unpack('H', data[51:53])[0]
-	else:
-		stat.error = 0
-
-	if dlen > 53:
-		# junk data. just ignore it.
-		pass
+	stat.error    = socket.ntohl(struct.unpack('H', data[51:53])[0])
 
 	return stat
 
 def parse_resp(data, dlen):
 	# data is always an HTTP header. In fact the very same one we sent
 	# on the streaming socket, unless the device is streaming from some
-	# other source. simply discard the data for now.
-	return Resp(data)
+	# other source.
+
+	# RESP sometimes contains a lot of junk. don't trust dlen
+	i = first_unprintable(data) # -1 if none, which is good input in next step.
+	if dlen > i:
+		print('Junk in RESP')
+	return (Resp(data[:i]), i)
 
 def parse_ureq(data, dlen):
 	return Ureq()

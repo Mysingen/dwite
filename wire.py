@@ -126,6 +126,8 @@ class Wire(Thread):
 							continue
 
 						if isinstance(message, Stat):
+							if message.event == 'STMt':
+								continue
 							print(message)
 							continue
 
@@ -145,5 +147,5 @@ class Wire(Thread):
 		if self.state != RUNNING:
 			print('Wire restarting. Dropped %s' % data[2:6])
 			return
-#		print('Wire.send %s' % data[2:6])
+		#print('Wire.send %s' % data[2:6])
 		self.socket.send(data)
