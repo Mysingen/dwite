@@ -373,30 +373,28 @@ class Updn(Command):
 		return length + cmd + params
 
 class Visu(Command):
-	# kind
+	# kinds
 	NONE     = 0
 	VUMETER  = 1
 	SPECTRUM = 2
-	WAVEFORM = 3
+	WAVEFORM = 3 # no documentation or example code available anywhere
+
+	# channels
+	STEREO   = 0
+	MONO     = 1
 
 	def serialize(self):
 		raise Exception, 'Visu must be subclassed'
 
 class VisuNone(Visu):
-	kind = Visu.NONE
-	
 	def serialize(self):
 		cmd = 'visu'
-		params = ( struct.pack('B', self.kind)
+		params = ( struct.pack('B', Visu.NONE)
 		         + struct.pack('B', 0) )
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class VisuMeter(Visu):
-	# channels
-	STEREO = 0
-	MONO   = 1
-
 	# style
 	DIGITAL = 0
 	ANALOG  = 1
@@ -405,8 +403,7 @@ class VisuMeter(Visu):
 	PARAMETERS  = 6
 
 	# member values
-	kind        = Visu.VUMETER
-	channels    = STEREO
+	channels    = Visu.STEREO
 	style       = DIGITAL
 	left_pos    = 0
 	left_width  = 0
@@ -419,14 +416,9 @@ class VisuMeter(Visu):
 		self.right_pos   = right_pos
 		self.right_width = right_width
 
-	def __str__(self):
-		return '%d %d %d %d' % (self.left_pos, socket.htonl(self.left_width),
-		                        self.right_pos, socket.htonl(self.right_width))
-
 	def serialize(self):
 		cmd = 'visu'
-		print(self)
-		params = ( struct.pack('B', self.kind)
+		params = ( struct.pack('B', Visu.VUMETER)
 		         + struct.pack('B', self.PARAMETERS)
 		         + struct.pack('l', socket.htonl(self.channels))
 		         + struct.pack('l', socket.htonl(self.style))
@@ -436,6 +428,78 @@ class VisuMeter(Visu):
 		         + struct.pack('l', socket.htonl(self.right_width)) )
 		length = struct.pack('h', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+class VisuSpectrum(Visu):
+	# bandwidth
+	HIGH_BANDWIDTH = 0 # 0..22050Hz
+	LOW_BANDWIDTH  = 1 # 0..11025Hz
+	
+	# orientation
+	LEFT_TO_RIGHT = 0
+	RIGHT_TO_LEFT = 1
+	
+	# clipping
+	CLIP_NOTHING = 0 # show all subbands
+	CLIP_HIGH    = 1 # clip higher subbands
+
+	# bar intensity
+	MILD   = 1
+	MEDIUM = 2
+	HOT    = 3
+
+	PARAMETERS = 19
+
+	# member values
+	channels    = Visu.STEREO
+	bandwidth   = HIGH_BANDWIDTH
+	preemphasis = 0x10000 # dB per KHz
+
+	left_pos           = 0
+	left_width         = 160
+	left_orientation   = LEFT_TO_RIGHT
+	left_bar_width     = 4
+	left_bar_spacing   = 1
+	left_clipping      = CLIP_HIGH
+	left_bar_intensity = MILD
+	left_cap_intensity = HOT
+
+	right_pos           = 160
+	right_width         = 160
+	right_orientation   = RIGHT_TO_LEFT
+	right_bar_width     = 4
+	right_bar_spacing   = 1
+	right_clipping      = CLIP_HIGH
+	right_bar_intensity = MILD
+	right_cap_intensity = HOT
+
+	def serialize(self):
+		cmd = 'visu'
+		params = ( struct.pack('B', Visu.SPECTRUM)
+		         + struct.pack('B', self.PARAMETERS)
+		         + struct.pack('l', socket.htonl(self.channels))
+		         + struct.pack('l', socket.htonl(self.bandwidth))
+		         + struct.pack('l', socket.htonl(self.preemphasis))
+
+		         + struct.pack('l', socket.htonl(self.left_pos))
+		         + struct.pack('l', socket.htonl(self.left_width))
+		         + struct.pack('l', socket.htonl(self.left_orientation))
+		         + struct.pack('l', socket.htonl(self.left_bar_width))
+		         + struct.pack('l', socket.htonl(self.left_bar_spacing))
+		         + struct.pack('l', socket.htonl(self.left_clipping))
+		         + struct.pack('l', socket.htonl(self.left_bar_intensity))
+		         + struct.pack('l', socket.htonl(self.left_cap_intensity))
+
+		         + struct.pack('l', socket.htonl(self.right_pos))
+		         + struct.pack('l', socket.htonl(self.right_width))
+		         + struct.pack('l', socket.htonl(self.right_orientation))
+		         + struct.pack('l', socket.htonl(self.right_bar_width))
+		         + struct.pack('l', socket.htonl(self.right_bar_spacing))
+		         + struct.pack('l', socket.htonl(self.right_clipping))
+		         + struct.pack('l', socket.htonl(self.right_bar_intensity))
+		         + struct.pack('l', socket.htonl(self.right_cap_intensity)) )
+		length = struct.pack('h', socket.htons(len(cmd + params)))
+		return length + cmd + params
+		
 
 # only used to debug malformed messages
 def parsable(data):

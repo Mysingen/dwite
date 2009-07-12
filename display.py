@@ -5,7 +5,7 @@
 # by the Free Software Foundation.
 
 from canvas   import Canvas
-from protocol import Grfe, Grfb, VisuNone, VisuMeter
+from protocol import Grfe, Grfb, VisuNone, VisuMeter, VisuSpectrum
 
 # no intantiation of BRIGHTNESS is needed since it only carries constants
 # that share a name space.
@@ -34,9 +34,10 @@ class TRANSITION:
 	BOUNCE_RIGHT = 'L'
 
 all_visualizers = [
-	VisuNone(),
 	VisuMeter(),
-	VisuMeter(0,159, 161,159)
+	VisuMeter(0,159, 161,159),
+	VisuSpectrum(),
+	VisuNone()
 ]
 
 class Display:
