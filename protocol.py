@@ -306,6 +306,12 @@ class StrmStartMpeg(Strm):
 		else:
 			self.autostart = Strm.AUTOSTART_YES
 
+class StrmPause(Strm):
+	operation = Strm.OP_PAUSE
+
+class StrmUnpause(Strm):
+	operation = Strm.OP_UNPAUSE
+
 class StrmStop(Strm):
 	operation = Strm.OP_STOP
 
@@ -533,11 +539,11 @@ def human_readable(data):
 	return buf
 
 def first_unprintable(data):
-	for i in range(len(data) - 1):
+	for i in range(len(data)):
 		if ((ord(data[i]) not in [9, 10, 13])
 		and (ord(data[i]) < 32 or ord(data[i]) > 126)):
 			return i
-	return -1
+	return len(data)
 
 # returns a tuple (message, remainder) where message is a Message instance
 # and remainder is any remaining data that was not consumed by parsing.
@@ -549,7 +555,10 @@ def parse(data):
 	kind = data[0:4]
 	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
 	body = data[8:8+blen]
-	rem  = data[8+blen:]
+	if blen > len(body):
+		print('WARNING: length field is too big! %d > %d' % (blen, len(body)))
+		blen = len(body)
+	rem  = data[8+blen:-1]
 	#print '\n%s %d %d' % (kind, blen, len(body))
 
 	if kind == 'HELO':
@@ -574,8 +583,12 @@ def parse(data):
 	if kind == 'RESP':
 		# let the RESP parser figure out the real body length as it appears
 		# to often be incorrectly set.
+		print(human_readable(data))
+		print(human_readable(data[0:8+blen]))
+		print(human_readable(rem))
 		(resp, blen) = parse_resp(body, blen)
-		return (resp, data[8+blen:])
+		print(human_readable(data[8+blen:-1]))
+		return (resp, data[8+blen:-1])
 
 	if kind == 'UREQ':
 		return (parse_ureq(body, blen), rem)
@@ -678,7 +691,8 @@ def parse_stat(data, dlen):
 	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
 	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
 	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
-	stat.error    = socket.ntohl(struct.unpack('H', data[51:53])[0])
+	if dlen >= 53:
+		stat.error = socket.ntohl(struct.unpack('H', data[51:53])[0])
 
 	return stat
 
@@ -687,7 +701,7 @@ def parse_resp(data, dlen):
 	# on the streaming socket, unless the device is streaming from some
 	# other source.
 
-	# RESP sometimes contains a lot of junk. don't trust dlen
+	# RESP sometimes contains junk. don't trust dlen
 	i = first_unprintable(data) # -1 if none, which is good input in next step.
 	if dlen > i:
 		print('Junk in RESP')

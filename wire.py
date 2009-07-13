@@ -126,7 +126,7 @@ class Wire(Thread):
 							continue
 
 						if isinstance(message, Stat):
-							print(message)
+							self.queue.put(message)
 							continue
 
 						if isinstance(message, Resp):

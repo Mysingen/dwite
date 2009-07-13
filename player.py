@@ -18,7 +18,7 @@ import mutagen.mp3
 from threading import Thread
 
 from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
-from protocol import Aude, Audg
+from protocol import Aude, Audg, StrmPause, StrmUnpause
 
 STOPPED  = 0
 STARTING = 1
@@ -101,8 +101,8 @@ class Streamer(Thread):
 					continue
 
 				if len(events[0]) > 0:
-					sys.stdout.write('o')
-					sys.stdout.flush()
+					#sys.stdout.write('o')
+					#sys.stdout.flush()
 					try:
 						in_data = self.socket.recv(4096)
 					except socket.error, e:
@@ -127,8 +127,8 @@ class Streamer(Thread):
 
 				if len(events[1]) > 0:
 					if out_left == 0:
-						sys.stdout.write('O')
-						sys.stdout.flush()
+						#sys.stdout.write('O')
+						#sys.stdout.flush()
 						out_data = None
 						if self.decoder:
 							out_data = self.decoder.read()
@@ -143,8 +143,8 @@ class Streamer(Thread):
 							continue
 
 					else:
-						sys.stdout.write('*')
-						sys.stdout.flush()
+						#sys.stdout.write('*')
+						#sys.stdout.flush()
 						try:
 							sent = self.socket.send(out_data[-out_left:])
 							out_left = out_left - sent
@@ -168,7 +168,7 @@ class Streamer(Thread):
 			#traceback.print_tb(info[2])
 			#print info[1]
 			# not an mp3 resource
-			return 'HTTP/1.0 404 Not Found\r\n\r\n'
+			return 'HTTP/1.0 404 Not Found\r\n'
 
 		try:
 			m = re.search('Seek-Time: (\d+)', data, re.MULTILINE)
@@ -184,11 +184,11 @@ class Streamer(Thread):
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
 		return (
-		    'HTTP/1.0 200 OK\r\n'
-		  + 'Content-Type: application/octet-stream\r\n'
+		    'HTTP/1.0 200 OK\r\n\r\n'
+		  #+ 'Content-Type: application/octet-stream\r\n'
 		  #+ 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
 		  #+ 'Location: %s\r\n' % self.decoder.path
-		  + '\r\n'
+		  #+ '\r\n'
 		)
 
 	def stop(self):
@@ -231,45 +231,26 @@ class MP3_Decoder(Decoder):
 		self.open(path)
 
 	def time_to_offset(self, msec):
-		# divide by 8000 instead of 1000 to go from bitrate to byterate
-		return (self.bitrate * (msec / 8000))
+		return int(((self.bitrate / 1000.0) * (msec / 8.0)))
 
 	def seek(self, msec):
 		if msec > self.duration * 1000:
 			print('Too large time seek value %d' % msec)
 			return
-		self.file.seek(self.time_to_offset(msec))
+		offset = self.time_to_offset(msec)
+		print('seek(%d)' % offset)
+		self.file.seek(offset)
 
-# playback states
-STOPPED   = 0
-PLAYING   = 1
-PAUSED    = 2	
-# buffering states
-FLUSHING  = 3
-BUFFERING = 4
-READY     = 5
-# other states
-NO_STATE = -1
-
-states_debug = {
-	NO_STATE  : 'NO_STATE',
-	STOPPED   : 'STOPPED',
-	PLAYING   : 'PLAYING',
-	PAUSED    : 'PAUSED',
-	FLUSHING  : 'FLUSHING',
-	BUFFERING : 'BUFFERING',
-	READY     : 'READY'
-}
+######################
 
 class Player:
-	playback = NO_STATE
-	guid     = None # used when telling the device how to present itself
-	streamer = None
-	wire     = None
-	gain_l   = (0,0) # 16bit.16bit expressed as uints
-	gain_r   = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
-	preamp   = 0
-	playing  = None # path or URL
+	guid        = None # used when telling the device how to present itself
+	streamer    = None # to be removed or replaced with a JSON interface
+	wire        = None
+	gain_l      = (0,0) # 16bit.16bit expressed as uints
+	gain_r      = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
+	preamp      = 0
+	now_playing = None # NowPlaying instance
 	
 	def __init__(self, wire, guid):
 		self.guid     = guid
@@ -319,7 +300,7 @@ class Player:
 		left  = self.decrease_gain(self.gain_l, 4000)
 		right = self.decrease_gain(self.gain_r, 4000)
 		self.set_volume(self.preamp, left, right)
-	
+
 	def set_volume(self, preamp, gain_left, gain_right):
 		self.preamp = preamp
 		self.gain_l = gain_left
@@ -357,47 +338,70 @@ class Player:
 		return False
 
 	def flush_buffer(self):
-		strm = StrmFlush()
-		self.wire.send(strm.serialize())
+		self.wire.send(StrmFlush().serialize())
+		self.now_playing = None
 
 	def stream_background(self):
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
 		self.wire.send(strm.serialize())
 
 	def start_playback(self, path, in_threshold, seek=0):
+		if seek < 0:
+			seek = 0
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
 		strm.in_threshold  = in_threshold
 		strm.out_threshold = 1
-		self.playing = path
 		self.wire.send(strm.serialize())
+		self.now_playing = NowPlaying(path, seek)
 
 	def stop_playback(self):
-		self.playback = STOPPED
-		strm = StrmStop()
-		self.wire.send(strm.serialize())
+		self.wire.send(StrmStop().serialize())
+		self.now_playing = None
 
 	def pause(self):
-		if self.playback == PLAYING:
-			self.playback = PAUSED
-			strm = Strm()
-			strm.operation = Strm.OP_PAUSE
-			self.wire.send(strm.serialize())
+		if not self.now_playing:
 			return
-		if self.playback == PAUSED:
-			self.playback = PLAYING
-			strm = Strm()
-			strm.operation = Strm.OP_UNPAUSE
-			self.wire.send(strm.serialize())
+		if self.now_playing.state == NowPlaying.PLAYING:
+			self.now_playing.state = NowPlaying.PAUSED
+			self.wire.send(StrmPause().serialize())
 			return
-		print('Player in wrong state %s to (un)pause playback!'
-		     % states_debug[self.playback])
+		if self.now_playing.state == NowPlaying.PAUSED:
+			self.now_playing.state = NowPlaying.BUFFERING
+			self.wire.send(StrmUnpause().serialize())
+			return
 
-	def skip(self):
-		if self.playback != PAUSED:
-			pass
-		strm = StrmSkip(999)
-		self.wire.send(strm.serialize())
+	def skip(self, msecs):
+		if self.now_playing.state != NowPlaying.PLAYING:
+			return
+		self.wire.send(StrmSkip(msecs).serialize())
 
 	def seek(self, msecs):
+		if not self.now_playing:
+			return
+		resource = self.now_playing.resource
+		position = self.now_playing.position()
 		self.stop_playback()
-		self.start_playback(self.playing, 10, msecs)
+		self.start_playback(resource, 10, position + msecs)
+
+	def set_progress(self, msecs):
+		self.now_playing.state    = NowPlaying.PLAYING
+		self.now_playing.progress = msecs
+		print('song position=%d' % self.now_playing.position())
+
+class NowPlaying:
+	# state definitions
+	BUFFERING = 0 # forced pause to give a device's buffers time to fill up
+	PLAYING   = 1
+	PAUSED    = 2
+
+	resource = None # URL or file path string
+	state    = BUFFERING
+	start    = 0 # current playback position (in milliseconds) is calculated
+	progress = 0 # as the start position plus the progress.
+	
+	def __init__(self, resource, start=0):
+		self.resource = resource
+		self.start    = start
+	
+	def position(self):
+		return self.start + self.progress

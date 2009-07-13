@@ -10,7 +10,7 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
-from protocol  import Helo, Tactile
+from protocol  import Helo, Tactile, Stat
 from display   import Display
 from tactile   import IR
 from menu      import Menu
@@ -112,6 +112,12 @@ class Classic(Device):
 				if isinstance(msg, Helo):
 					# always draw on screen when a device reconnects
 					self.menu.draw()
+				if isinstance(msg, Stat):
+					if msg.event == 'STMt':
+						self.player.set_progress(msg.msecs)
+					else:
+						print('STAT %s' % msg.event)
+					continue
 				if isinstance(msg, Tactile):
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
@@ -136,7 +142,9 @@ class Classic(Device):
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.player.seek(10000)
+						self.player.seek(1000)
+					elif msg.code == IR.REWIND:
+						self.player.seek(-1000)
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()
