@@ -136,7 +136,7 @@ class Classic(Device):
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.player.seek(1.0)
+						self.player.seek(10000)
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()

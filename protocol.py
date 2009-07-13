@@ -252,7 +252,9 @@ class Strm(Command):
 	server_ip       = 0     # where to get the data stream (32 bit IPv4 addr).
 	                        # zero makes it use the same as the control server.
 	                        # struct.pack('L', htonl(_))
+	resource        = None  # string to identify the file/stream on a CM server
 	player_guid     = None
+	seek            = 0     # milliseconds
 
 	def serialize(self):
 		cmd = 'strm'
@@ -276,9 +278,10 @@ class Strm(Command):
 		      + struct.pack('L', socket.htonl(self.server_ip)) )
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
-		if self.operation == 's' and self.player_guid != None:
-			params = ( tmp + 'GET /stream.mp3?player=%s HTTP/1.0\n'
-			         % self.player_guid )
+		if self.operation == Strm.OP_START:
+			params = ( tmp
+			         + 'GET %s HTTP/1.0\r\n' % self.resource
+			         + 'Seek-Time: %d\r\n' % self.seek )
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
 			#if len(params) % 2 != 0:
 			#	params = params + '\n'
@@ -287,6 +290,21 @@ class Strm(Command):
 
 		length = struct.pack('H', socket.htons(len(cmd + params)))
 		return length + cmd + params
+
+class StrmStartMpeg(Strm):
+	operation = Strm.OP_START
+	format    = Strm.FORMAT_MPEG
+
+	def __init__(self, ip, port, resource, player_guid,seek=0,background=False):
+		self.server_ip     = ip
+		self.server_port   = port
+		self.resource      = resource
+		self.player_guid   = player_guid
+		self.seek          = seek
+		if background:
+			self.autostart = Strm.AUTOSTART_NO
+		else:
+			self.autostart = Strm.AUTOSTART_YES
 
 class StrmStop(Strm):
 	operation = Strm.OP_STOP

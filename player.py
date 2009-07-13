@@ -12,11 +12,13 @@ import struct
 import select
 import time
 import errno
+import re
 import mutagen.mp3
 
 from threading import Thread
 
-from protocol import Strm, StrmStop, StrmFlush, StrmSkip, Aude, Audg
+from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
+from protocol import Aude, Audg
 
 STOPPED  = 0
 STARTING = 1
@@ -82,8 +84,9 @@ class Streamer(Thread):
 			
 			print('Streamer listening')
 
-			selected = [[self.socket], [self.socket], [self.socket]]
-			left = 0
+			selected = [[self.socket], [], [self.socket]]
+			out_data = None
+			out_left = 0
 			while self.state == RUNNING:
 				events = select.select(selected[0],selected[1],selected[2], 0.5)
 				if len(events[2]) > 0:
@@ -98,10 +101,10 @@ class Streamer(Thread):
 					continue
 
 				if len(events[0]) > 0:
-					#sys.stdout.write('o')
-					#sys.stdout.flush()
+					sys.stdout.write('o')
+					sys.stdout.flush()
 					try:
-						data = self.socket.recv(4096)
+						in_data = self.socket.recv(4096)
 					except socket.error, e:
 						if e[0] == errno.ECONNRESET:
 							print('Streamer connection RESET')
@@ -110,8 +113,12 @@ class Streamer(Thread):
 						print('Streamer: Unhandled exception %s' % str(e))
 						continue
 
-					if data.startswith('GET /stream') and len(data) < 4096:
-						self.handle_http_get(data, len(data))
+					if in_data.startswith('GET '):
+						out_data = self.handle_http_get(in_data)
+						out_left = len(out_data)
+						print('len=%d\ndata=%s' % (out_left, out_data))
+						if out_left > 0:
+							selected[1] = [self.socket]
 						continue
 					else:
 						raise Exception, ( 'streamer got weird stuff to read:\n'
@@ -119,48 +126,70 @@ class Streamer(Thread):
 						                 + 'data=%s\n' % data )
 
 				if len(events[1]) > 0:
-					if left == 0:
+					if out_left == 0:
 						sys.stdout.write('O')
 						sys.stdout.flush()
-						data = self.decoder.read()
-						if data:
-							left = len(data)
+						out_data = None
+						if self.decoder:
+							out_data = self.decoder.read()
+						if out_data:
+							out_left = len(out_data)
 						else:
-							left = 0
+							out_left = 0
 							# annoyingly, the socket is always writable when we
 							# have already written everything there is to write.
 							# unselect writable to avoid high CPU utilization.
 							selected[1] = []
+							continue
+
 					else:
 						sys.stdout.write('*')
 						sys.stdout.flush()
-						pass
-					try:
-						left = left - self.socket.send(data[-left:])
-					except:
-						info = sys.exc_info()
-						traceback.print_tb(info[2])
-						print(info[1])
-						break
+						try:
+							sent = self.socket.send(out_data[-out_left:])
+							out_left = out_left - sent
+						except:
+							info = sys.exc_info()
+							traceback.print_tb(info[2])
+							print(info[1])
+							break
+						continue
 		print('streamer is dead')
 
-	def feed(self, decoder):
+	def handle_http_get(self, data):
+		# check what resource is requested and whether to start playing it
+		# at some offset:
+		print data
+		try:
+			m = re.search('GET (.+?) HTTP/1\.0', data, re.MULTILINE)
+			decoder = MP3_Decoder(m.group(1))
+		except:
+			#info = sys.exc_info()
+			#traceback.print_tb(info[2])
+			#print info[1]
+			# not an mp3 resource
+			return 'HTTP/1.0 404 Not Found\r\n\r\n'
+
+		try:
+			m = re.search('Seek-Time: (\d+)', data, re.MULTILINE)
+			decoder.seek(int(m.group(1)))
+		except:
+			#info = sys.exc_info()
+			#traceback.print_tb(info[2])
+			#print info[1]
+			pass
+
 		self.decoder = decoder
 
-	def handle_http_get(self, data, dlen):
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
-		if self.decoder:
-			response = (
-			    'HTTP/1.0 200 OK\r\n'
-			  + 'Content-Type: application/octet-stream\r\n'
-			  + 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
-			  + 'Location: %s\r\n' % self.decoder.path
-			  + '\r\n'
-			)
-			self.decoder.salt = response
-		else:
-			raise Exception, 'There is no decoder object to salt!'
+		return (
+		    'HTTP/1.0 200 OK\r\n'
+		  + 'Content-Type: application/octet-stream\r\n'
+		  #+ 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
+		  #+ 'Location: %s\r\n' % self.decoder.path
+		  + '\r\n'
+		)
 
 	def stop(self):
 		self.state = STOPPED
@@ -192,15 +221,24 @@ class Decoder:
 		raise Exception, 'Your decoder must implement seek()'
 
 class MP3_Decoder(Decoder):
+	duration = 0 # float: seconds
+	bitrate  = 0 # int: bits per second
 
 	def __init__(self, path):
+		audio = mutagen.mp3.MP3(path)
+		self.duration = audio.info.length
+		self.bitrate  = audio.info.bitrate
 		self.open(path)
 
-	def time_to_offset(self, time):
-		return 300 * 1024
+	def time_to_offset(self, msec):
+		# divide by 8000 instead of 1000 to go from bitrate to byterate
+		return (self.bitrate * (msec / 8000))
 
-	def seek(self, time):
-		self.file.seek(self.time_to_offset(time))
+	def seek(self, msec):
+		if msec > self.duration * 1000:
+			print('Too large time seek value %d' % msec)
+			return
+		self.file.seek(self.time_to_offset(msec))
 
 # playback states
 STOPPED   = 0
@@ -231,6 +269,7 @@ class Player:
 	gain_l   = (0,0) # 16bit.16bit expressed as uints
 	gain_r   = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	preamp   = 0
+	playing  = None # path or URL
 	
 	def __init__(self, wire, guid):
 		self.guid     = guid
@@ -307,11 +346,7 @@ class Player:
 		try:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
-			self.streamer.feed(MP3_Decoder(path))
-			if self.playback == PLAYING:
-				self.stream_background()
-			else:
-				self.start_playback(self.get_in_threshold(path))
+			self.start_playback(path, self.get_in_threshold(path))
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
@@ -326,40 +361,20 @@ class Player:
 		self.wire.send(strm.serialize())
 
 	def stream_background(self):
-		if self.streamer.state != RUNNING:
-			print('Streamer state %d != RUNNING' % self.streamer.state)
-			return
-		strm = Strm()
-		strm.operation     = Strm.OP_START
-		strm.autostart     = Strm.AUTOSTART_YES
-		strm.format        = Strm.FORMAT_MPEG
-		strm.flags         = Strm.FLAG_DEC_NO_RESTART
-#		strm.in_threshold  = in_threshold
-#		strm.out_threshold = 1
-		strm.server_port   = self.streamer.port
-		strm.player_guid   = self.guid
+		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
 		self.wire.send(strm.serialize())
 
-	def start_playback(self, in_threshold):
-		if self.streamer.state != RUNNING:
-			print('Streamer state %d != RUNNING' % self.streamer.state)
-			return
-		self.playback      = PLAYING
-		strm = Strm()
-		strm.operation     = Strm.OP_START
-		strm.autostart     = Strm.AUTOSTART_YES
-		strm.format        = Strm.FORMAT_MPEG
+	def start_playback(self, path, in_threshold, seek=0):
+		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
 		strm.in_threshold  = in_threshold
 		strm.out_threshold = 1
-		strm.server_port   = self.streamer.port
-		strm.player_guid   = self.guid
+		self.playing = path
 		self.wire.send(strm.serialize())
 
 	def stop_playback(self):
 		self.playback = STOPPED
 		strm = StrmStop()
 		self.wire.send(strm.serialize())
-		#self.flush_buffer()
 
 	def pause(self):
 		if self.playback == PLAYING:
@@ -383,13 +398,6 @@ class Player:
 		strm = StrmSkip(999)
 		self.wire.send(strm.serialize())
 
-	def seek(self, seconds):
-		print('stop')
+	def seek(self, msecs):
 		self.stop_playback()
-		self.streamer.decoder.seek(seconds)
-		while self.streamer.state != RUNNING:
-			sys.stdout.write(',')
-			sys.stdout.flush()
-			continue
-		print('start')
-		self.start_playback(10)
+		self.start_playback(self.playing, 10, msecs)
