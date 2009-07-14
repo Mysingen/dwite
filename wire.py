@@ -13,7 +13,7 @@ import time
 import errno
 
 from threading import Thread
-from datetime  import datetime
+from datetime  import datetime, timedelta
 
 from protocol import *
 
@@ -26,6 +26,7 @@ class Wire(Thread):
 	socket   = None
 	port     = 0
 	receiver = None
+	escrow   = None
 
 	def __new__(cls, port, queue):
 		object = Thread.__new__(cls, None, Wire.run, 'Wire', (), {})
@@ -84,6 +85,21 @@ class Wire(Thread):
 					print('Wire EXCEPTIONAL EVENT')
 					self.state = STOPPED
 					continue
+				
+				# if we wake up for any non-exceptional reason and there is a
+				# tactile event in escrow, check if it has expired and if so
+				# send its negative version as a signal that the key has been
+				# released. this isn't completely fool proof, because the event
+				# can be overwritten by one for another key before it expires.
+				# i.e. first press '1' for a while and then quickly change to
+				# pressing '2'. not sure if this is really a problem.
+				if self.escrow and self.escrow[1] < datetime.now():
+					code   = -self.escrow[0].code
+					stress =  self.escrow[0].stress
+					self.queue.put(Tactile(code, stress))
+					print
+					self.escrow = None
+				
 				if events == ([],[],[]):
 					# do nothing. the select() timeout is just there to make
 					# sure we can break the loop when self.state goes STOPPED.
@@ -123,6 +139,10 @@ class Wire(Thread):
 
 						if isinstance(message, Tactile):
 							self.queue.put(message)
+							self.escrow = (
+								message,
+								datetime.now() + timedelta(milliseconds=300)
+							)
 							continue
 
 						if isinstance(message, Stat):

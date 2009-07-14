@@ -116,7 +116,6 @@ class Streamer(Thread):
 					if in_data.startswith('GET '):
 						out_data = self.handle_http_get(in_data)
 						out_left = len(out_data)
-						print('len=%d\ndata=%s' % (out_left, out_data))
 						if out_left > 0:
 							selected[1] = [self.socket]
 						continue
@@ -168,7 +167,7 @@ class Streamer(Thread):
 			#traceback.print_tb(info[2])
 			#print info[1]
 			# not an mp3 resource
-			return 'HTTP/1.0 404 Not Found\r\n'
+			return 'HTTP/1.0 404 Not Found\r\n\r\n'
 
 		try:
 			m = re.search('Seek-Time: (\d+)', data, re.MULTILINE)
@@ -183,13 +182,8 @@ class Streamer(Thread):
 
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
-		return (
-		    'HTTP/1.0 200 OK\r\n\r\n'
-		  #+ 'Content-Type: application/octet-stream\r\n'
-		  #+ 'Content-Length: %d\r\n' % os.path.getsize(self.decoder.path)
-		  #+ 'Location: %s\r\n' % self.decoder.path
-		  #+ '\r\n'
-		)
+		response = 'HTTP/1.0 200 OK\r\n\r\n'
+		return response + self.decoder.read(4096 - len(response))
 
 	def stop(self):
 		self.state = STOPPED
@@ -198,7 +192,6 @@ class Streamer(Thread):
 # support both files and remote streams.
 
 class Decoder:
-	salt = None
 	file = None
 	path = None
 
@@ -206,13 +199,9 @@ class Decoder:
 		self.file = open(path, 'rb')
 		self.path = path
 
-	def read(self):
-		if self.salt:
-			data = self.salt
-			self.salt = None
-			return data
+	def read(self, amount=4096):
 		if self.file:
-			return self.file.read(4096)
+			return self.file.read(amount)
 		return None
 
 	# translate time (floating point seconds) to an offset into the file and let
@@ -238,7 +227,7 @@ class MP3_Decoder(Decoder):
 			print('Too large time seek value %d' % msec)
 			return
 		offset = self.time_to_offset(msec)
-		print('seek(%d)' % offset)
+		#print('seek(%d)' % offset)
 		self.file.seek(offset)
 
 ######################
@@ -249,7 +238,7 @@ class Player:
 	wire        = None
 	gain_l      = (0,0) # 16bit.16bit expressed as uints
 	gain_r      = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
-	preamp      = 0
+	preamp      = 0    # 0-255
 	now_playing = None # NowPlaying instance
 	
 	def __init__(self, wire, guid):
@@ -259,7 +248,7 @@ class Player:
 
 		self.stop_playback()
 		self.mute(False, False)
-		self.set_volume(255, (2,25000), (2,25000))
+		self.set_volume(245, (2,25000), (2,25000))
 		self.streamer.start()
 	
 	def close(self):

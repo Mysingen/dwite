@@ -72,7 +72,10 @@ class Tactile(Message):
 		self.stress = stress
 
 	def __str__(self):
-		return 'IR  : %s %d' % (IR.codes_debug[self.code], self.stress)
+		if self.code > 0:
+			return 'IR  : %s %d' % (IR.codes_debug[self.code], self.stress)
+		else:
+			return 'IR R: %s %d' % (IR.codes_debug[-self.code], self.stress)
 
 class Bye(Message):
 	head   = 'BYE '
@@ -107,8 +110,6 @@ class Stat(Message):
 	error    = 0    # uint16 (only set in STAT/STMn?)
 
 	def __str__(self):
-#		return 'STAT %s' % self.event
-
 		tmp1 = ( 'Event    = %s\n' % self.event
 		       + 'CRLFs    = %d\n' % self.crlfs
 		       + 'MAS init = %d\n' % self.mas_init
@@ -517,7 +518,8 @@ class VisuSpectrum(Visu):
 		         + struct.pack('l', socket.htonl(self.right_cap_intensity)) )
 		length = struct.pack('h', socket.htons(len(cmd + params)))
 		return length + cmd + params
-		
+
+
 
 # only used to debug malformed messages
 def parsable(data):
@@ -583,11 +585,7 @@ def parse(data):
 	if kind == 'RESP':
 		# let the RESP parser figure out the real body length as it appears
 		# to often be incorrectly set.
-		print(human_readable(data))
-		print(human_readable(data[0:8+blen]))
-		print(human_readable(rem))
 		(resp, blen) = parse_resp(body, blen)
-		print(human_readable(data[8+blen:-1]))
 		return (resp, data[8+blen:-1])
 
 	if kind == 'UREQ':
@@ -643,10 +641,10 @@ def parse_ir(data, dlen):
 	code    = socket.ntohl(struct.unpack('L', data[6:10])[0])
 	
 	if code not in IR.codes_debug:
-		print 'stamp   %d' % stamp
-		print 'format  %d' % format
-		print 'nr bits %d' % nr_bits
-		print 'UNKNOWN ir code %d' % code
+		print('stamp   %d' % stamp)
+		print('format  %d' % format)
+		print('nr bits %d' % nr_bits)
+		print('UNKNOWN ir code %d' % code)
 		last_ir = None
 		return None
 
@@ -654,8 +652,8 @@ def parse_ir(data, dlen):
 	if last_ir and last_ir[0] == code:
 		# the same key was pressed again. if it was done fast enough,
 		# then we *guess* that the user is keeping it pressed, rather
-		# than hitting it again real fast. unfortunately the remotes
-		# don't generate key release events.
+		# than hitting it again real fast. unfortunately the remote
+		# doesn't generate key release events.
 		#print('Stamp %d, diff %d' % (stamp, stamp - last_ir[1]))
 		if stamp - last_ir[1] < 130: # milliseconds
 			# the threshold can't be set below 108 which seems to be the

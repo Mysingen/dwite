@@ -75,6 +75,16 @@ class Classic(Device):
 		self.menu.set_display(self.display)
 
 	def enough_stress(self, code, stress):
+		# start with the FWD/REW special cases: the device doesn't like it too
+		# well if you start a new stream more than about twice per second, and
+		# seeking requires starting new streams. so instead of accelerating the
+		# frequency of seek operations, we always do at most two per second and
+		# instead increase the seek distance when the stress increases.
+		if code in [IR.FORWARD, IR.REWIND]:
+			return stress > 0 and stress % 5 == 0
+		if code in [-IR.FORWARD, -IR.REWIND]:
+			return stress < 5
+
 		if stress == 0:
 			return True # special case to catch all untracked codes
 		if code in self.acceleration:
@@ -125,6 +135,8 @@ class Classic(Device):
 					if not self.enough_stress(msg.code, msg.stress):
 						continue
 
+					print('%s %d' % (msg, abs(msg.code)))
+
 					if msg.code == IR.UP:
 						self.menu.draw(self.menu.up())
 					elif msg.code == IR.DOWN:
@@ -145,6 +157,10 @@ class Classic(Device):
 						self.player.seek(1000)
 					elif msg.code == IR.REWIND:
 						self.player.seek(-1000)
+					elif msg.code == -IR.FORWARD:
+						print('FORWARD one track')
+					elif msg.code == -IR.REWIND:
+						print('REWIND one track')
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()
@@ -176,9 +192,12 @@ class Classic(Device):
 					elif msg.code == IR.NOW_PLAYING:
 						self.display.next_visualizer()
 
+					elif msg.code < 0:
+						pass
+
 					else:
 						raise Exception, ('Unhandled code %s'
-						                  % IR.codes_debug[msg.code])
+						                  % IR.codes_debug[abs(msg.code)])
 
 			except:
 				info = sys.exc_info()
