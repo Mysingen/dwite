@@ -115,7 +115,7 @@ class Wire(Thread):
 						print('Wire: Unhandled exception %s' % str(e))
 						continue
 
-					while len(data) >= 8:
+					while parsable(data):
 						(message, data) = parse(data)
 						if not message:
 							break
@@ -157,6 +157,11 @@ class Wire(Thread):
 							continue
 
 						print('%s: No particular handling' % message.head)
+
+					#for d in data:
+					#	sys.stdout.write('\\%03d' % ord(d))
+					#print('')
+
 
 		self.socket.close()
 		print 'wire is dead'

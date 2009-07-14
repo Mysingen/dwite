@@ -524,9 +524,12 @@ class VisuSpectrum(Visu):
 # only used to debug malformed messages
 def parsable(data):
 	kind = data[0:4]
-	if kind in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ']:
-		return True
-	return False
+	if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ']:
+		return False
+	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+	if blen > len(data) - 8:
+		return False
+	return True
 
 def human_readable(data):
 	buf = data[0:4]
@@ -550,18 +553,12 @@ def first_unprintable(data):
 # returns a tuple (message, remainder) where message is a Message instance
 # and remainder is any remaining data that was not consumed by parsing.
 def parse(data):
-	dlen = len(data)
-	if dlen < 8:
-		raise Excpetion, 'Useless message, length = %d' % len(data)
-
 	kind = data[0:4]
 	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
 	body = data[8:8+blen]
-	if blen > len(body):
-		print('WARNING: length field is too big! %d > %d' % (blen, len(body)))
-		blen = len(body)
-	rem  = data[8+blen:-1]
-	#print '\n%s %d %d' % (kind, blen, len(body))
+	if blen != len(body):
+		print('WARNING: length field is wrong! %d != %d' % (blen, len(body)))
+	rem  = data[8+blen:]
 
 	if kind == 'HELO':
 		if   blen == 10:
@@ -583,10 +580,7 @@ def parse(data):
 		return (parse_stat(body, blen), rem)
 
 	if kind == 'RESP':
-		# let the RESP parser figure out the real body length as it appears
-		# to often be incorrectly set.
-		(resp, blen) = parse_resp(body, blen)
-		return (resp, data[8+blen:-1])
+		return (parse_resp(body, blen), rem)
 
 	if kind == 'UREQ':
 		return (parse_ureq(body, blen), rem)
@@ -689,8 +683,7 @@ def parse_stat(data, dlen):
 	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
 	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
 	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
-	if dlen >= 53:
-		stat.error = socket.ntohl(struct.unpack('H', data[51:53])[0])
+	stat.error    = socket.ntohl(struct.unpack('H', data[51:53])[0])
 
 	return stat
 
@@ -698,12 +691,7 @@ def parse_resp(data, dlen):
 	# data is always an HTTP header. In fact the very same one we sent
 	# on the streaming socket, unless the device is streaming from some
 	# other source.
-
-	# RESP sometimes contains junk. don't trust dlen
-	i = first_unprintable(data) # -1 if none, which is good input in next step.
-	if dlen > i:
-		print('Junk in RESP')
-	return (Resp(data[:i]), i)
+	return Resp(data)
 
 def parse_ureq(data, dlen):
 	return Ureq()
