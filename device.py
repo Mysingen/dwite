@@ -15,6 +15,7 @@ from display   import Display
 from tactile   import IR
 from menu      import Menu
 from player    import Player
+from render    import ProgressRender
 
 class Device(Thread):
 	queue   = None  # let other threads post events here
@@ -154,9 +155,13 @@ class Classic(Device):
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.player.seek(1000)
+						pr = ProgressRender(self.player.seek(1000))
+						pr.draw(self.display.canvas)
+						self.display.show('c')
 					elif msg.code == IR.REWIND:
-						self.player.seek(-1000)
+						pr = ProgressRender(self.player.seek(-1000))
+						pr.draw(self.display.canvas)
+						self.display.show('c')
 					elif msg.code == -IR.FORWARD:
 						print('FORWARD one track')
 					elif msg.code == -IR.REWIND:

@@ -318,6 +318,7 @@ class Player:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
 			self.start_playback(path, self.get_in_threshold(path))
+			self.now_playing = NowPlaying(path, audio.info.length * 1000)
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
@@ -342,7 +343,6 @@ class Player:
 		strm.in_threshold  = in_threshold
 		strm.out_threshold = 1
 		self.wire.send(strm.serialize())
-		self.now_playing = NowPlaying(path, seek)
 
 	def stop_playback(self):
 		self.wire.send(StrmStop().serialize())
@@ -373,8 +373,12 @@ class Player:
 			return
 		resource = self.now_playing.resource
 		position = self.now_playing.position()
-		self.stop_playback()
-		self.start_playback(resource, 10, position + msecs)
+		if position + msecs > self.now_playing.duration:
+			print('can\'t seek outside the track duration')
+			return
+		self.now_playing.progress = self.now_playing.progress + msecs
+		print ('pos %d / dur %d' % (self.now_playing.position(), self.now_playing.duration))
+		return self.now_playing.position() / float(self.now_playing.duration)
 
 	def set_progress(self, msecs):
 		self.now_playing.state    = NowPlaying.PLAYING
@@ -390,10 +394,12 @@ class NowPlaying:
 	resource = None # URL or file path string
 	state    = BUFFERING
 	start    = 0 # current playback position (in milliseconds) is calculated
-	progress = 0 # as the start position plus the progress.
+	progress = 0 # as the start position plus the progress. position should
+	duration = 0 # of course never be greater than the duration.
 	
-	def __init__(self, resource, start=0):
+	def __init__(self, resource, duration, start=0):
 		self.resource = resource
+		self.duration = int(duration)
 		self.start    = start
 	
 	def position(self):

@@ -38,10 +38,12 @@ class Canvas:
 		# the natural traverse order of drawables, but we can easily prepare
 		# the entire image for the transmission by transposing the horizontal
 		# stripes.
+		self.image.save('./before.jpg')
 		for y in [8, 16, 24, 32]:
 			box = (0, y-8, self.size[0], y)
 			sub = self.image.crop(box).transpose(Image.FLIP_TOP_BOTTOM)
 			self.image.paste(sub, box)
+		self.image.save('./after.jpg')
 
 		# pack each vertical stripe into unsigned 32 bit integers
 		pack = []

@@ -63,7 +63,7 @@ class TextRender(Render):
 		if key in singleton:
 			object = singleton[key]
 		else:
-			object = super(TextRender, cls.__new__(cls))
+			object = Render.__new__(cls)
 			TextRender.__init__(object, font_path, size)
 			singleton[key] = object
 		return object
@@ -97,5 +97,49 @@ class TextRender(Render):
 		canvas.drawable.text((x,0), self.text, font=self.font, fill=1)
 		if xx >= 0:
 			canvas.drawable.text((xx,0), self.text, font=self.font, fill=1)
+		self.timeout = now + timedelta(milliseconds=100)
+		return True
+
+class ProgressRender(Render):
+	progress = 0 # float: 0.0-1.0
+	x_size   = 100
+	y_size   = 2
+	position = (200, 0)
+
+	def __new__(cls, progress=0):
+		global singleton
+		key = cls
+		if key in singleton:
+			object = singleton[key]
+		else:
+			object = Render.__new__(cls)
+			singleton[key] = object
+		ProgressRender.__init__(object, progress)
+		return object
+
+	def __init__(self, progress=0):
+		self.progress = progress
+		print('progress = %f' % progress)
+
+	def draw(self, canvas):
+		# tl = top left, lr = lower right
+		outer_tl = self.position
+		outer_lr = (self.position[0] + self.x_size + 4,
+		            self.position[1] + self.y_size + 4)
+		inner_tl = (self.position[0] + 2, self.position[1] + 2)
+		inner_lr = (self.position[0] + 2 + int(self.x_size * self.progress),
+		            self.position[1] + 2 +  self.y_size)
+
+		print('%s %s' % (str([outer_tl, outer_lr]), str([inner_tl, inner_lr])))
+		
+		canvas.drawable.rectangle([outer_tl, outer_lr], outline=1, fill=0)
+		canvas.drawable.rectangle([inner_tl, inner_lr], outline=1, fill=1)
+		return True
+
+	def tick(self, canvas):
+		now = datetime.now()
+		if now < self.timeout:
+			return False
+		self.draw(canvas)
 		self.timeout = now + timedelta(milliseconds=100)
 		return True
