@@ -148,9 +148,10 @@ class Streamer(Thread):
 							sent = self.socket.send(out_data[-out_left:])
 							out_left = out_left - sent
 						except:
-							info = sys.exc_info()
-							traceback.print_tb(info[2])
-							print(info[1])
+							#info = sys.exc_info()
+							#traceback.print_tb(info[2])
+							#print(info[1])
+							self.state = STARTING
 							break
 						continue
 		print('streamer is dead')
@@ -248,7 +249,7 @@ class Player:
 
 		self.stop_playback()
 		self.mute(False, False)
-		self.set_volume(245, (2,25000), (2,25000))
+		self.set_volume(200, (1,25000), (1,25000))
 		self.streamer.start()
 	
 	def close(self):
@@ -281,13 +282,13 @@ class Player:
 		return new_gain
 
 	def volume_up(self):
-		left  = self.increase_gain(self.gain_l, 2500)
-		right = self.increase_gain(self.gain_r, 2500)
+		left  = self.increase_gain(self.gain_l, 1500)
+		right = self.increase_gain(self.gain_r, 1500)
 		self.set_volume(self.preamp, left, right)
 
 	def volume_down(self):
-		left  = self.decrease_gain(self.gain_l, 4000)
-		right = self.decrease_gain(self.gain_r, 4000)
+		left  = self.decrease_gain(self.gain_l, 1500)
+		right = self.decrease_gain(self.gain_r, 1500)
 		self.set_volume(self.preamp, left, right)
 
 	def set_volume(self, preamp, gain_left, gain_right):
@@ -366,6 +367,9 @@ class Player:
 
 	def seek(self, msecs):
 		if not self.now_playing:
+			return
+		if self.now_playing.state != NowPlaying.PLAYING:
+			print('not playing, no seeking')
 			return
 		resource = self.now_playing.resource
 		position = self.now_playing.position()
