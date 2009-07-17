@@ -55,6 +55,8 @@ def init_acceleration_maps():
 	maps[IR.BRIGHTNESS]  = default
 	maps[IR.VOLUME_UP]   = default
 	maps[IR.VOLUME_DOWN] = default
+	maps[IR.FORWARD]     = [0]
+	maps[IR.REWIND]      = [0]
 
 	return maps
 
@@ -73,19 +75,7 @@ class Classic(Device):
 		self.display      = Display((320,32), self.wire)
 		self.acceleration = init_acceleration_maps()
 
-		self.menu.set_display(self.display)
-
 	def enough_stress(self, code, stress):
-		# start with the FWD/REW special cases: the device doesn't like it too
-		# well if you start a new stream more than about twice per second, and
-		# seeking requires starting new streams. so instead of accelerating the
-		# frequency of seek operations, we always do at most two per second and
-		# instead increase the seek distance when the stress increases.
-		if code in [IR.FORWARD, IR.REWIND]:
-			return stress > 0 and stress % 5 == 0
-		if code in [-IR.FORWARD, -IR.REWIND]:
-			return stress < 5
-
 		if stress == 0:
 			return True # special case to catch all untracked codes
 		if code in self.acceleration:
@@ -101,7 +91,12 @@ class Classic(Device):
 		# the threading would goes bananas. player contains more threads and
 		# threads cannot be created "inside" the creation procedures of other
 		# threads.
-		self.player  = Player(self.wire, self.guid)
+		self.player = Player(self.wire, self.guid)
+
+		(guid, render, transition) = self.menu.curry()
+		render.draw(self.display.canvas)
+		self.display.show(transition)
+		render = None
 
 		while(self.alive):
 			msg = None
@@ -114,9 +109,12 @@ class Classic(Device):
 			except Exception, e:
 				pass # most likely, it's just the timeout that triggered.
 
-			self.menu.tick()
-
 			if not msg:
+				self.display.canvas.clear()
+				(guid, render, transition) = self.menu.ticker()
+				render.tick(self.display.canvas)
+				self.display.show(transition)
+				render = None
 				continue
 
 			try:
@@ -139,29 +137,45 @@ class Classic(Device):
 					print('%s %d' % (msg, abs(msg.code)))
 
 					if msg.code == IR.UP:
-						self.menu.draw(self.menu.up())
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.up()
+						render.draw(self.display.canvas)
 					elif msg.code == IR.DOWN:
-						self.menu.draw(self.menu.down())
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.down()
+						render.draw(self.display.canvas)
 					elif msg.code == IR.RIGHT:
-						self.menu.draw(self.menu.enter())
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.enter()
+						render.draw(self.display.canvas)
 					elif msg.code == IR.LEFT:
-						self.menu.draw(self.menu.leave())
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.leave()
+						render.draw(self.display.canvas)
 
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
 
 					elif msg.code == IR.PLAY:
-						self.menu.draw(self.menu.play(self.player))
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.ticker()
+						if not self.player.play(guid):
+							transition = TRANSITION.BOUNCE_RIGHT
+						render.tick(self.display.canvas)
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						pr = ProgressRender(self.player.seek(1000))
-						pr.draw(self.display.canvas)
-						self.display.show('c')
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.ticker()
+						render.tick(self.display.canvas)
+						render = ProgressRender(self.player.seek(1000))
+						render.draw(self.display.canvas)
 					elif msg.code == IR.REWIND:
-						pr = ProgressRender(self.player.seek(-1000))
-						pr.draw(self.display.canvas)
-						self.display.show('c')
+						self.display.canvas.clear()
+						(guid, render, transition) = self.menu.ticker()
+						render.tick(self.display.canvas)
+						render = ProgressRender(self.player.seek(-1000))
+						render.draw(self.display.canvas)
 					elif msg.code == -IR.FORWARD:
 						print('FORWARD one track')
 					elif msg.code == -IR.REWIND:
@@ -203,6 +217,10 @@ class Classic(Device):
 					else:
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[abs(msg.code)])
+
+					if render:
+						self.display.show(transition)
+					render = None
 
 			except:
 				info = sys.exc_info()

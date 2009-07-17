@@ -313,7 +313,7 @@ class Player:
 				return tmp - 1
 		return 10 # I'm just guessing
 	
-	def play_file(self, path):
+	def play(self, path):
 		try:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
@@ -370,12 +370,12 @@ class Player:
 			return
 		if self.now_playing.state != NowPlaying.PLAYING:
 			print('not playing, no seeking')
-			return
+			return 0.0
 		resource = self.now_playing.resource
 		position = self.now_playing.position()
 		if position + msecs > self.now_playing.duration:
 			print('can\'t seek outside the track duration')
-			return
+			return 1.0
 		self.now_playing.progress = self.now_playing.progress + msecs
 		print ('pos %d / dur %d' % (self.now_playing.position(), self.now_playing.duration))
 		return self.now_playing.position() / float(self.now_playing.duration)

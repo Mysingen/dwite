@@ -13,14 +13,16 @@ from render  import TextRender
 from display import TRANSITION
 
 class Tree:
-	label  = None
-	parent = None
-	render = None
+	guid   = None # string: must be a file path or proper URL
+	label  = None # string: the item's pretty printed identity
+	parent = None # another Tree node
+	render = None # Render object that knows how to draw this Tree node
 
 	def __init__(self, label, parent):
 		self.label  = label
 		self.parent = parent
 		self.render = TextRender('/Library/Fonts/Arial.ttf', 27)
+		self.render.curry(self.label, 2)
 
 	def __str__(self):
 		return self.label
@@ -32,21 +34,17 @@ class Tree:
 			return -1
 		return 1
 
-	def draw(self, canvas):
-		return self.render.draw(canvas, self.label, 2)
+	def curry(self):
+		self.render.curry(self.label, 2)
+		return (self.guid, self.render)
 
-	def tick(self, canvas):
-		return self.render.tick(canvas)
+	def ticker(self):
+		return (self.guid, self.render)
 
 class FileTree(Tree):
-	path = None
-
 	def __init__(self, label, parent, path):
 		Tree.__init__(self, label, parent)
-		self.path = path
-
-	def play(self, player):
-		return player.play_file(self.path)
+		self.guid = path
 
 class DirTree(FileTree):
 	children = []
@@ -55,7 +53,7 @@ class DirTree(FileTree):
 		FileTree.__init__(self, label, parent, path)
 		self.render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
 
-		if not os.path.isdir(self.path):
+		if not os.path.isdir(self.guid):
 			raise Exception, 'DirTree(): %s is not a directory' % path
 
 	def __iter__(self):
@@ -63,10 +61,10 @@ class DirTree(FileTree):
 
 	def ls(self):
 		self.children = []
-		listing = os.listdir(self.path)
+		listing = os.listdir(self.guid)
 		listing.sort()
 		for l in listing:
-			path = os.path.join(self.path, l)
+			path = os.path.join(self.guid, l)
 			if os.path.isdir(path):
 				self.children.append(DirTree(l, self, path))
 			else:
@@ -79,9 +77,6 @@ class Menu:
 	root    = None # must always point to a Tree instance that implements ls()
 	cwd     = None # must always point to a Tree instance that implements ls()
 	current = 0    # index into cwd.children[]
-	display = None # a menu needs a drawable device in order to draw itself.
-
-	# todo: split out display handling into a subclass DrawableMenu?
 
 	def __init__(self, root=None):
 		if not root:
@@ -89,65 +84,54 @@ class Menu:
 		self.root = root
 		self.cwd  = self.root
 		self.cwd.ls()
-	
-	def set_display(self, display):
-		self.display = display
-		self.draw(TRANSITION.NONE)
-	
+
 	def enter(self):
 		try:
 			self.cwd.children[self.current].ls()
+			self.cwd     = self.cwd.children[self.current]
+			self.current = 0
+			print 'enter %s' % str(self.cwd.guid)
+			transition = TRANSITION.SCROLL_LEFT
 		except Exception, msg:
 			# self.current has no listable content and can thus not be entered
-			return TRANSITION.BOUNCE_LEFT
-		self.cwd     = self.cwd.children[self.current]
-		self.current = 0
-		print 'enter %s' % str(self.cwd.path)
-		return TRANSITION.SCROLL_LEFT
+			transition = TRANSITION.BOUNCE_LEFT
+		(guid, render) = self.cwd.children[self.current].curry()
+		return (guid, render, transition)
 
 	def leave(self):
 		try:
 			self.cwd.parent.ls()
+			self.current = self.cwd.parent.children.index(self.cwd)
+			self.cwd     = self.cwd.parent
+			print 'return %s' % str(self.cwd.guid)
+			transition = TRANSITION.SCROLL_RIGHT
 		except Exception, msg:
-			return TRANSITION.BOUNCE_RIGHT
-		self.current = self.cwd.parent.children.index(self.cwd)
-		self.cwd     = self.cwd.parent
-		print 'return %s' % str(self.cwd.path)
-		return TRANSITION.SCROLL_RIGHT
+			transition = TRANSITION.BOUNCE_RIGHT
+		(guid, render) = self.cwd.children[self.current].curry()
+		return (guid, render, transition)
 	
 	def up(self):
 		if self.current > 0:
 			self.current = self.current - 1
-			return TRANSITION.SCROLL_DOWN
-		return TRANSITION.BOUNCE_DOWN
+			transition = TRANSITION.SCROLL_DOWN
+		else:
+			transition = TRANSITION.BOUNCE_DOWN
+		(guid, render) = self.cwd.children[self.current].curry()
+		return (guid, render, transition)
 	
 	def down(self):
 		if self.current < len(self.cwd.children) - 1:
 			self.current = self.current + 1
-			return TRANSITION.SCROLL_UP
-		return TRANSITION.BOUNCE_UP
+			transition = TRANSITION.SCROLL_UP
+		else:
+			transition = TRANSITION.BOUNCE_UP
+		(guid, render) = self.cwd.children[self.current].curry()
+		return (guid, render, transition)
 
-	def play(self, player):
-		try:
-			if self.cwd.children[self.current].play(player):
-				# should temporarily replace the child with a NowPlayingTree
-				# object that renders progress bars and stuff.
-				return TRANSITION.NONE
-		except:
-			pass # no play() method or some other trouble.
-			info = sys.exc_info()
-			traceback.print_tb(info[2])
-			print info[1]
-		return TRANSITION.BOUNCE_RIGHT
+	def curry(self):
+		(guid, render) = self.cwd.children[self.current].curry()
+		return (guid, render, TRANSITION.NONE)
 
-	def draw(self, transition=TRANSITION.NONE):
-		if not self.display:
-			return
-		if self.cwd.children[self.current].draw(self.display.canvas):
-			self.display.show(transition)
-	
-	def tick(self):
-		if not self.display:
-			return
-		if self.cwd.children[self.current].tick(self.display.canvas):
-			self.display.show(TRANSITION.NONE)
+	def ticker(self):
+		(guid, render) = self.cwd.children[self.current].ticker()
+		return (guid, render, TRANSITION.NONE)

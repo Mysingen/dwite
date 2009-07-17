@@ -18,6 +18,10 @@ class Render:
 	# should expect that a user of the object calls its tick() method regularly
 	# to drive this.
 
+	# subclasses must implement the curry() method
+	def curry(self):
+		raise Exception, 'Your Render instance has no curry() method'
+
 	# subclasses must implement the tick() method
 	def tick(self):
 		raise Exception, 'Your Render instance has no tick() method'
@@ -71,33 +75,34 @@ class TextRender(Render):
 	def __init__(self, font_path, size):
 		self.font = ImageFont.truetype(font_path, size)
 
-	def draw(self, canvas, text, position):
-		self.text = text
+	def curry(self, text, position):
+		self.text     = text
+		self.position = position
+
+	def draw(self, canvas):
 		(x,y) = canvas.drawable.textsize(self.text, font=self.font)
-		if x > canvas.size[0] - 2:
-			if position < 0:
-				position = canvas.size[0] - x
-			self.window  = Window(canvas.size[0], 10, x, position)
+		if x > canvas.size[0] - self.position:
+			# will render outside canvas right side. create a sliding window
+			# and let it show its starting position for a full second
+			self.window  = Window(canvas.size[0], 10, x, self.position)
 			self.timeout = datetime.now() + timedelta(milliseconds=1000)
 		else:
 			self.window  = None
 			self.timeout = None
-		canvas.clear()
-		canvas.drawable.text((position,0), self.text, font=self.font, fill=1)
+		canvas.drawable.text((self.position,0),self.text, font=self.font,fill=1)
 		return True
 
 	def tick(self, canvas):
-		if not self.window:
-			return False
 		now = datetime.now()
-		if now < self.timeout:
-			return False
-		(x, xx) = self.window.advance(5)
-		canvas.clear()
+		if (not self.window) or (now < self.timeout):
+			x  = self.position
+			xx = -1
+		else:
+			(x, xx) = self.window.advance(5)
+			self.timeout = now + timedelta(milliseconds=100)
 		canvas.drawable.text((x,0), self.text, font=self.font, fill=1)
 		if xx >= 0:
 			canvas.drawable.text((xx,0), self.text, font=self.font, fill=1)
-		self.timeout = now + timedelta(milliseconds=100)
 		return True
 
 class ProgressRender(Render):
