@@ -97,7 +97,6 @@ class Wire(Thread):
 					code   = -self.escrow[0].code
 					stress =  self.escrow[0].stress
 					self.queue.put(Tactile(code, stress))
-					print
 					self.escrow = None
 				
 				if events == ([],[],[]):
@@ -139,10 +138,10 @@ class Wire(Thread):
 
 						if isinstance(message, Tactile):
 							if message.code in [IR.FORWARD, IR.REWIND]:
+								timeout = ( datetime.now()
+								          + timedelta(milliseconds=300) )
+								self.escrow = (message, timeout)
 								if message.stress < 5:
-									timeout = ( datetime.now()
-									          + timedelta(milliseconds=300) )
-									self.escrow = (message, timeout)
 									# don't post an event since we can't tell
 									# yet if the wants a tap or a long press.
 									continue

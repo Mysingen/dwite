@@ -247,7 +247,7 @@ class Player:
 		self.wire     = wire
 		self.streamer = Streamer(port=3484)
 
-		self.stop_playback()
+		self.stop()
 		self.mute(False, False)
 		self.set_volume(200, (1,25000), (1,25000))
 		self.streamer.start()
@@ -313,11 +313,11 @@ class Player:
 				return tmp - 1
 		return 10 # I'm just guessing
 	
-	def play(self, path):
+	def play(self, path, seek=0):
 		try:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
-			self.start_playback(path, self.get_in_threshold(path))
+			self.start(path, self.get_in_threshold(path), seek)
 			self.now_playing = NowPlaying(path, audio.info.length * 1000)
 			return True
 		except:
@@ -336,7 +336,7 @@ class Player:
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
 		self.wire.send(strm.serialize())
 
-	def start_playback(self, path, in_threshold, seek=0):
+	def start(self, path, in_threshold=10, seek=0):
 		if seek < 0:
 			seek = 0
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
@@ -344,7 +344,7 @@ class Player:
 		strm.out_threshold = 1
 		self.wire.send(strm.serialize())
 
-	def stop_playback(self):
+	def stop(self):
 		self.wire.send(StrmStop().serialize())
 		self.now_playing = None
 
@@ -367,6 +367,7 @@ class Player:
 
 	def seek(self, msecs):
 		if not self.now_playing:
+			print('now_playing is missing')
 			return
 		if self.now_playing.state != NowPlaying.PLAYING:
 			print('not playing, no seeking')
@@ -375,15 +376,20 @@ class Player:
 		position = self.now_playing.position()
 		if position + msecs > self.now_playing.duration:
 			print('can\'t seek outside the track duration')
-			return 1.0
-		self.now_playing.progress = self.now_playing.progress + msecs
+		else:
+			self.now_playing.start = position + msecs
 		print ('pos %d / dur %d' % (self.now_playing.position(), self.now_playing.duration))
 		return self.now_playing.position() / float(self.now_playing.duration)
 
 	def set_progress(self, msecs):
+		if not self.now_playing:
+			return
 		self.now_playing.state    = NowPlaying.PLAYING
 		self.now_playing.progress = msecs
 		print('song position=%d' % self.now_playing.position())
+
+	def get_progress(self):
+		return self.now_playing.position()
 
 class NowPlaying:
 	# state definitions

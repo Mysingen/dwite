@@ -49,6 +49,7 @@ def main():
 			if (msg.id == ID.SQUEEZEBOX3
 			or  msg.id == ID.SOFTSQUEEZE):
 				device = Classic(wire, queue, msg.mac_addr)
+				device.queue.put(msg) # let device handle Helo as well
 				break
 
 	device.start()

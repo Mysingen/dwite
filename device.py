@@ -57,6 +57,8 @@ def init_acceleration_maps():
 	maps[IR.VOLUME_DOWN] = default
 	maps[IR.FORWARD]     = [0]
 	maps[IR.REWIND]      = [0]
+	maps[-IR.FORWARD]    = [0]
+	maps[-IR.REWIND]     = [0]
 
 	return maps
 
@@ -93,11 +95,6 @@ class Classic(Device):
 		# threads.
 		self.player = Player(self.wire, self.guid)
 
-		(guid, render, transition) = self.menu.curry()
-		render.draw(self.display.canvas)
-		self.display.show(transition)
-		render = None
-
 		while(self.alive):
 			msg = None
 
@@ -110,17 +107,17 @@ class Classic(Device):
 				pass # most likely, it's just the timeout that triggered.
 
 			if not msg:
-				self.display.canvas.clear()
 				(guid, render, transition) = self.menu.ticker()
-				render.tick(self.display.canvas)
-				self.display.show(transition)
-				render = None
+				if render.tick(self.display.canvas, clear=True):
+					self.display.show(transition)
 				continue
 
 			try:
 				if isinstance(msg, Helo):
 					# always draw on screen when a device reconnects
-					self.menu.draw()
+					(guid, render, transition) = self.menu.curry()
+					render.draw(self.display.canvas)
+					self.display.show(transition)
 				if isinstance(msg, Stat):
 					if msg.event == 'STMt':
 						self.player.set_progress(msg.msecs)
@@ -134,7 +131,7 @@ class Classic(Device):
 					if not self.enough_stress(msg.code, msg.stress):
 						continue
 
-					print('%s %d' % (msg, abs(msg.code)))
+					render = None
 
 					if msg.code == IR.UP:
 						self.display.canvas.clear()
@@ -168,18 +165,31 @@ class Classic(Device):
 						self.display.canvas.clear()
 						(guid, render, transition) = self.menu.ticker()
 						render.tick(self.display.canvas)
-						render = ProgressRender(self.player.seek(1000))
+						render = ProgressRender(self.player.seek(100))
 						render.draw(self.display.canvas)
 					elif msg.code == IR.REWIND:
 						self.display.canvas.clear()
 						(guid, render, transition) = self.menu.ticker()
 						render.tick(self.display.canvas)
-						render = ProgressRender(self.player.seek(-1000))
+						render = ProgressRender(self.player.seek(-100))
 						render.draw(self.display.canvas)
 					elif msg.code == -IR.FORWARD:
-						print('FORWARD one track')
+						print('-IR.FORWARD')
+						if msg.stress >= 5:
+							(guid, render, transition) = self.menu.ticker()
+							progress = self.player.get_progress() # reset by stop
+							self.player.stop()
+							self.player.play(guid, seek=progress)
+						else:
+							print('FORWARD one track')
 					elif msg.code == -IR.REWIND:
-						print('REWIND one track')
+						if msg.stress >= 5:
+							(guid, render, transition) = self.menu.ticker()
+							progress = self.player.get_progress() # reset by stop
+							self.player.stop()
+							self.player.play(guid, seek=progress)
+						else:
+							print('REWIND one track')
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()
@@ -190,11 +200,11 @@ class Classic(Device):
 						self.alive = False
 
 					elif msg.code == IR.NUM_1:
-						self.player.stop_playback()
+						self.player.stop()
 					elif msg.code == IR.NUM_2:
-						self.player.flush_buffer()
+						pass
 					elif msg.code == IR.NUM_3:
-						self.player.start_playback(10)
+						pass
 					elif msg.code == IR.NUM_4:
 						pass
 					elif msg.code == IR.NUM_5:

@@ -92,14 +92,14 @@ class TextRender(Render):
 		canvas.drawable.text((self.position,0),self.text, font=self.font,fill=1)
 		return True
 
-	def tick(self, canvas):
+	def tick(self, canvas, clear=False):
 		now = datetime.now()
 		if (not self.window) or (now < self.timeout):
-			x  = self.position
-			xx = -1
-		else:
-			(x, xx) = self.window.advance(5)
-			self.timeout = now + timedelta(milliseconds=100)
+			return False
+		if clear:
+			canvas.clear()
+		(x, xx) = self.window.advance(5)
+		self.timeout = now + timedelta(milliseconds=100)
 		canvas.drawable.text((x,0), self.text, font=self.font, fill=1)
 		if xx >= 0:
 			canvas.drawable.text((xx,0), self.text, font=self.font, fill=1)
@@ -135,8 +135,6 @@ class ProgressRender(Render):
 		inner_lr = (self.position[0] + 2 + int(self.x_size * self.progress),
 		            self.position[1] + 2 +  self.y_size)
 
-		print('%s %s' % (str([outer_tl, outer_lr]), str([inner_tl, inner_lr])))
-		
 		canvas.drawable.rectangle([outer_tl, outer_lr], outline=1, fill=0)
 		canvas.drawable.rectangle([inner_tl, inner_lr], outline=1, fill=1)
 		return True

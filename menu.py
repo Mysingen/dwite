@@ -22,7 +22,6 @@ class Tree:
 		self.label  = label
 		self.parent = parent
 		self.render = TextRender('/Library/Fonts/Arial.ttf', 27)
-		self.render.curry(self.label, 2)
 
 	def __str__(self):
 		return self.label
