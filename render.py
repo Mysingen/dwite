@@ -7,7 +7,7 @@
 from datetime import datetime, timedelta
 
 # PIL dependencies
-import ImageFont
+import Image, ImageDraw, ImageFont
 
 class Render:
 	canvas  = None
@@ -23,7 +23,7 @@ class Render:
 		raise Exception, 'Your Render instance has no curry() method'
 
 	# subclasses must implement the tick() method
-	def tick(self):
+	def tick(self, canvas):
 		raise Exception, 'Your Render instance has no tick() method'
 
 class Window:
@@ -42,8 +42,8 @@ class Window:
 
 	def get(self):
 		if self.current + self.content + self.slack < self.size:
-			return (self.current, self.current + self.content + self.slack)
-		return (self.current, - 1)
+			return [self.current, self.current + self.content + self.slack]
+		return [self.current]
 
 	def advance(self, amount):
 		prospect = (self.current - amount) + self.content + self.slack
@@ -56,6 +56,7 @@ class Window:
 singleton = {}
 
 class TextRender(Render):
+	image   = None
 	font    = None
 	text    = None
 	window  = None
@@ -73,36 +74,57 @@ class TextRender(Render):
 		return object
 
 	def __init__(self, font_path, size):
-		self.font = ImageFont.truetype(font_path, size)
+		self.font    = ImageFont.truetype(font_path, size)
+		self.image   = None
+		self.window  = None
+		self.timeout = None
 
-	def curry(self, text, position):
-		self.text     = text
-		self.position = position
+	def curry(self, text):
+		self.text  = text
+		self.image = None
 
-	def draw(self, canvas):
-		(x,y) = canvas.drawable.textsize(self.text, font=self.font)
-		if x > canvas.size[0] - self.position:
-			# will render outside canvas right side. create a sliding window
-			# and let it show its starting position for a full second
-			self.window  = Window(canvas.size[0], 10, x, self.position)
-			self.timeout = datetime.now() + timedelta(milliseconds=1000)
-		else:
-			self.window  = None
-			self.timeout = None
-		canvas.drawable.text((self.position,0),self.text, font=self.font,fill=1)
-		return True
+	def make_window(self, size):
+		draw  = ImageDraw.Draw(self.image)
+		(x,y) = draw.textsize(self.text, font=self.font)
+		if x > size[0] - 2:
+			# would render outside image's right side. create a sliding window
+			self.window = Window(size[0], 10, x, 2)
 
-	def tick(self, canvas, clear=False):
+	def draw(self, positions):
+		draw = ImageDraw.Draw(self.image)
+		for p in positions:
+			draw.text((p,0), self.text, font=self.font, fill=1)
+
+	def tick(self, canvas):
+		if not self.image: # never called this render's tick() before
+			self.image = Image.new('1', canvas.size, 0)
+			self.make_window(canvas.size)
+			self.draw([2])
+			canvas.paste(self.image)
+			#print('first')
+			if self.image:
+				self.timeout = datetime.now() + timedelta(milliseconds=1000)
+			else:
+				self.timeout = datetime.now() + timedelta(days=1)
+			return True
+
+		if not self.window:
+			#print('never')
+			canvas.paste(self.image)
+			return False # no need to redraw. ever.
+
 		now = datetime.now()
-		if (not self.window) or (now < self.timeout):
+		if now < self.timeout:
+			#print('later')
+			canvas.paste(self.image)
 			return False
-		if clear:
-			canvas.clear()
-		(x, xx) = self.window.advance(5)
+
+		#print('now')
+		positions = self.window.advance(5)
+		self.image = Image.new('1', canvas.size, 0)
+		self.draw(positions)
+		canvas.paste(self.image)
 		self.timeout = now + timedelta(milliseconds=100)
-		canvas.drawable.text((x,0), self.text, font=self.font, fill=1)
-		if xx >= 0:
-			canvas.drawable.text((xx,0), self.text, font=self.font, fill=1)
 		return True
 
 class ProgressRender(Render):
@@ -110,6 +132,7 @@ class ProgressRender(Render):
 	x_size   = 100
 	y_size   = 2
 	position = (200, 0)
+	image    = None
 
 	def __new__(cls, progress=0):
 		global singleton
@@ -126,7 +149,7 @@ class ProgressRender(Render):
 		self.progress = progress
 		print('progress = %f' % progress)
 
-	def draw(self, canvas):
+	def draw(self):
 		# tl = top left, lr = lower right
 		outer_tl = self.position
 		outer_lr = (self.position[0] + self.x_size + 4,
@@ -135,14 +158,42 @@ class ProgressRender(Render):
 		inner_lr = (self.position[0] + 2 + int(self.x_size * self.progress),
 		            self.position[1] + 2 +  self.y_size)
 
-		canvas.drawable.rectangle([outer_tl, outer_lr], outline=1, fill=0)
-		canvas.drawable.rectangle([inner_tl, inner_lr], outline=1, fill=1)
-		return True
+		draw = ImageDraw.Draw(self.image)
+		draw.rectangle([outer_tl, outer_lr], outline=1, fill=0)
+		draw.rectangle([inner_tl, inner_lr], outline=1, fill=1)
 
 	def tick(self, canvas):
+		if not self.image: # never called this render's tick() before
+			self.image = Image.new('1', canvas.size, 0)
+			self.draw()
+			canvas.paste(self.image)
+			return True
+
 		now = datetime.now()
 		if now < self.timeout:
+			canvas.paste(self.image)
 			return False
-		self.draw(canvas)
-		self.timeout = now + timedelta(milliseconds=100)
+
+		self.image = Image.new('1', canvas.size, 0)
+		self.draw()
+		canvas.paste(self.image)
+		self.timeout = now + timedelta(milliseconds=500)
 		return True
+
+class NowPlayingRender(Render):
+	text     = None
+	progress = None
+
+	def __init__(self, label):
+		self.text     = TextRender('/Library/Fonts/Courier New.ttf', 35)
+		self.text.curry(label)
+		self.progress = ProgressRender()
+
+	def curry(self, progress):
+		self.progress.progress = progress
+
+	def tick(self, canvas):
+		t1 = self.text.tick(canvas)
+		t2 = self.progress.tick(canvas)
+		print('t1 %s, t2 %s' % (`t1`, `t2`))
+		return (t1 or t2)

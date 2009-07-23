@@ -13,7 +13,7 @@ import ImageDraw
 class Canvas:
 	bitmap   = ''    # Suitable for output to SqueezeBox with 'grfe' command
 	image    = None  # private member
-	drawable = None  # an ImageDraw object for others to interact with
+#	drawable = None  # an ImageDraw object for others to interact with
 	size     = None  # pixel size of the drawable. tuple (x,y)
 
 	# the full SqueezeBox display is divided into stripes. depending on what
@@ -25,12 +25,16 @@ class Canvas:
 	# render content onto.
 
 	def __init__(self, size):
-		self.size     = size
-		self.image    = Image.new('1', size, 0)
-		self.drawable = ImageDraw.Draw(self.image)
+		self.size = size
+		self.clear()
+#		self.drawable = ImageDraw.Draw(self.image)
 
 	def clear(self):
-		self.drawable.rectangle((0,0,self.size[0],self.size[1]), fill=0)
+		self.image = Image.new('1', self.size, 0)
+#		self.drawable.rectangle((0,0,self.size[0],self.size[1]), fill=0)
+	
+	def paste(self, image):
+		self.image = Image.composite(self.image, image, self.image)
 	
 	def prepare_transmission(self):
 		# SqueezeBox expects each 8 bit part of each vertical stripe to be

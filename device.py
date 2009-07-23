@@ -11,7 +11,7 @@ from threading import Thread
 from Queue     import Queue
 
 from protocol  import Helo, Tactile, Stat
-from display   import Display
+from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
 from player    import Player
@@ -88,6 +88,16 @@ class Classic(Device):
 				return True
 		return False
 
+	def default_ticking(self):
+		self.display.canvas.clear()
+		(guid1, render)  = self.menu.ticker()
+		(guid2, render2) = self.player.ticker()
+		#print('default ticking %s %s, %s %s' % (guid1, render, guid2, render2))
+		if guid1 == guid2:
+			render = render2
+		if render.tick(self.display.canvas):
+			self.display.show(TRANSITION.NONE)
+
 	def run(self):
 		# Python limit: the player cannot be created in __init__() because
 		# the threading would goes bananas. player contains more threads and
@@ -107,85 +117,74 @@ class Classic(Device):
 				pass # most likely, it's just the timeout that triggered.
 
 			if not msg:
-				(guid, render, transition) = self.menu.ticker()
-				if render.tick(self.display.canvas, clear=True):
-					self.display.show(transition)
+				self.default_ticking()
 				continue
 
 			try:
 				if isinstance(msg, Helo):
 					# always draw on screen when a device reconnects
-					(guid, render, transition) = self.menu.curry()
-					render.draw(self.display.canvas)
-					self.display.show(transition)
+					(guid, render) = self.menu.ticker()
+					self.display.canvas.clear()
+					render.tick(self.display.canvas)
+					self.display.show(TRANSITION.NONE)
+					continue
+
 				if isinstance(msg, Stat):
 					if msg.event == 'STMt':
 						self.player.set_progress(msg.msecs)
 					else:
 						print('STAT %s' % msg.event)
 					continue
+
 				if isinstance(msg, Tactile):
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.
 					if not self.enough_stress(msg.code, msg.stress):
+						self.default_ticking()
 						continue
 
-					render = None
+					guid       = 0
+					render     = None
+					transition = TRANSITION.NONE
 
-					if msg.code == IR.UP:
-						self.display.canvas.clear()
+					if   msg.code == IR.UP:
 						(guid, render, transition) = self.menu.up()
-						render.draw(self.display.canvas)
 					elif msg.code == IR.DOWN:
-						self.display.canvas.clear()
 						(guid, render, transition) = self.menu.down()
-						render.draw(self.display.canvas)
 					elif msg.code == IR.RIGHT:
-						self.display.canvas.clear()
 						(guid, render, transition) = self.menu.enter()
-						render.draw(self.display.canvas)
 					elif msg.code == IR.LEFT:
-						self.display.canvas.clear()
 						(guid, render, transition) = self.menu.leave()
-						render.draw(self.display.canvas)
 
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
 
 					elif msg.code == IR.PLAY:
-						self.display.canvas.clear()
-						(guid, render, transition) = self.menu.ticker()
+						(guid, render) = self.menu.ticker()
 						if not self.player.play(guid):
 							transition = TRANSITION.BOUNCE_RIGHT
-						render.tick(self.display.canvas)
+						else:
+							(guid, render) = self.player.ticker()
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.display.canvas.clear()
-						(guid, render, transition) = self.menu.ticker()
-						render.tick(self.display.canvas)
-						render = ProgressRender(self.player.seek(100))
-						render.draw(self.display.canvas)
+						self.player.seek(100)
+						(guid, render) = self.player.ticker()
 					elif msg.code == IR.REWIND:
-						self.display.canvas.clear()
-						(guid, render, transition) = self.menu.ticker()
-						render.tick(self.display.canvas)
-						render = ProgressRender(self.player.seek(-100))
-						render.draw(self.display.canvas)
+						self.player.seek(-100)
+						(guid, render) = self.player.ticker()
 					elif msg.code == -IR.FORWARD:
 						print('-IR.FORWARD')
 						if msg.stress >= 5:
-							(guid, render, transition) = self.menu.ticker()
-							progress = self.player.get_progress() # reset by stop
+							progress = self.player.get_progress()
 							self.player.stop()
 							self.player.play(guid, seek=progress)
 						else:
 							print('FORWARD one track')
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
-							(guid, render, transition) = self.menu.ticker()
-							progress = self.player.get_progress() # reset by stop
+							progress = self.player.get_progress()
 							self.player.stop()
 							self.player.play(guid, seek=progress)
 						else:
@@ -228,9 +227,11 @@ class Classic(Device):
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[abs(msg.code)])
 
+					print(msg)
 					if render:
-						self.display.show(transition)
-					render = None
+						self.display.canvas.clear()
+						if render.tick(self.display.canvas):
+							self.display.show(transition)
 
 			except:
 				info = sys.exc_info()

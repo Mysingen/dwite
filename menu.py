@@ -22,6 +22,7 @@ class Tree:
 		self.label  = label
 		self.parent = parent
 		self.render = TextRender('/Library/Fonts/Arial.ttf', 27)
+		self.render.curry(self.label)
 
 	def __str__(self):
 		return self.label
@@ -34,7 +35,7 @@ class Tree:
 		return 1
 
 	def curry(self):
-		self.render.curry(self.label, 2)
+		self.render.curry(self.label)
 		return (self.guid, self.render)
 
 	def ticker(self):
@@ -127,10 +128,6 @@ class Menu:
 		(guid, render) = self.cwd.children[self.current].curry()
 		return (guid, render, transition)
 
-	def curry(self):
-		(guid, render) = self.cwd.children[self.current].curry()
-		return (guid, render, TRANSITION.NONE)
-
 	def ticker(self):
 		(guid, render) = self.cwd.children[self.current].ticker()
-		return (guid, render, TRANSITION.NONE)
+		return (guid, render)

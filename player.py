@@ -19,6 +19,7 @@ from threading import Thread
 
 from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
 from protocol import Aude, Audg, StrmPause, StrmUnpause
+from render   import NowPlayingRender
 
 STOPPED  = 0
 STARTING = 1
@@ -249,7 +250,7 @@ class Player:
 
 		self.stop()
 		self.mute(False, False)
-		self.set_volume(200, (1,25000), (1,25000))
+		self.set_volume(200, (1,15000), (1,15000))
 		self.streamer.start()
 	
 	def close(self):
@@ -317,8 +318,11 @@ class Player:
 		try:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
-			self.start(path, self.get_in_threshold(path), seek)
-			self.now_playing = NowPlaying(path, audio.info.length * 1000)
+			strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
+			strm.in_threshold  = self.get_in_threshold(path)
+			strm.out_threshold = 1
+			self.wire.send(strm.serialize())
+			self.now_playing = NowPlaying(path, audio.info.length * 1000, seek)
 			return True
 		except:
 			# presumably the path does not point to an mp3 file..
@@ -334,14 +338,6 @@ class Player:
 
 	def stream_background(self):
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
-		self.wire.send(strm.serialize())
-
-	def start(self, path, in_threshold=10, seek=0):
-		if seek < 0:
-			seek = 0
-		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
-		strm.in_threshold  = in_threshold
-		strm.out_threshold = 1
 		self.wire.send(strm.serialize())
 
 	def stop(self):
@@ -372,7 +368,6 @@ class Player:
 		if self.now_playing.state != NowPlaying.PLAYING:
 			print('not playing, no seeking')
 			return 0.0
-		resource = self.now_playing.resource
 		position = self.now_playing.position()
 		if position + msecs > self.now_playing.duration:
 			print('can\'t seek outside the track duration')
@@ -390,6 +385,13 @@ class Player:
 
 	def get_progress(self):
 		return self.now_playing.position()
+	
+	def ticker(self):
+		try:
+			self.now_playing.curry()
+			return (self.now_playing.guid, self.now_playing.render)
+		except:
+			return (None, None)
 
 class NowPlaying:
 	# state definitions
@@ -397,16 +399,21 @@ class NowPlaying:
 	PLAYING   = 1
 	PAUSED    = 2
 
-	resource = None # URL or file path string
+	guid     = None # URL or file path string
+	render   = None
 	state    = BUFFERING
 	start    = 0 # current playback position (in milliseconds) is calculated
 	progress = 0 # as the start position plus the progress. position should
 	duration = 0 # of course never be greater than the duration.
 	
-	def __init__(self, resource, duration, start=0):
-		self.resource = resource
+	def __init__(self, guid, duration, start=0):
+		self.guid     = guid
 		self.duration = int(duration)
 		self.start    = start
+		self.render   = NowPlayingRender(os.path.basename(self.guid))
 	
 	def position(self):
 		return self.start + self.progress
+
+	def curry(self):
+		self.render.curry(self.position() / float(self.duration))
