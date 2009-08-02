@@ -178,3 +178,4 @@ class Wire(Thread):
 			return
 		#print('Wire.send %s' % data[2:6])
 		self.socket.send(data)
+

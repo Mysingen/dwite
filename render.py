@@ -185,7 +185,7 @@ class NowPlayingRender(Render):
 	progress = None
 
 	def __init__(self, label):
-		self.text     = TextRender('/Library/Fonts/Courier New.ttf', 35)
+		self.text     = TextRender('fonts/LiberationMono-Bold.ttf', 35)
 		self.text.curry(label)
 		self.progress = ProgressRender()
 
@@ -195,5 +195,6 @@ class NowPlayingRender(Render):
 	def tick(self, canvas):
 		t1 = self.text.tick(canvas)
 		t2 = self.progress.tick(canvas)
-		print('t1 %s, t2 %s' % (`t1`, `t2`))
+		#print('t1 %s, t2 %s' % (`t1`, `t2`))
 		return (t1 or t2)
+

@@ -19,9 +19,10 @@ class Tree:
 	render = None # Render object that knows how to draw this Tree node
 
 	def __init__(self, label, parent):
+		self.guid   = label
 		self.label  = label
 		self.parent = parent
-		self.render = TextRender('/Library/Fonts/Arial.ttf', 27)
+		self.render = TextRender('fonts/LiberationSerif-Regular.ttf', 27)
 		self.render.curry(self.label)
 
 	def __str__(self):
@@ -51,7 +52,7 @@ class DirTree(FileTree):
 
 	def __init__(self, label, parent, path):
 		FileTree.__init__(self, label, parent, path)
-		self.render = TextRender('/Library/Fonts/Times New Roman.ttf', 20)
+		self.render = TextRender('fonts/LiberationSans-Italic.ttf', 20)
 
 		if not os.path.isdir(self.guid):
 			raise Exception, 'DirTree(): %s is not a directory' % path
@@ -128,6 +129,10 @@ class Menu:
 		(guid, render) = self.cwd.children[self.current].curry()
 		return (guid, render, transition)
 
-	def ticker(self):
-		(guid, render) = self.cwd.children[self.current].ticker()
+	def ticker(self, curry=False):
+		if curry:
+			(guid, render) = self.cwd.children[self.current].curry()
+		else:
+			(guid, render) = self.cwd.children[self.current].ticker()
 		return (guid, render)
+

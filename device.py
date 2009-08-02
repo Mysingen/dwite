@@ -122,8 +122,8 @@ class Classic(Device):
 
 			try:
 				if isinstance(msg, Helo):
-					# always draw on screen when a device reconnects
-					(guid, render) = self.menu.ticker()
+					# always draw on screen when a device (re)connects
+					(guid, render) = self.menu.ticker(curry=True)
 					self.display.canvas.clear()
 					render.tick(self.display.canvas)
 					self.display.show(TRANSITION.NONE)

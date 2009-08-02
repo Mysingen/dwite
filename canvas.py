@@ -56,6 +56,6 @@ class Canvas:
 			stripe = 0
 			for j in range(self.size[1]):
 				stripe = stripe | (data[j * self.size[0] + i] << j)
-			pack.append(struct.pack('L', stripe))
+			pack.append(struct.pack('<L', stripe))
 
 		self.bitmap = ''.join(pack) # ready for transmission

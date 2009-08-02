@@ -208,9 +208,9 @@ class Strm(Command):
 	PCM_LITTLE_ENDIAN = '1'
 	
 	# spdif enabled?
-	SPDIF_AUTO    = struct.pack('B', 0)
-	SPDIF_ENABLE  = struct.pack('B', 1)
-	SPDIF_DISABLE = struct.pack('B', 2)
+	SPDIF_AUTO    = struct.pack('<B', 0)
+	SPDIF_ENABLE  = struct.pack('<B', 1)
+	SPDIF_DISABLE = struct.pack('<B', 2)
 
 	# fade types
 	FADE_NONE  = '0'
@@ -236,23 +236,23 @@ class Strm(Command):
 	pcm_endianness  = '?'
 	in_threshold    = 0     # KBytes of input data to buffer before autostart
 	                        # and/or notifying the server of buffer status
-					        # struct.pack('B', _) 
+					        # struct.pack('<B', _) 
 	spdif           = SPDIF_DISABLE
 	fade_time       = 0     # seconds to spend on fading between songs
-	                        # struct.pack('B', _) 
+	                        # struct.pack('<B', _) 
 	fade_type       = FADE_NONE
-	flags           = 0     # struct.pack('B', _)
+	flags           = 0     # struct.pack('<B', _)
 	out_threshold   = 0     # tenths of seconds of decoded audio to buffer
 	                        # before starting playback.
-	                        # struct.pack('B', _) 
-	reserved        = struct.pack('B', 0)
+	                        # struct.pack('<B', _) 
+	reserved        = struct.pack('<B', 0)
 	gain            = (0,0) # playback gain in 16.16 fixed point
-	                        # struct.pack('HH', htons(_), htons(_))
+	                        # struct.pack('<HH', htons(_), htons(_))
 
-	server_port     = 0     # struct.pack('H', socket.htons(3484))
+	server_port     = 0     # struct.pack('<H', socket.htons(3484))
 	server_ip       = 0     # where to get the data stream (32 bit IPv4 addr).
 	                        # zero makes it use the same as the control server.
-	                        # struct.pack('L', htonl(_))
+	                        # struct.pack('<L', htonl(_))
 	resource        = None  # string to identify the file/stream on a CM server
 	player_guid     = None
 	seek            = 0     # milliseconds
@@ -266,17 +266,17 @@ class Strm(Command):
 		      + self.pcm_sample_rate
 		      + self.pcm_channels
 		      + self.pcm_endianness
-		      + struct.pack('B', self.in_threshold)
+		      + struct.pack('<B', self.in_threshold)
 		      + self.spdif
-		      + struct.pack('B', self.fade_time)
+		      + struct.pack('<B', self.fade_time)
 		      + self.fade_type
-		      + struct.pack('B', self.flags)
-		      + struct.pack('B', self.out_threshold)
+		      + struct.pack('<B', self.flags)
+		      + struct.pack('<B', self.out_threshold)
 		      + self.reserved
-		      + struct.pack('HH', socket.htons(self.gain[0]),
-		                          socket.htons(self.gain[1]))
-		      + struct.pack('H', socket.htons(self.server_port))
-		      + struct.pack('L', socket.htonl(self.server_ip)) )
+		      + struct.pack('<HH', socket.htons(self.gain[0]),
+		                           socket.htons(self.gain[1]))
+		      + struct.pack('<H', socket.htons(self.server_port))
+		      + struct.pack('<L', socket.htonl(self.server_ip)) )
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
 		if self.operation == Strm.OP_START:
@@ -289,7 +289,7 @@ class Strm(Command):
 		else:
 			params = tmp
 
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class StrmStartMpeg(Strm):
@@ -333,11 +333,11 @@ class Grfe(Command):
 
 	def serialize(self):
 		cmd    = 'grfe'
-		params = ( struct.pack('H', socket.htons(self.offset))
+		params = ( struct.pack('<H', socket.htons(self.offset))
 		         + self.transition
-		         + struct.pack('B', self.distance)
+		         + struct.pack('<B', self.distance)
 		         + self.bitmap )
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class Grfb(Command):
@@ -345,8 +345,8 @@ class Grfb(Command):
 
 	def serialize(self):
 		cmd    = 'grfb'
-		params = struct.pack('H', socket.htons(self.brightness))
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		params = struct.pack('<H', socket.htons(self.brightness))
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class Aude(Command):
@@ -356,9 +356,9 @@ class Aude(Command):
 	
 	def serialize(self):
 		cmd    = 'aude'
-		params = ( struct.pack('B', self.analog)
-		         + struct.pack('B', self.digital) )
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		params = ( struct.pack('<B', self.analog)
+		         + struct.pack('<B', self.digital) )
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class Audg(Command):
@@ -370,25 +370,25 @@ class Audg(Command):
 	right    = (0,0)
 	dvc      = False
 	preamp   = 255  # default to maximum
-	legacy   = struct.pack('LL', 0, 0)
+	legacy   = struct.pack('<LL', 0, 0)
 	
 	def serialize(self):
 		cmd    = 'audg'
 		params = ( self.legacy
-		         + struct.pack('B', self.dvc)
-		         + struct.pack('B', self.preamp)
-		         + struct.pack('HH', socket.htons(self.left[0]),
-		                             socket.htons(self.left[1]))
-		         + struct.pack('HH', socket.htons(self.right[0]),
-		                             socket.htons(self.right[1])) )
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		         + struct.pack('<B', self.dvc)
+		         + struct.pack('<B', self.preamp)
+		         + struct.pack('<HH', socket.htons(self.left[0]),
+		                              socket.htons(self.left[1]))
+		         + struct.pack('<HH', socket.htons(self.right[0]),
+		                              socket.htons(self.right[1])) )
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class Updn(Command):
 	def serialize(self):
 		cmd    = 'updn'
 		params = ' '
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class Visu(Command):
@@ -408,9 +408,9 @@ class Visu(Command):
 class VisuNone(Visu):
 	def serialize(self):
 		cmd = 'visu'
-		params = ( struct.pack('B', Visu.NONE)
-		         + struct.pack('B', 0) )
-		length = struct.pack('H', socket.htons(len(cmd + params)))
+		params = ( struct.pack('<B', Visu.NONE)
+		         + struct.pack('<B', 0) )
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class VisuMeter(Visu):
@@ -437,15 +437,15 @@ class VisuMeter(Visu):
 
 	def serialize(self):
 		cmd = 'visu'
-		params = ( struct.pack('B', Visu.VUMETER)
-		         + struct.pack('B', self.PARAMETERS)
-		         + struct.pack('l', socket.htonl(self.channels))
-		         + struct.pack('l', socket.htonl(self.style))
-		         + struct.pack('l', socket.htonl(self.left_pos))
-		         + struct.pack('l', socket.htonl(self.left_width))
-		         + struct.pack('l', socket.htonl(self.right_pos))
-		         + struct.pack('l', socket.htonl(self.right_width)) )
-		length = struct.pack('h', socket.htons(len(cmd + params)))
+		params = ( struct.pack('<B', Visu.VUMETER)
+		         + struct.pack('<B', self.PARAMETERS)
+		         + struct.pack('<l', socket.htonl(self.channels))
+		         + struct.pack('<l', socket.htonl(self.style))
+		         + struct.pack('<l', socket.htonl(self.left_pos))
+		         + struct.pack('<l', socket.htonl(self.left_width))
+		         + struct.pack('<l', socket.htonl(self.right_pos))
+		         + struct.pack('<l', socket.htonl(self.right_width)) )
+		length = struct.pack('<h', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 class VisuSpectrum(Visu):
@@ -493,30 +493,30 @@ class VisuSpectrum(Visu):
 
 	def serialize(self):
 		cmd = 'visu'
-		params = ( struct.pack('B', Visu.SPECTRUM)
-		         + struct.pack('B', self.PARAMETERS)
-		         + struct.pack('l', socket.htonl(self.channels))
-		         + struct.pack('l', socket.htonl(self.bandwidth))
-		         + struct.pack('l', socket.htonl(self.preemphasis))
+		params = ( struct.pack('<B', Visu.SPECTRUM)
+		         + struct.pack('<B', self.PARAMETERS)
+		         + struct.pack('<l', socket.htonl(self.channels))
+		         + struct.pack('<l', socket.htonl(self.bandwidth))
+		         + struct.pack('<l', socket.htonl(self.preemphasis))
 
-		         + struct.pack('l', socket.htonl(self.left_pos))
-		         + struct.pack('l', socket.htonl(self.left_width))
-		         + struct.pack('l', socket.htonl(self.left_orientation))
-		         + struct.pack('l', socket.htonl(self.left_bar_width))
-		         + struct.pack('l', socket.htonl(self.left_bar_spacing))
-		         + struct.pack('l', socket.htonl(self.left_clipping))
-		         + struct.pack('l', socket.htonl(self.left_bar_intensity))
-		         + struct.pack('l', socket.htonl(self.left_cap_intensity))
+		         + struct.pack('<l', socket.htonl(self.left_pos))
+		         + struct.pack('<l', socket.htonl(self.left_width))
+		         + struct.pack('<l', socket.htonl(self.left_orientation))
+		         + struct.pack('<l', socket.htonl(self.left_bar_width))
+		         + struct.pack('<l', socket.htonl(self.left_bar_spacing))
+		         + struct.pack('<l', socket.htonl(self.left_clipping))
+		         + struct.pack('<l', socket.htonl(self.left_bar_intensity))
+		         + struct.pack('<l', socket.htonl(self.left_cap_intensity))
 
-		         + struct.pack('l', socket.htonl(self.right_pos))
-		         + struct.pack('l', socket.htonl(self.right_width))
-		         + struct.pack('l', socket.htonl(self.right_orientation))
-		         + struct.pack('l', socket.htonl(self.right_bar_width))
-		         + struct.pack('l', socket.htonl(self.right_bar_spacing))
-		         + struct.pack('l', socket.htonl(self.right_clipping))
-		         + struct.pack('l', socket.htonl(self.right_bar_intensity))
-		         + struct.pack('l', socket.htonl(self.right_cap_intensity)) )
-		length = struct.pack('h', socket.htons(len(cmd + params)))
+		         + struct.pack('<l', socket.htonl(self.right_pos))
+		         + struct.pack('<l', socket.htonl(self.right_width))
+		         + struct.pack('<l', socket.htonl(self.right_orientation))
+		         + struct.pack('<l', socket.htonl(self.right_bar_width))
+		         + struct.pack('<l', socket.htonl(self.right_bar_spacing))
+		         + struct.pack('<l', socket.htonl(self.right_clipping))
+		         + struct.pack('<l', socket.htonl(self.right_bar_intensity))
+		         + struct.pack('<l', socket.htonl(self.right_cap_intensity)) )
+		length = struct.pack('<h', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
 
@@ -526,7 +526,7 @@ def parsable(data):
 	kind = data[0:4]
 	if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ']:
 		return False
-	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+	blen = socket.ntohl(struct.unpack('<L', data[4:8])[0])
 	if blen > len(data) - 8:
 		return False
 	return True
@@ -554,7 +554,7 @@ def first_unprintable(data):
 # and remainder is any remaining data that was not consumed by parsing.
 def parse(data):
 	kind = data[0:4]
-	blen = socket.ntohl(struct.unpack('L', data[4:8])[0])
+	blen = socket.ntohl(struct.unpack('<L', data[4:8])[0])
 	body = data[8:8+blen]
 	if blen != len(body):
 		print('WARNING: length field is wrong! %d != %d' % (blen, len(body)))
@@ -599,7 +599,7 @@ def parse(data):
 def parse_helo_10(data, dlen):
 	id       = ord(data[0])
 	revision = ord(data[1])
-	tmp      = struct.unpack('6BH', data[2:])
+	tmp      = struct.unpack('<6BH', data[2:])
 	mac_addr = tuple(tmp[0:6])
 	wlan_chn = socket.ntohs(tmp[6])
 	mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
@@ -609,7 +609,7 @@ def parse_helo_10(data, dlen):
 def parse_helo_36(data, dlen):
 	id       = ord(data[0])
 	revision = ord(data[1])
-	tmp      = struct.unpack('6B16BHLL2s', data[2:])
+	tmp      = struct.unpack('<6B16BHLL2s', data[2:])
 	mac_addr = tuple(tmp[0:6])
 
 	# why not just cook a new device number?
@@ -629,10 +629,10 @@ last_ir = None # tuple: (IR code, time stamp, stress)
 def parse_ir(data, dlen):
 	global last_ir
 
-	stamp   = socket.ntohl(struct.unpack('L', data[0:4])[0])
-	format  = struct.unpack('B', data[4:5])[0]
-	nr_bits = struct.unpack('B', data[5:6])[0]
-	code    = socket.ntohl(struct.unpack('L', data[6:10])[0])
+	stamp   = socket.ntohl(struct.unpack('<L', data[0:4])[0])
+	format  = struct.unpack('<B', data[4:5])[0]
+	nr_bits = struct.unpack('<B', data[5:6])[0]
+	code    = socket.ntohl(struct.unpack('<L', data[6:10])[0])
 	
 	if code not in IR.codes_debug:
 		print('stamp   %d' % stamp)
@@ -661,29 +661,29 @@ def parse_ir(data, dlen):
 	return Tactile(code, stress)
 
 def parse_bye(data, dlen):
-	reason = struct.unpack('B', data[0])
+	reason = struct.unpack('<B', data[0])
 	return Bye(reason)
 
 def parse_stat(data, dlen):
 	stat = Stat()
 
 	stat.event    = data[0:4]
-	stat.crlfs    = struct.unpack('B', data[4])[0]
-	stat.mas_init = struct.unpack('B', data[5])[0]
-	stat.mas_mode = struct.unpack('B', data[6])[0]
-	stat.in_size  = socket.ntohl(struct.unpack('L', data[ 7:11])[0])
-	stat.in_fill  = socket.ntohl(struct.unpack('L', data[11:15])[0])
-	stat.recv_hi  = socket.ntohl(struct.unpack('L', data[15:19])[0])
-	stat.recv_lo  = socket.ntohl(struct.unpack('L', data[19:23])[0])
-	stat.wifi_pow = socket.ntohs(struct.unpack('H', data[23:25])[0])
-	stat.jiffies  = socket.ntohl(struct.unpack('L', data[25:29])[0])
-	stat.out_size = socket.ntohl(struct.unpack('L', data[29:33])[0])
-	stat.out_fill = socket.ntohl(struct.unpack('L', data[33:37])[0])
-	stat.seconds  = socket.ntohl(struct.unpack('L', data[37:41])[0])
-	stat.voltage  = socket.ntohs(struct.unpack('H', data[41:43])[0])
-	stat.msecs    = socket.ntohl(struct.unpack('L', data[43:47])[0])
-	stat.stamp    = socket.ntohl(struct.unpack('L', data[47:51])[0])
-	stat.error    = socket.ntohl(struct.unpack('H', data[51:53])[0])
+	stat.crlfs    = struct.unpack('<B', data[4])[0]
+	stat.mas_init = struct.unpack('<B', data[5])[0]
+	stat.mas_mode = struct.unpack('<B', data[6])[0]
+	stat.in_size  = socket.ntohl(struct.unpack('<L', data[ 7:11])[0])
+	stat.in_fill  = socket.ntohl(struct.unpack('<L', data[11:15])[0])
+	stat.recv_hi  = socket.ntohl(struct.unpack('<L', data[15:19])[0])
+	stat.recv_lo  = socket.ntohl(struct.unpack('<L', data[19:23])[0])
+	stat.wifi_pow = socket.ntohs(struct.unpack('<H', data[23:25])[0])
+	stat.jiffies  = socket.ntohl(struct.unpack('<L', data[25:29])[0])
+	stat.out_size = socket.ntohl(struct.unpack('<L', data[29:33])[0])
+	stat.out_fill = socket.ntohl(struct.unpack('<L', data[33:37])[0])
+	stat.seconds  = socket.ntohl(struct.unpack('<L', data[37:41])[0])
+	stat.voltage  = socket.ntohs(struct.unpack('<H', data[41:43])[0])
+	stat.msecs    = socket.ntohl(struct.unpack('<L', data[43:47])[0])
+	stat.stamp    = socket.ntohl(struct.unpack('<L', data[47:51])[0])
+	stat.error    = socket.ntohl(struct.unpack('<H', data[51:53])[0])
 
 	return stat
 
