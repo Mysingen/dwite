@@ -241,3 +241,4 @@ class Classic(Device):
 
 		self.player.close()
 		print('device is Dead')
+
