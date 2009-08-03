@@ -302,6 +302,7 @@ class StrmStartMpeg(Strm):
 		self.resource      = resource
 		self.player_guid   = player_guid
 		self.seek          = seek
+		self.out_threshold = 1 # should be enough for low datarate formats
 		if background:
 			self.autostart = Strm.AUTOSTART_NO
 		else:

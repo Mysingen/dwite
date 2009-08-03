@@ -90,6 +90,9 @@ class Classic(Device):
 
 	def default_ticking(self):
 		self.display.canvas.clear()
+		# get the guids for the currently playing track (if any) and the
+		# currently visible menu item. if they happen to be the same, then
+		# prefer the render for the currently playing track.
 		(guid1, render)  = self.menu.ticker()
 		(guid2, render2) = self.player.ticker()
 		#print('default ticking %s %s, %s %s' % (guid1, render, guid2, render2))
@@ -132,6 +135,15 @@ class Classic(Device):
 				if isinstance(msg, Stat):
 					if msg.event == 'STMt':
 						self.player.set_progress(msg.msecs)
+						self.player.set_buffers(msg.in_fill, msg.out_fill)
+					elif msg.event == 'STMo':
+						self.player.set_progress(msg.msecs)
+						self.player.set_buffers(msg.in_fill, msg.out_fill)
+						self.player.finish()
+						# curry the currently focused menu item ensure that it
+						# is correctly redrawn after the track stops playing:
+						self.menu.ticker(curry=True)
+						#print msg
 					else:
 						print('STAT %s' % msg.event)
 					continue
@@ -169,24 +181,20 @@ class Classic(Device):
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.player.seek(100)
+						self.player.seek(500)
 						(guid, render) = self.player.ticker()
 					elif msg.code == IR.REWIND:
-						self.player.seek(-100)
+						self.player.seek(-500)
 						(guid, render) = self.player.ticker()
 					elif msg.code == -IR.FORWARD:
 						print('-IR.FORWARD')
 						if msg.stress >= 5:
-							progress = self.player.get_progress()
-							self.player.stop()
-							self.player.play(guid, seek=progress)
+							self.player.unseek()
 						else:
 							print('FORWARD one track')
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
-							progress = self.player.get_progress()
-							self.player.stop()
-							self.player.play(guid, seek=progress)
+							self.player.unseek()
 						else:
 							print('REWIND one track')
 
@@ -227,7 +235,7 @@ class Classic(Device):
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[abs(msg.code)])
 
-					print(msg)
+					#print(msg)
 					if render:
 						self.display.canvas.clear()
 						if render.tick(self.display.canvas):

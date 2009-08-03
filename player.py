@@ -238,11 +238,10 @@ class Player:
 	guid        = None # used when telling the device how to present itself
 	streamer    = None # to be removed or replaced with a JSON interface
 	wire        = None
-	gain_l      = (0,0) # 16bit.16bit expressed as uints
+	gain_l      = (0,0) # 16bit.16bit fixed point, expressed as two uint16's
 	gain_r      = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	preamp      = 0    # 0-255
-	now_playing = None # NowPlaying instance
-	
+
 	def __init__(self, wire, guid):
 		self.guid     = guid
 		self.wire     = wire
@@ -306,6 +305,9 @@ class Player:
 
 	# playback manipulations
 
+	nowplaying = None # NowPlaying instance
+	seeker     = None # Seeker instance
+
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
 		if size < 10*1024:
@@ -318,78 +320,98 @@ class Player:
 		try:
 			audio = mutagen.mp3.MP3(path)
 			print(audio.info.pprint())
-			strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
-			strm.in_threshold  = self.get_in_threshold(path)
-			strm.out_threshold = 1
-			self.wire.send(strm.serialize())
-			self.now_playing = NowPlaying(path, audio.info.length * 1000, seek)
-			return True
 		except:
 			# presumably the path does not point to an mp3 file..
-			pass
 			info = sys.exc_info()
 			traceback.print_tb(info[2])
 			print info[1]
-		return False
+			return False
 
-	def flush_buffer(self):
-		self.wire.send(StrmFlush().serialize())
-		self.now_playing = None
+		print('audio.info.length = %f' % audio.info.length)
+		self.playing = NowPlaying(path, int(audio.info.length * 1000), seek)
+		self.seeker  = None
 
-	def stream_background(self):
-		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
+		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
+		strm.in_threshold = self.get_in_threshold(path)
 		self.wire.send(strm.serialize())
+		return True
+
+#	def flush_buffer(self):
+#		self.wire.send(StrmFlush().serialize())
+#		self.playing = None
+
+#	def stream_background(self):
+#		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
+#		self.wire.send(strm.serialize())
 
 	def stop(self):
 		self.wire.send(StrmStop().serialize())
-		self.now_playing = None
+		self.playing = None
+		self.seeker  = None
 
 	def pause(self):
-		if not self.now_playing:
+		if not self.playing:
 			return
-		if self.now_playing.state == NowPlaying.PLAYING:
-			self.now_playing.state = NowPlaying.PAUSED
-			self.wire.send(StrmPause().serialize())
-			return
-		if self.now_playing.state == NowPlaying.PAUSED:
-			self.now_playing.state = NowPlaying.BUFFERING
-			self.wire.send(StrmUnpause().serialize())
-			return
+		try:
+			if self.playing.paused():
+				self.playing.enter_state(NowPlaying.PAUSED)
+				self.wire.send(StrmPause().serialize())
+			else:
+				self.playing.enter_state(NowPlaying.BUFFERING)
+				self.wire.send(StrmUnpause().serialize())
+		except Exception, e:
+			print e
 
-	def skip(self, msecs):
-		if self.now_playing.state != NowPlaying.PLAYING:
-			return
-		self.wire.send(StrmSkip(msecs).serialize())
+#	def skip(self, msecs):
+#		if self.playing.state != NowPlaying.PLAYING:
+#			return
+#		self.wire.send(StrmSkip(msecs).serialize())
 
 	def seek(self, msecs):
-		if not self.now_playing:
-			print('now_playing is missing')
+		if not self.playing:
+			print('Playing nothing, so nothing to seek in')
 			return
-		if self.now_playing.state != NowPlaying.PLAYING:
-			print('not playing, no seeking')
-			return 0.0
-		position = self.now_playing.position()
-		if position + msecs > self.now_playing.duration:
-			print('can\'t seek outside the track duration')
-		else:
-			self.now_playing.start = position + msecs
-		print ('pos %d / dur %d' % (self.now_playing.position(), self.now_playing.duration))
-		return self.now_playing.position() / float(self.now_playing.duration)
+		if not self.seeker:
+			self.seeker = Seeker(
+				self.playing.duration,
+				self.playing.position()
+			)
+		self.seeker.seek(msecs)
+
+	def unseek(self):
+		if not self.playing:
+			print('Playing nothing, so nothing to unseek in')
+			return
+		if not self.seeker:
+			print('Seeking in nothing, so nothing to unseek in')
+			return
+		guid  = self.playing.guid
+		start = self.seeker.position
+		self.stop()
+		self.play(guid, start)
 
 	def set_progress(self, msecs):
-		if not self.now_playing:
+		if not self.playing:
+			print('Nothing playing, nothing to progress')
 			return
-		self.now_playing.state    = NowPlaying.PLAYING
-		self.now_playing.progress = msecs
-		print('song position=%d' % self.now_playing.position())
+		print('progress = %d' % msecs)
+		self.playing.set_progress(msecs)
+		print('song position = %d / %d' % (self.playing.position(),
+		                                   self.playing.duration))
 
 	def get_progress(self):
-		return self.now_playing.position()
+		return self.playing.position()
+
+	def set_buffers(self, in_fill, out_fill):
+		print('in/out = %d/%d' % (in_fill, out_fill))
+
+	def finish(self):
+		self.playing = None
+		self.seeker  = None
 	
 	def ticker(self):
 		try:
-			self.now_playing.curry()
-			return (self.now_playing.guid, self.now_playing.render)
+			return self.playing.curry()
 		except:
 			return (None, None)
 
@@ -408,12 +430,60 @@ class NowPlaying:
 	
 	def __init__(self, guid, duration, start=0):
 		self.guid     = guid
-		self.duration = int(duration)
+		self.duration = duration
 		self.start    = start
 		self.render   = NowPlayingRender(os.path.basename(self.guid))
+
+	def	enter_state(self, state):
+		if state == self.state:
+			return
+
+		if state == NowPlaying.BUFFERING:
+			if ((self.state != NowPlaying.PLAYING)
+			and (self.state != NowPlaying.PAUSED)):
+				raise Exception, 'Must enter BUFFERING from PLAYING or PAUSED'
+		elif state == NowPlaying.PLAYING:
+			if ((self.state != NowPlaying.BUFFERING)
+			and (self.state != NowPlaying.PAUSED)):
+				raise Exception, 'Must enter PLAYING from BUFFERING or PAUSED'
+		elif state == NowPlaying.PAUSED:
+			if self.state != NowPlaying.PLAYING:
+				raise Exception, 'Must enter PAUSED from PLAYING'
+		elif state == NowPlaying.STOPPED:
+			pass
+
+		self.state = state
+
+	def set_progress(self, progress):
+		self.enter_state(NowPlaying.PLAYING)
+		self.progress = progress
+
+	def paused(self):
+		return self.state == PAUSED
 	
 	def position(self):
 		return self.start + self.progress
 
 	def curry(self):
 		self.render.curry(self.position() / float(self.duration))
+		return (self.guid, self.render)
+
+class Seeker:
+	limit    = 0
+	position = 0
+
+	def __init__(self, limit, position):
+		self.limit    = limit
+		self.position = position
+	
+	def seek(self, msec):
+		target = self.position + msec
+		if target < 0:
+			print('Can\'t seek to before position 0')
+			target = 0
+		if target > self.limit:
+			print('Can\'t seek beyond %d' % self.limit)
+			target = self.limit
+		self.position = target
+		print('seek %d' % self.position)
+
