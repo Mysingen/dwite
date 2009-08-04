@@ -202,10 +202,5 @@ class NowPlayingRender(OverlayRender):
 		self.overlay = ProgressRender()
 
 	def curry(self, progress):
-		self.progress.curry(progress)
-
-	def tick(self, canvas):
-		t1 = self.text.tick(canvas)
-		t2 = self.progress.tick(canvas)
-		return (t1 or t2)
+		self.overlay.curry(progress)
 

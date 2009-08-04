@@ -98,6 +98,13 @@ class Classic(Device):
 		(guid1, render1) = self.menu.ticker()
 		(guid2, render2) = self.player.ticker()
 		if guid1 == guid2:
+			# the menu is focused on the currently playing track. if the user
+			# is also seeking in the track, then return a NowPlaying render
+			# where the normal progress bar is replaced with a seek bar.
+			if self.seeker:
+				(guid3, render3) = self.seeker.ticker()
+				return OverlayRender(render2.base, render3)
+			# just return the NowPlaying render 
 			return render2
 		# if the user is seeking, but the menu isn't focused on the currently
 		# playing track, then get a render that is the combination of that menu
@@ -220,9 +227,7 @@ class Classic(Device):
 							if not self.player.playing:
 								print('Nothing playing, nothing to seek in')
 								continue
-							self.player.stop()
-							self.player.play(self.seeker.guid,
-							                 self.seeker.position)
+							self.player.jump(self.seeker.position)
 							self.seeker = None
 							# curry the focused menu item to ensure that it
 							# is correctly redrawn without a progres bar:
@@ -234,9 +239,7 @@ class Classic(Device):
 							if not self.player.playing:
 								print('Nothing playing, nothing to seek in')
 								continue
-							self.player.stop()
-							self.player.play(self.seeker.guid,
-							                 self.seeker.position)
+							self.player.jump(self.seeker.position)
 							self.seeker = None
 							# curry the focused menu item to ensure that it
 							# is correctly redrawn without a progres bar:

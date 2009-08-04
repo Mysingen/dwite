@@ -334,6 +334,15 @@ class Player:
 		self.wire.send(strm.serialize())
 		return True
 
+	def jump(self, position):
+		path = self.playing.guid
+		self.wire.send(StrmStop().serialize())
+		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, position)
+		strm.in_threshold = self.get_in_threshold(path)
+		self.wire.send(strm.serialize())
+		self.playing.start = position
+		self.playing.progress = 0
+
 	def duration(self):
 		return self.playing.duration
 	
@@ -374,24 +383,22 @@ class Player:
 		if not self.playing:
 			print('Nothing playing, nothing to progress')
 			return
-		print('progress = %d' % msecs)
 		self.playing.set_progress(msecs)
-		print('song position = %d / %d' % (self.playing.position(),
-		                                   self.playing.duration))
 
 	def get_progress(self):
 		return self.playing.position()
 
 	def set_buffers(self, in_fill, out_fill):
-		print('in/out = %d/%d' % (in_fill, out_fill))
+		pass
+		#print('in/out = %d/%d' % (in_fill, out_fill))
 
 	def finish(self):
 		self.playing = None
 	
 	def ticker(self):
-		try:
+		if self.playing:
 			return self.playing.curry()
-		except:
+		else:
 			return (None, None)
 
 class NowPlaying:

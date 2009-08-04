@@ -22,7 +22,6 @@ class Seeker:
 			target = self.limit
 		self.position = target
 		self.render.curry(float(self.position) / self.limit)
-		print('seek %d' % self.position)
 
 	def ticker(self):
 		return (self.guid, self.render)
