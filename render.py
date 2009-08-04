@@ -128,7 +128,7 @@ class TextRender(Render):
 		return True
 
 class ProgressRender(Render):
-	progress = 0 # float: 0.0-1.0
+	progress = 0.0 # float: 0.0-1.0
 	x_size   = 100
 	y_size   = 2
 	position = (200, 0)
@@ -145,9 +145,11 @@ class ProgressRender(Render):
 		ProgressRender.__init__(object, progress)
 		return object
 
-	def __init__(self, progress=0):
+	def __init__(self, progress=0.0):
 		self.progress = progress
-		print('progress = %f' % progress)
+
+	def curry(self, progress):
+		self.progress = progress
 
 	def draw(self):
 		# tl = top left, lr = lower right
@@ -180,21 +182,30 @@ class ProgressRender(Render):
 		self.timeout = now + timedelta(milliseconds=500)
 		return True
 
-class NowPlayingRender(Render):
-	text     = None
-	progress = None
+class OverlayRender(Render):
+	base    = None
+	overlay = None
+	
+	def __init__(self, base, overlay):
+		self.base    = base
+		self.overlay = overlay
+	
+	def tick(self, canvas):
+		t1 = self.base.tick(canvas)
+		t2 = self.overlay.tick(canvas)
+		return (t1 or t2)
 
+class NowPlayingRender(OverlayRender):
 	def __init__(self, label):
-		self.text     = TextRender('fonts/LiberationMono-Bold.ttf', 35)
-		self.text.curry(label)
-		self.progress = ProgressRender()
+		self.base = TextRender('fonts/LiberationMono-Bold.ttf', 35)
+		self.base.curry(label)
+		self.overlay = ProgressRender()
 
 	def curry(self, progress):
-		self.progress.progress = progress
+		self.progress.curry(progress)
 
 	def tick(self, canvas):
 		t1 = self.text.tick(canvas)
 		t2 = self.progress.tick(canvas)
-		#print('t1 %s, t2 %s' % (`t1`, `t2`))
 		return (t1 or t2)
 

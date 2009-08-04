@@ -15,7 +15,9 @@ from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
 from player    import Player
+from seeker    import Seeker
 from render    import ProgressRender
+from render    import OverlayRender
 
 class Device(Thread):
 	queue   = None  # let other threads post events here
@@ -24,6 +26,7 @@ class Device(Thread):
 	menu    = None  # all devices must have a menu system
 	guid    = None  # string. uniqely identifies the device. usualy MAC addr.
 	player  = None
+	seeker  = None
 
 	def __new__(cls, wire, queue, guid):
 		object = super(Device, cls).__new__(
@@ -88,16 +91,26 @@ class Classic(Device):
 				return True
 		return False
 
-	def default_ticking(self):
-		self.display.canvas.clear()
+	def select_render(self):
 		# get the guids for the currently playing track (if any) and the
 		# currently visible menu item. if they happen to be the same, then
 		# prefer the render for the currently playing track.
-		(guid1, render)  = self.menu.ticker()
+		(guid1, render1) = self.menu.ticker()
 		(guid2, render2) = self.player.ticker()
-		#print('default ticking %s %s, %s %s' % (guid1, render, guid2, render2))
 		if guid1 == guid2:
-			render = render2
+			return render2
+		# if the user is seeking, but the menu isn't focused on the currently
+		# playing track, then get a render that is the combination of that menu
+		# item's render and the render for showing the progress bar
+		if self.seeker:
+			(guid3, render3) = self.seeker.ticker()
+			return OverlayRender(render1, render3)
+		# just return the render for the currently focused menu item
+		return render1
+
+	def default_ticking(self):
+		self.display.canvas.clear()
+		render = self.select_render()
 		if render.tick(self.display.canvas):
 			self.display.show(TRANSITION.NONE)
 
@@ -140,8 +153,9 @@ class Classic(Device):
 						self.player.set_progress(msg.msecs)
 						self.player.set_buffers(msg.in_fill, msg.out_fill)
 						self.player.finish()
-						# curry the currently focused menu item ensure that it
-						# is correctly redrawn after the track stops playing:
+						self.seeker = None
+						# curry the currently focused menu item to ensure that
+						# it is correctly redrawn after the track stops playing
 						self.menu.ticker(curry=True)
 						#print msg
 					else:
@@ -181,20 +195,52 @@ class Classic(Device):
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
-						self.player.seek(500)
-						(guid, render) = self.player.ticker()
+						if not self.player.playing:
+							print('Nothing playing, nothing to seek in')
+							continue
+						if not self.seeker:
+							self.seeker = Seeker(self.player.playing.guid,
+							                     self.player.duration(),
+							                     self.player.position())
+						self.seeker.seek(1000)
+						render = self.select_render()
 					elif msg.code == IR.REWIND:
-						self.player.seek(-500)
-						(guid, render) = self.player.ticker()
+						if not self.player.playing:
+							print('Nothing playing, nothing to seek in')
+							continue
+						if not self.seeker:
+							self.seeker = Seeker(self.player.playing.guid,
+							                     self.player.duration(),
+							                     self.player.position())
+						self.seeker.seek(-1000)
+						render = self.select_render()
 					elif msg.code == -IR.FORWARD:
 						print('-IR.FORWARD')
 						if msg.stress >= 5:
-							self.player.unseek()
+							if not self.player.playing:
+								print('Nothing playing, nothing to seek in')
+								continue
+							self.player.stop()
+							self.player.play(self.seeker.guid,
+							                 self.seeker.position)
+							self.seeker = None
+							# curry the focused menu item to ensure that it
+							# is correctly redrawn without a progres bar:
+							self.menu.ticker(curry=True)
 						else:
 							print('FORWARD one track')
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
-							self.player.unseek()
+							if not self.player.playing:
+								print('Nothing playing, nothing to seek in')
+								continue
+							self.player.stop()
+							self.player.play(self.seeker.guid,
+							                 self.seeker.position)
+							self.seeker = None
+							# curry the focused menu item to ensure that it
+							# is correctly redrawn without a progres bar:
+							self.menu.ticker(curry=True)
 						else:
 							print('REWIND one track')
 

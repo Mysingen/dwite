@@ -306,7 +306,6 @@ class Player:
 	# playback manipulations
 
 	nowplaying = None # NowPlaying instance
-	seeker     = None # Seeker instance
 
 	def get_in_threshold(self, path):
 		size = os.path.getsize(path)
@@ -329,12 +328,17 @@ class Player:
 
 		print('audio.info.length = %f' % audio.info.length)
 		self.playing = NowPlaying(path, int(audio.info.length * 1000), seek)
-		self.seeker  = None
 
 		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
 		strm.in_threshold = self.get_in_threshold(path)
 		self.wire.send(strm.serialize())
 		return True
+
+	def duration(self):
+		return self.playing.duration
+	
+	def position(self):
+		return self.playing.position()
 
 #	def flush_buffer(self):
 #		self.wire.send(StrmFlush().serialize())
@@ -347,7 +351,6 @@ class Player:
 	def stop(self):
 		self.wire.send(StrmStop().serialize())
 		self.playing = None
-		self.seeker  = None
 
 	def pause(self):
 		if not self.playing:
@@ -367,29 +370,6 @@ class Player:
 #			return
 #		self.wire.send(StrmSkip(msecs).serialize())
 
-	def seek(self, msecs):
-		if not self.playing:
-			print('Playing nothing, so nothing to seek in')
-			return
-		if not self.seeker:
-			self.seeker = Seeker(
-				self.playing.duration,
-				self.playing.position()
-			)
-		self.seeker.seek(msecs)
-
-	def unseek(self):
-		if not self.playing:
-			print('Playing nothing, so nothing to unseek in')
-			return
-		if not self.seeker:
-			print('Seeking in nothing, so nothing to unseek in')
-			return
-		guid  = self.playing.guid
-		start = self.seeker.position
-		self.stop()
-		self.play(guid, start)
-
 	def set_progress(self, msecs):
 		if not self.playing:
 			print('Nothing playing, nothing to progress')
@@ -407,7 +387,6 @@ class Player:
 
 	def finish(self):
 		self.playing = None
-		self.seeker  = None
 	
 	def ticker(self):
 		try:
@@ -467,23 +446,4 @@ class NowPlaying:
 	def curry(self):
 		self.render.curry(self.position() / float(self.duration))
 		return (self.guid, self.render)
-
-class Seeker:
-	limit    = 0
-	position = 0
-
-	def __init__(self, limit, position):
-		self.limit    = limit
-		self.position = position
-	
-	def seek(self, msec):
-		target = self.position + msec
-		if target < 0:
-			print('Can\'t seek to before position 0')
-			target = 0
-		if target > self.limit:
-			print('Can\'t seek beyond %d' % self.limit)
-			target = self.limit
-		self.position = target
-		print('seek %d' % self.position)
 
