@@ -183,8 +183,10 @@ class Classic(Device):
 
 					if   msg.code == IR.UP:
 						(guid, render, transition) = self.menu.up()
+						render = self.select_render()
 					elif msg.code == IR.DOWN:
 						(guid, render, transition) = self.menu.down()
+						render = self.select_render()
 					elif msg.code == IR.RIGHT:
 						(guid, render, transition) = self.menu.enter()
 					elif msg.code == IR.LEFT:
@@ -287,8 +289,9 @@ class Classic(Device):
 					#print(msg)
 					if render:
 						self.display.canvas.clear()
-						if render.tick(self.display.canvas):
-							self.display.show(transition)
+						render.tick(self.display.canvas)
+						self.display.show(transition)
+						render.min_timeout(200)
 
 			except:
 				info = sys.exc_info()

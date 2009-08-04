@@ -26,6 +26,13 @@ class Render:
 	def tick(self, canvas):
 		raise Exception, 'Your Render instance has no tick() method'
 
+	def min_timeout(self, msecs):
+		now   = datetime.now()
+		delta = timedelta(milliseconds=msecs)
+		test  = now + delta
+		if self.timeout < test:
+			self.timeout = test
+
 class Window:
 	size    = 0
 	slack   = 0 # the space to keep unpainted when the window contents wrap around
@@ -191,6 +198,8 @@ class OverlayRender(Render):
 		self.overlay = overlay
 	
 	def tick(self, canvas):
+		if datetime.now() < self.timeout:
+			return False
 		t1 = self.base.tick(canvas)
 		t2 = self.overlay.tick(canvas)
 		return (t1 or t2)
