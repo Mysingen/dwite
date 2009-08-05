@@ -17,7 +17,6 @@ from menu      import Menu
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
-from resource  import Playable, Playlist
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
@@ -41,7 +40,6 @@ class Device(Thread):
 		self.queue    = queue
 		self.guid     = guid
 		self.menu     = Menu()
-		self.playlist = Playlist(self, '<PLAYLIST>')
 
 	def run(self):
 		raise Excepion, 'Device subclasses must implement run()'

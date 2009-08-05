@@ -66,4 +66,3 @@ def main():
 	wire.stop()
 	device.stop()
 
-main()

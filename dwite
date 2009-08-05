@@ -1,4 +1,10 @@
-#! /bin/sh
+#! /usr/bin/env python
 
-python core.py
-echo "Goodbye"
+import sys
+import os
+import os.path
+import core
+
+os.environ['DWITE_HOME'] = os.path.dirname(os.path.realpath(sys.argv[0]))
+core.main()
+print('Goodbye')

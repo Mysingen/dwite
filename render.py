@@ -4,6 +4,7 @@
 # under the terms of the GNU General Public License version 3, as published
 # by the Free Software Foundation.
 
+import os
 from datetime import datetime, timedelta
 
 # PIL dependencies
@@ -206,7 +207,8 @@ class OverlayRender(Render):
 
 class NowPlayingRender(OverlayRender):
 	def __init__(self, label):
-		self.base = TextRender('fonts/LiberationMono-Bold.ttf', 35)
+		home = os.getenv('DWITE_HOME')
+		self.base = TextRender('%s/fonts/LiberationMono-Bold.ttf' % home, 35)
 		self.base.curry(label)
 		self.overlay = ProgressRender()
 

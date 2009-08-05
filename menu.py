@@ -23,7 +23,9 @@ class Tree:
 		self.guid   = label # FIXME
 		self.label  = label
 		self.parent = parent
-		self.render = TextRender('fonts/LiberationSerif-Regular.ttf', 27)
+		home = os.getenv('DWITE_HOME')
+		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf' % home,
+		                         27)
 		self.render.curry(self.label)
 
 	def __str__(self):
@@ -56,7 +58,9 @@ class DirTree(FileTree):
 
 	def __init__(self, label, parent, path):
 		FileTree.__init__(self, label, parent, path)
-		self.render = TextRender('fonts/LiberationSans-Italic.ttf', 20)
+		home = os.getenv('DWITE_HOME')
+		self.render = TextRender('%s/fonts/LiberationSans-Italic.ttf' % home,
+		                         20)
 
 		if not os.path.isdir(self.guid):
 			raise Exception, 'DirTree(): %s is not a directory' % path
