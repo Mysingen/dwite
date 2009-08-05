@@ -207,7 +207,7 @@ class Classic(Device):
 							self.menu.playlist().add(item)
 
 					elif msg.code == IR.PLAY:
-						(guid, render) = self.menu.ticker()
+						guid = self.menu.focused().guid
 						if not self.player.play(guid):
 							transition = TRANSITION.BOUNCE_RIGHT
 						else:

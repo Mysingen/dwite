@@ -106,6 +106,10 @@ class Player:
 			print info[1]
 			return False
 
+		# stop the currently playing track, if any
+		if self.playing:
+			self.stop()
+
 		print('audio.info.length = %f' % audio.info.length)
 		self.playing = NowPlaying(path, int(audio.info.length * 1000), seek)
 
