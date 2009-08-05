@@ -16,17 +16,18 @@ from tactile   import IR
 from menu      import Menu
 from player    import Player
 from seeker    import Seeker
-from render    import ProgressRender
-from render    import OverlayRender
+from render    import ProgressRender, OverlayRender
+from resource  import Playable, Playlist
 
 class Device(Thread):
-	queue   = None  # let other threads post events here
-	alive   = True  # controls the main loop
-	wire    = None  # must have a wire to send actual commands to the device
-	menu    = None  # all devices must have a menu system
-	guid    = None  # string. uniqely identifies the device. usualy MAC addr.
-	player  = None
-	seeker  = None
+	queue    = None  # let other threads post events here
+	alive    = True  # controls the main loop
+	wire     = None  # must have a wire to send actual commands to the device
+	menu     = None  # all devices must have a menu system
+	guid     = None  # string. uniqely identifies the device. usualy MAC addr.
+	player   = None
+	seeker   = None
+	playlist = None
 
 	def __new__(cls, wire, queue, guid):
 		object = super(Device, cls).__new__(
@@ -36,10 +37,11 @@ class Device(Thread):
 
 	def __init__(self, wire, queue, guid):
 		Thread.__init__(self)
-		self.wire  = wire
-		self.queue = queue
-		self.guid  = guid
-		self.menu  = Menu()
+		self.wire     = wire
+		self.queue    = queue
+		self.guid     = guid
+		self.menu     = Menu()
+		self.playlist = Playlist(self, '<PLAYLIST>')
 
 	def run(self):
 		raise Excepion, 'Device subclasses must implement run()'
@@ -195,6 +197,17 @@ class Classic(Device):
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
 
+					elif msg.code == IR.ADD:
+						item = self.menu.focused()
+						if self.menu.cwd == self.menu.playlist():
+							# if the user is browsing the playlist, then ADD
+							# results in removing the focused item.
+							self.menu.playlist().remove(item)
+							(guid, render) = self.menu.ticker(curry=True)
+							#transition = TRANSITION.SCROLL_UP
+						else:
+							self.menu.playlist().add(item)
+
 					elif msg.code == IR.PLAY:
 						(guid, render) = self.menu.ticker()
 						if not self.player.play(guid):
@@ -255,7 +268,7 @@ class Classic(Device):
 						self.player.volume_down()
 
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
-						self.alive = False
+						pass
 
 					elif msg.code == IR.NUM_1:
 						self.player.stop()
@@ -291,7 +304,7 @@ class Classic(Device):
 						self.display.canvas.clear()
 						render.tick(self.display.canvas)
 						self.display.show(transition)
-						render.min_timeout(200)
+						render.min_timeout(325)
 
 			except:
 				info = sys.exc_info()
