@@ -59,16 +59,6 @@ class Helo(Message):
 		return 'HELO: %s %d %s %s %s' % (ID.debug[self.id], self.revision,
 		                           self.mac_addr, self.uuid, self.language)
 
-class Hail(Message):
-	head  = 'HAIL'
-	label = None
-
-	def __init__(self, label):
-		self.label = label
-
-	def __str__(self):
-		return 'HAIL: %s' % self.label
-
 class Anic(Message):
 	head = 'ANIC'
 
@@ -539,16 +529,28 @@ class VisuSpectrum(Visu):
 class JsonMessage(Message):
 	head = 'JSON'
 
+class Hail(JsonMessage):
+	def __init__(self, obj):
+		self.label = obj['label']
+		self.port  = obj['port']
+
+	def __str__(self):
+		return 'Hail: %s %d' % (self.label, self.port)
+
+
 class Listing(JsonMessage):
-	def __init__(self, guid, listing):
-		self.guid    = guid
-		self.listing = listing
+	def __init__(self, obj):
+		self.guid    = obj['guid']
+		self.listing = obj['listing']
 		
 def parse_json(data, dlen):
 	obj = json.loads(data)
 	
+	if obj[0] == 'Hail':
+		return Hail(obj[1])
+	
 	if obj[0] == 'Listing':
-		return Listing(obj[2], obj[3])
+		return Listing(obj[1])
 
 	return None
 
@@ -578,7 +580,7 @@ class Ls(JsonCommand):
 def parsable(data):
 	kind = data[0:4]
 	if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ',
-	                'HAIL', 'JSON']:
+	                'JSON']:
 		return False
 	blen = socket.ntohl(struct.unpack('<L', data[4:8])[0])
 	if blen > len(data) - 8:
@@ -621,9 +623,6 @@ def parse(data):
 			msg = parse_helo_36(body, blen)
 		return (msg, rem)
 
-	if kind == 'HAIL':
-		return (parse_hail(body, blen), rem)
-
 	if kind == 'ANIC':
 		return (Anic(), rem)
 
@@ -665,9 +664,6 @@ def parse_helo_10(data, dlen):
 	mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
 
 	return Helo(id, revision, mac_addr, 1234, 'EN')
-
-def parse_hail(data, dlen):
-	return Hail(data)
 
 def parse_helo_36(data, dlen):
 	id       = ord(data[0])
