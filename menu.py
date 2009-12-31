@@ -173,7 +173,6 @@ class Menu:
 	def __init__(self):
 		self.root = Root()
 		self.cwd  = self.root
-		self.cwd.ls()
 
 	def add_cm(self, label, wire):
 		self.root.add(CmDirTree('/', label, self.root, wire))
@@ -192,7 +191,6 @@ class Menu:
 
 	def leave(self):
 		if self.cwd.parent:
-			self.cwd.parent.ls()
 			self.current = self.cwd.parent.children.index(self.cwd)
 			self.cwd     = self.cwd.parent
 			print 'return %s' % str(self.cwd.guid)
