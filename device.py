@@ -10,41 +10,47 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
-from protocol  import Helo, Tactile, Stat
+from protocol  import Helo, Hail, Tactile, Stat, Listing
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
+from wire      import JsonWire
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
 	alive    = True  # controls the main loop
-	wire     = None  # must have a wire to send actual commands to the device
+	sb_wire  = None  # must have a wire to send actual commands to the device
+	cm_wire  = None  # must have a wire to talk to the content manager
 	menu     = None  # all devices must have a menu system
 	guid     = None  # string. uniqely identifies the device. usualy MAC addr.
 	player   = None
 	seeker   = None
 	playlist = None
 
-	def __new__(cls, wire, queue, guid):
+	def __new__(cls, sb_wire, queue, guid):
 		object = super(Device, cls).__new__(
 			cls, None, Device.run, 'Device', (),{})
-		Device.__init__(object, wire, queue, guid)
+		Device.__init__(object, sb_wire, queue, guid)
 		return object
 
-	def __init__(self, wire, queue, guid):
+	def __init__(self, sb_wire, queue, guid):
+		print 'Device __init__'
 		Thread.__init__(self)
-		self.wire     = wire
-		self.queue    = queue
-		self.guid     = guid
-		self.menu     = Menu()
+		self.sb_wire = sb_wire
+		self.queue   = queue
+		self.guid    = guid
+		self.menu    = Menu()
+		self.cm_wire = JsonWire(3484, queue)
+		self.cm_wire.start()
 
 	def run(self):
 		raise Excepion, 'Device subclasses must implement run()'
 	
 	def stop(self):
+		self.cm_wire.stop()
 		self.alive = False
 
 def init_acceleration_maps():
@@ -71,13 +77,13 @@ class Classic(Device):
 	                    # maps so keep a mapping from message codes to arrays
 	                    # of stress levels. only used for tactile events.
 
-	def __new__(cls, wire, queue, guid):
-		object = super(Classic, cls).__new__(cls, wire, queue, guid)
-		Classic.__init__(object, wire, queue, guid)
+	def __new__(cls, sb_wire, queue, guid):
+		object = super(Classic, cls).__new__(cls, sb_wire, queue, guid)
 		return object
 
-	def __init__(self, wire, queue, guid):
-		self.display      = Display((320,32), self.wire)
+	def __init__(self, sb_wire, queue, guid):
+		print 'Classic __init__'
+		self.display      = Display((320,32), sb_wire)
 		self.acceleration = init_acceleration_maps()
 
 	def enough_stress(self, code, stress):
@@ -126,9 +132,9 @@ class Classic(Device):
 		# the threading would goes bananas. player contains more threads and
 		# threads cannot be created "inside" the creation procedures of other
 		# threads.
-		self.player = Player(self.wire, self.guid)
+		self.player = Player(self.sb_wire, self.guid)
 
-		while(self.alive):
+		while self.alive :
 			msg = None
 
 			try:
@@ -151,6 +157,23 @@ class Classic(Device):
 					render.tick(self.display.canvas)
 					self.display.show(TRANSITION.NONE)
 					continue
+
+				if isinstance(msg, Hail):
+					print str(msg)
+					self.menu.add_cm(msg.label, self.cm_wire)
+					continue
+
+				if isinstance(msg, Listing):
+					parent = self.menu.focused().parent
+					if parent.guid == msg.guid:
+						parent.add(msg.listing)
+						# redraw screen in case it was showing '<EMPTY>'
+						(guid, render) = self.menu.ticker(curry=True)
+						self.display.canvas.clear()
+						render.tick(self.display.canvas)
+						self.display.show(TRANSITION.NONE)
+						continue
+						
 
 				if isinstance(msg, Stat):
 					if msg.event == 'STMt':

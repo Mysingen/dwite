@@ -8,3 +8,4 @@ import core
 os.environ['DWITE_HOME'] = os.path.dirname(os.path.realpath(sys.argv[0]))
 core.main()
 print('Goodbye')
+

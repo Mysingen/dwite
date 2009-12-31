@@ -7,6 +7,7 @@
 import sys
 import struct
 import socket
+import simplejson as json # remove for Python 2.6 or later
 
 from tactile import IR
 
@@ -34,10 +35,12 @@ class ID:
 	}
 
 # there are Messages and Commands. Messages are inbound from the device and
-# Commands are outbound to the device. The parser produces Message instances
-# while the Command base class has a virtual function serialize() that all
-# subclasses must implement. The serialized representation shall be writable
-# on the control connection's socket.
+# are used in communication between dwite and cleo. Commands are outbound to
+# the hardware device.
+# The parser produces Message instances while the Command base class has a
+# virtual function serialize() that all subclasses must implement. The
+# serialized representation shall be writable on the control connection's
+# socket.
 
 class Message:
 	head = None # string
@@ -55,6 +58,16 @@ class Helo(Message):
 	def __str__(self):
 		return 'HELO: %s %d %s %s %s' % (ID.debug[self.id], self.revision,
 		                           self.mac_addr, self.uuid, self.language)
+
+class Hail(Message):
+	head  = 'HAIL'
+	label = None
+
+	def __init__(self, label):
+		self.label = label
+
+	def __str__(self):
+		return 'HAIL: %s' % self.label
 
 class Anic(Message):
 	head = 'ANIC'
@@ -148,7 +161,7 @@ class Ureq(Message):
 
 	def __str__(self):
 		return 'UREQ: -'
-
+	
 
 
 class Command:
@@ -522,10 +535,50 @@ class VisuSpectrum(Visu):
 
 
 
+# JSON based messages:
+class JsonMessage(Message):
+	head = 'JSON'
+
+class Listing(JsonMessage):
+	def __init__(self, guid, listing):
+		self.guid    = guid
+		self.listing = listing
+		
+def parse_json(data, dlen):
+	obj = json.loads(data)
+	
+	if obj[0] == 'Listing':
+		return Listing(obj[2], obj[3])
+
+	return None
+
+# JSON based commands:
+# commands are formed almost like those accepted by a device:
+#     header: 4 chars ('json')
+#     length: network order uint16
+#     params: any string
+# so the main difference is the ordering of the length field.
+class JsonCommand(Command):
+	cmd = 'json'
+
+class Ls(JsonCommand):
+	guid = None
+
+	def __init__(self, guid):
+		self.guid = guid
+
+	def serialize(self):
+		params = json.dumps(['ls', self.guid])
+		length = struct.pack('!H', socket.htons(len(params)))
+		return self.cmd + length + params
+
+
+
 # only used to debug malformed messages
 def parsable(data):
 	kind = data[0:4]
-	if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ']:
+	if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP', 'UREQ',
+	                'HAIL', 'JSON']:
 		return False
 	blen = socket.ntohl(struct.unpack('<L', data[4:8])[0])
 	if blen > len(data) - 8:
@@ -568,6 +621,9 @@ def parse(data):
 			msg = parse_helo_36(body, blen)
 		return (msg, rem)
 
+	if kind == 'HAIL':
+		return (parse_hail(body, blen), rem)
+
 	if kind == 'ANIC':
 		return (Anic(), rem)
 
@@ -585,6 +641,9 @@ def parse(data):
 
 	if kind == 'UREQ':
 		return (parse_ureq(body, blen), rem)
+
+	if kind == 'JSON':
+		return (parse_json(body, blen), rem)
 
 	print('unknown message, len %d. first 160 chars:' % dlen)
 	if dlen > 160:
@@ -606,6 +665,9 @@ def parse_helo_10(data, dlen):
 	mac_addr = '%02x:%02x:%02x:%02x:%02x:%02x' % mac_addr
 
 	return Helo(id, revision, mac_addr, 1234, 'EN')
+
+def parse_hail(data, dlen):
+	return Hail(data)
 
 def parse_helo_36(data, dlen):
 	id       = ord(data[0])
@@ -696,3 +758,4 @@ def parse_resp(data, dlen):
 
 def parse_ureq(data, dlen):
 	return Ureq()
+

@@ -25,7 +25,7 @@ class Player:
 	def __init__(self, wire, guid):
 		self.guid     = guid
 		self.wire     = wire
-		self.streamer = Streamer(port=3484)
+		self.streamer = Streamer(port=3485)
 
 		self.stop()
 		self.mute(False, False)

@@ -12,16 +12,18 @@ import time
 import traceback
 import threading
 
-from Queue   import Queue
+from Queue    import Queue
 
 from device   import Classic
-from wire     import Wire
+from wire     import SlimWire
 from protocol import ID, Helo
 
 def main():
 	try:
 		queue = Queue(100)
-		wire  = Wire(3483, queue)
+		# give the same queue to both protocol wires so they have somewhere to
+		# post events.
+		wire = SlimWire(3483, queue)
 		wire.start()
 	except: # user pressed CTRL-C before the subsystems could initialize?
 		info = sys.exc_info()
@@ -41,8 +43,8 @@ def main():
 			continue
 
 		# in the following, if a device class instance is created, the queue
-		# for protocol events is given over to that instance. from then on
-		# the main loop cannot see what is going on on the protocol wire!
+		# for events is given over to that instance. from then on the main loop
+		# cannot see what is going on on the protocol wire!
 
 		if isinstance(msg, Helo):
 			print(msg)
@@ -51,6 +53,9 @@ def main():
 				device = Classic(wire, queue, msg.mac_addr)
 				device.queue.put(msg) # let device handle Helo as well
 				break
+		else:
+			print('The core loop only handles HELO messages from devices')
+			print(msg)
 
 	device.start()
 
