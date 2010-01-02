@@ -257,7 +257,6 @@ class Strm(Command):
 	                        # zero makes it use the same as the control server.
 	                        # struct.pack('<L', htonl(_))
 	resource        = None  # string to identify the file/stream on a CM server
-	player_guid     = None
 	seek            = 0     # milliseconds
 
 	def serialize(self):
@@ -283,9 +282,10 @@ class Strm(Command):
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
 		if self.operation == Strm.OP_START:
-			params = ( tmp
-			         + 'GET %s HTTP/1.0\r\n' % self.resource
-			         + 'Seek-Time: %d\r\n' % self.seek )
+			s = str('GET %s HTTP/1.0\r\n'
+			        'Seek-Time: %d\r\n'
+			        % (self.resource, self.seek))
+			params = tmp + struct.pack('%ds' % len(s), s)
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
 			#if len(params) % 2 != 0:
 			#	params = params + '\n'
@@ -299,11 +299,11 @@ class StrmStartMpeg(Strm):
 	operation = Strm.OP_START
 	format    = Strm.FORMAT_MPEG
 
-	def __init__(self, ip, port, resource, player_guid,seek=0,background=False):
+	def __init__(self, ip, port, resource, seek=0, background=False):
+		print('%d %d %s %d' % (ip, port, resource, seek))
 		self.server_ip     = ip
 		self.server_port   = port
 		self.resource      = resource
-		self.player_guid   = player_guid
 		self.seek          = seek
 		self.out_threshold = 1 # should be enough for low datarate formats
 		if background:
@@ -531,11 +531,12 @@ class JsonMessage(Message):
 
 class Hail(JsonMessage):
 	def __init__(self, obj):
-		self.label = obj['label']
-		self.port  = obj['port']
+		self.label       = obj['label']
+		self.stream_ip   = obj['stream_ip']
+		self.stream_port = obj['stream_port']
 
 	def __str__(self):
-		return 'Hail: %s %d' % (self.label, self.port)
+		return 'Hail: %s %d:%d' % (self.label, self.stream_ip, self.stream_port)
 
 
 class Listing(JsonMessage):

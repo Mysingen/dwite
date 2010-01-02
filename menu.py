@@ -86,22 +86,36 @@ class Waiting(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, '<WAITING>', '<WAITING>', parent)
 
-class CmDirTree(FileTree):
-	children = None
-	wire     = None
+class CmFileTree(Tree):
+	cm = None
 
-	def __init__(self, guid, label, parent, wire):
-		FileTree.__init__(self, guid, label, parent)
-		self.wire   = wire
+	def __init__(self, guid, label, parent, cm):
+		Tree.__init__(self, guid, label, parent)
+		self.cm = cm
+
+class CmMp3Tree(CmFileTree):
+	size   = 0   # bytes
+	length = 0.0 # seconds
+
+	def __init__(self, guid, label, size, length, parent, cm):
+		CmFileTree.__init__(self, guid, label, parent, cm)
+		self.size   = size
+		self.length = length
+
+class CmDirTree(CmFileTree):
+	children = None
+
+	def __init__(self, guid, label, parent, cm):
+		CmFileTree.__init__(self, guid, label, parent, cm)
 		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
-		                         % os.getenv('DWITE_HOME'), 16)
+		                         % os.getenv('DWITE_HOME'), 23)
 	
 	def __iter__(self):
 		return self.children.__iter__()
 
 	def ls(self):
 		self.children = [Waiting(self)]
-		self.wire.send(protocol.Ls(self.guid).serialize())
+		self.cm.wire.send(protocol.Ls(self.guid).serialize())
 		# results will be added asynchronously
 		return self.children
 
@@ -109,10 +123,25 @@ class CmDirTree(FileTree):
 		if isinstance(self.children[0], Waiting):
 			self.children = []
 		for l in listing:
-			if l[0] == 1:
-				self.children.append(CmDirTree(l[1], l[2], self, self.wire))
-			elif l[0] == 2:
-				self.children.append(FileTree(l[1], l[2], self))
+			guid  = l['guid']
+			label = l['label']
+			kind  = l['kind']
+
+			if kind == 'dir':
+				self.children.append(CmDirTree(guid, label, self, self.cm))
+				continue
+
+			if kind == 'file':
+				self.children.append(CmFileTree(guid, label, self, self.cm))
+				continue
+			
+			if kind == 'mp3':
+				size   = l['size']
+				length = l['length']
+				self.children.append(
+					CmMp3Tree(guid, label, size, length, self, self.cm)
+				)
+
 		if len(self.children) == 0:
 			self.children.append(Empty(self))
 		return self.children
@@ -174,8 +203,8 @@ class Menu:
 		self.root = Root()
 		self.cwd  = self.root
 
-	def add_cm(self, label, wire):
-		self.root.add(CmDirTree('/', label, self.root, wire))
+	def add_cm(self, cm):
+		self.root.add(CmDirTree('/', cm.label, self.root, cm))
 
 	def enter(self):
 		if self.focused().ls():

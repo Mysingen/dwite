@@ -18,6 +18,7 @@ from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
+from cm        import ContentManager
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
@@ -160,7 +161,10 @@ class Classic(Device):
 
 				if isinstance(msg, Hail):
 					print str(msg)
-					self.menu.add_cm(msg.label, self.cm_wire)
+					cm = ContentManager(
+						msg.label, self.cm_wire, msg.stream_ip, msg.stream_port
+					)
+					self.menu.add_cm(cm)
 					continue
 
 				if isinstance(msg, Listing):
@@ -230,8 +234,8 @@ class Classic(Device):
 							self.menu.playlist().add(item)
 
 					elif msg.code == IR.PLAY:
-						guid = self.menu.focused().guid
-						if not self.player.play(guid):
+						item = self.menu.focused()
+						if not self.player.play(item):
 							transition = TRANSITION.BOUNCE_RIGHT
 						else:
 							(guid, render) = self.player.ticker()
@@ -242,7 +246,7 @@ class Classic(Device):
 							print('Nothing playing, nothing to seek in')
 							continue
 						if not self.seeker:
-							self.seeker = Seeker(self.player.playing.guid,
+							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
 						self.seeker.seek(1000)
@@ -252,7 +256,7 @@ class Classic(Device):
 							print('Nothing playing, nothing to seek in')
 							continue
 						if not self.seeker:
-							self.seeker = Seeker(self.player.playing.guid,
+							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
 						self.seeker.seek(-1000)

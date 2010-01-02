@@ -7,33 +7,31 @@
 import traceback
 import sys
 import os.path
-import mutagen.mp3
 
 from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
 from protocol import Aude, Audg, StrmPause, StrmUnpause
 from render   import NowPlayingRender
-from streamer import Streamer
+from menu     import CmMp3Tree
 
 class Player:
 	guid        = None # used when telling the device how to present itself
-	streamer    = None # to be removed or replaced with a JSON interface
 	wire        = None
 	gain_l      = (0,0) # 16bit.16bit fixed point, expressed as two uint16's
 	gain_r      = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
 	preamp      = 0    # 0-255
+	cm          = None
+	playing     = None # NowPlaying instance
 
 	def __init__(self, wire, guid):
 		self.guid     = guid
 		self.wire     = wire
-		self.streamer = Streamer(port=3485)
 
 		self.stop()
 		self.mute(False, False)
 		self.set_volume(200, (1,15000), (1,15000))
-		self.streamer.start()
 	
 	def close(self):
-		self.streamer.stop()
+		pass
 
 	# volume manipulations
 
@@ -85,46 +83,38 @@ class Player:
 
 	# playback manipulations
 
-	nowplaying = None # NowPlaying instance
-
-	def get_in_threshold(self, path):
-		size = os.path.getsize(path)
+	def get_in_threshold(self, size):
 		if size < 10*1024:
-			tmp = size / 1024 # 'size' is a natural number; the result is too
+			tmp = size / 1024 # 'size' is a natural number so the result is too
 			if tmp > 0:
 				return tmp - 1
 		return 10 # I'm just guessing
 	
-	def play(self, path, seek=0):
-		try:
-			audio = mutagen.mp3.MP3(path)
-			print(audio.info.pprint())
-		except:
-			# presumably the path does not point to an mp3 file..
-			info = sys.exc_info()
-			traceback.print_tb(info[2])
-			print info[1]
+	def play(self, item, seek=0):
+		if not isinstance(item, CmMp3Tree):
 			return False
 
 		# stop the currently playing track, if any
 		if self.playing:
 			self.stop()
 
-		print('audio.info.length = %f' % audio.info.length)
-		self.playing = NowPlaying(path, int(audio.info.length * 1000), seek)
-
-		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, seek)
-		strm.in_threshold = self.get_in_threshold(path)
+		self.playing = NowPlaying(item, int(item.length * 1000), seek)
+		strm = StrmStartMpeg(
+			item.cm.stream_ip, item.cm.stream_port, item.guid, seek
+		)
+		strm.in_threshold = self.get_in_threshold(item.size)
 		self.wire.send(strm.serialize())
 		return True
 
 	def jump(self, position):
-		path = self.playing.guid
+		item = self.playing.item
 		self.wire.send(StrmStop().serialize())
-		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, position)
-		strm.in_threshold = self.get_in_threshold(path)
+		strm = StrmStartMpeg(
+			item.cm.stream_ip, item.cm.stream_port, item.guid, position
+		)
+		strm.in_threshold = self.get_in_threshold(item.size)
 		self.wire.send(strm.serialize())
-		self.playing.start = position
+		self.playing.start    = position
 		self.playing.progress = 0
 
 	def duration(self):
@@ -138,7 +128,7 @@ class Player:
 #		self.playing = None
 
 #	def stream_background(self):
-#		strm = StrmStartMpeg(0, self.streamer.port, path, self.guid, True)
+#		strm = StrmStartMpeg(0, self.cm.port, path, True)
 #		self.wire.send(strm.serialize())
 
 	def stop(self):
@@ -191,18 +181,18 @@ class NowPlaying:
 	PLAYING   = 1
 	PAUSED    = 2
 
-	guid     = None # URL or file path string
+	item     = None # playable menu item (e.g. an CmMp3Tree object)
 	render   = None
 	state    = BUFFERING
 	start    = 0 # current playback position (in milliseconds) is calculated
 	progress = 0 # as the start position plus the progress. position should
 	duration = 0 # of course never be greater than the duration.
 	
-	def __init__(self, guid, duration, start=0):
-		self.guid     = guid
+	def __init__(self, item, duration, start=0):
+		self.item     = item
 		self.duration = duration
 		self.start    = start
-		self.render   = NowPlayingRender(os.path.basename(self.guid))
+		self.render   = NowPlayingRender(item.label)
 
 	def	enter_state(self, state):
 		if state == self.state:
@@ -229,12 +219,12 @@ class NowPlaying:
 		self.progress = progress
 
 	def paused(self):
-		return self.state == PAUSED
+		return self.state == NowPlaying.PAUSED
 	
 	def position(self):
 		return self.start + self.progress
 
 	def curry(self):
 		self.render.curry(self.position() / float(self.duration))
-		return (self.guid, self.render)
+		return (self.item.guid, self.render)
 
