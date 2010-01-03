@@ -183,17 +183,17 @@ class Searcher(Tree):
 
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
-		self.children  = [Empty(self)]
-		self.t9dict    = {}
-		self.terms     = []
-		self.last_code = None
-		self.current   = None
-		self.match     = ''
-		self.candidates = None
+		self.children   = [Empty(self)]
+		self.focused    = 0 # index of currently focused child item
+		self.t9dict     = {}
+		self.term       = ''   # search term built in T9 style (digits only)
+		self.candidates = None # T9 encoded strings (i.e. digits only)
+		self.query      = []   # all built search terms (translated strings)
 		#self.render = ProgressRender()
 	
 	def add_dict_terms(self, terms):
 		for t in terms:
+			# make a char list from each term so we can change single entries
 			translation = list(t)
 			for i in range(len(translation)):
 				if translation[i] in list(
@@ -225,6 +225,7 @@ class Searcher(Tree):
 				if translation[i] in list(u'9wxyz'):
 					translation[i] = '9'
 					continue
+			# change the translation from char list to string again:
 			translation = ''.join(translation)
 			if translation not in self.t9dict:
 				self.t9dict[translation] = [t]
@@ -235,41 +236,63 @@ class Searcher(Tree):
 		self.terms = terms
 
 	def consume(self, code):
-		print 'consume %s' % IR.codes_debug[code]
-		# build on the last item in the terms list until a space is seen.
-		# then start a new search term unless space is given twice
-		if code == self.last_code and code == IR.RIGHT:
-			# two rights in a row terminates the terms list and run the search.
-			print('search for %s' % self.terms)
-			return True
-		
 		if code == IR.RIGHT:
-			if self.current:
-				self.terms.append(self.current)
-				self.current = None
-				self.match   = ''
+			if self.term:
+				# complete the current term against the focused candidate
+				self.query.append(self.focused)
+				self.term       = ''
+				self.focused    = None
 				self.candidates = None
-				print(' '.join(self.terms))
+			else:
+				# terminate the query list and run the search
+				print('search for %s' % self.query)
+				self.query      = None
 			return True
 		
+		def get_candidates(term, clear=False):
+			if clear or not self.candidates:
+				self.candidates = self.t9dict.keys()
+			self.candidates = [c for c in self.candidates if c.startswith(term)]
+			pretty = []
+			for c in self.candidates:
+				pretty.extend(self.t9dict[c])
+			# sort 'pretty' so that all words with one char appear first,
+			# followed by all words with two chars, et.c.
+			tmp = {}
+			for p in pretty:
+				if len(p) not in tmp:
+					tmp[len(p)] = [p]
+				else:
+					tmp[len(p)].append(p)
+			# we now have a dict with words from 'pretty' sorted into different
+			# "length buckets". go through them from shortest to longest and
+			# build the final 'pretty'.
+			pretty = []
+			keys = tmp.keys()
+			keys.sort()
+			for i in keys:
+				p = tmp[i]
+				p.sort()
+				pretty.extend(p)
+			return (self.candidates, pretty)
+
 		if code == IR.LEFT:
-			if len(self.match) > 0:
-				self.match = self.match[:-1]
+			if len(self.term) > 0:
+				self.term = self.term[:-1]
+			(candidates, pretty) = get_candidates(self.term, clear=True)
+			if len(candidates) > 0:
+				self.focused = pretty[0]
+			print 'candidates: %s' % ' '.join(pretty)
 			return True
 		
 		if code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
 		            IR.NUM_4, IR.NUM_5, IR.NUM_6,
 		            IR.NUM_7, IR.NUM_8, IR.NUM_9]:
-			self.match = self.match + IR.codes_debug[code]
-			if not self.candidates:
-				self.candidates = self.t9dict.keys()
-			self.candidates = [c for c in self.candidates if c.startswith(self.match)]
-			pretty = []
-			for c in self.candidates:
-				pretty.extend(self.t9dict[c])
+			self.term = self.term + IR.codes_debug[code]
+			(candidates, pretty) = get_candidates(self.term)
+			if len(candidates) > 0:
+				self.focused = pretty[0]
 			print('candidates: %s' % ' '.join(pretty))
-			if len(self.candidates) > 0:
-				self.current = self.candidates[0]
 			return True
 
 
