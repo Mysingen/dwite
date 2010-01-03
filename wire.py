@@ -216,6 +216,10 @@ class JsonWire(Wire):
 			if isinstance(message, Listing):
 				self.queue.put(message)
 				continue
+			
+			if isinstance(message, Terms):
+				self.queue.put(message)
+				continue
 
 			print('%s: Not handled' % message.head)
 

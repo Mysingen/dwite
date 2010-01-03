@@ -543,15 +543,22 @@ class Listing(JsonMessage):
 	def __init__(self, obj):
 		self.guid    = obj['guid']
 		self.listing = obj['listing']
-		
+
+class Terms(JsonMessage):
+	def __init__(self, obj):
+		self.terms = obj['terms']
+
 def parse_json(data, dlen):
 	obj = json.loads(data)
-	
+
 	if obj[0] == 'Hail':
 		return Hail(obj[1])
 	
 	if obj[0] == 'Listing':
 		return Listing(obj[1])
+
+	if obj[0] == 'Terms':
+		return Terms(obj[1])
 
 	return None
 

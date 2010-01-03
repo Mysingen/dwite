@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
 
 # This program is free software; you can redistribute it and/or modify it
@@ -11,8 +13,9 @@ import sys
 
 import protocol
 
-from render  import TextRender
-from display import TRANSITION
+from render   import TextRender
+from display  import TRANSITION
+from tactile  import IR
 
 class Tree:
 	guid     = None # string used when querying the CM for stats, listings, etc
@@ -172,7 +175,103 @@ class Playlist(Tree):
 		except:
 			print('Could not remove %s' % item)
 			pass
+
+class Searcher(Tree):
+	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
+	terms  = None # list of actual search terms
+	render = None
+
+	def __init__(self, guid, label, parent):
+		Tree.__init__(self, guid, label, parent)
+		self.children  = [Empty(self)]
+		self.t9dict    = {}
+		self.terms     = []
+		self.last_code = None
+		self.current   = None
+		self.match     = ''
+		self.candidates = None
+		#self.render = ProgressRender()
+	
+	def add_dict_terms(self, terms):
+		for t in terms:
+			translation = list(t)
+			for i in range(len(translation)):
+				if translation[i] in list(
+					u'1,;.:-_!\"@#£¤$%&/{([)]=}+?\\`\'^~*<>|§½€'
+				):
+					translation[i] = '1'
+					continue
+				if translation[i] in list(u'2abcåä'):
+					translation[i] = '2'
+					continue
+				if translation[i] in list(u'3def'):
+					translation[i] = '3'
+					continue
+				if translation[i] in list(u'4ghi'):
+					translation[i] = '4'
+					continue
+				if translation[i] in list(u'5jkl'):
+					translation[i] = '5'
+					continue
+				if translation[i] in list(u'6mnoö'):
+					translation[i] = '6'
+					continue
+				if translation[i] in list(u'7pqrs'):
+					translation[i] = '7'
+					continue
+				if translation[i] in list(u'8tuv'):
+					translation[i] = '8'
+					continue
+				if translation[i] in list(u'9wxyz'):
+					translation[i] = '9'
+					continue
+			translation = ''.join(translation)
+			if translation not in self.t9dict:
+				self.t9dict[translation] = [t]
+			else:
+				self.t9dict[translation].append(t)
+	
+	def set_search_terms(self, terms):
+		self.terms = terms
+
+	def consume(self, code):
+		print 'consume %s' % IR.codes_debug[code]
+		# build on the last item in the terms list until a space is seen.
+		# then start a new search term unless space is given twice
+		if code == self.last_code and code == IR.RIGHT:
+			# two rights in a row terminates the terms list and run the search.
+			print('search for %s' % self.terms)
+			return True
 		
+		if code == IR.RIGHT:
+			if self.current:
+				self.terms.append(self.current)
+				self.current = None
+				self.match   = ''
+				self.candidates = None
+				print(' '.join(self.terms))
+			return True
+		
+		if code == IR.LEFT:
+			if len(self.match) > 0:
+				self.match = self.match[:-1]
+			return True
+		
+		if code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
+		            IR.NUM_4, IR.NUM_5, IR.NUM_6,
+		            IR.NUM_7, IR.NUM_8, IR.NUM_9]:
+			self.match = self.match + IR.codes_debug[code]
+			if not self.candidates:
+				self.candidates = self.t9dict.keys()
+			self.candidates = [c for c in self.candidates if c.startswith(self.match)]
+			pretty = []
+			for c in self.candidates:
+				pretty.extend(self.t9dict[c])
+			print('candidates: %s' % ' '.join(pretty))
+			if len(self.candidates) > 0:
+				self.current = self.candidates[0]
+			return True
+
 
 # specialty class to hold the menu system root node
 class Root(Tree):
@@ -195,13 +294,16 @@ class Root(Tree):
 			print('Will not add non-Tree object to Root: %s' % item)
 
 class Menu:
-	root    = None # must always point to a Tree instance that implements ls()
-	cwd     = None # must always point to a Tree instance that implements ls()
-	current = 0    # index into cwd.children[]
+	root     = None # must always point to a Tree instance that implements ls()
+	cwd      = None # must always point to a Tree instance that implements ls()
+	current  = 0    # index into cwd.children[]
+	searcher = None
 
 	def __init__(self):
 		self.root = Root()
 		self.cwd  = self.root
+		self.searcher = Searcher('Searcher', 'Search', self.root)
+		self.root.add(self.searcher)
 
 	def add_cm(self, cm):
 		self.root.add(CmDirTree('/', cm.label, self.root, cm))

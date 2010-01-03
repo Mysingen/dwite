@@ -10,7 +10,7 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
-from protocol  import Helo, Hail, Tactile, Stat, Listing
+from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
@@ -69,6 +69,16 @@ def init_acceleration_maps():
 	maps[IR.REWIND]      = [0]
 	maps[-IR.FORWARD]    = [0]
 	maps[-IR.REWIND]     = [0]
+	maps[IR.NUM_0]       = default
+	maps[IR.NUM_1]       = default
+	maps[IR.NUM_2]       = default
+	maps[IR.NUM_3]       = default
+	maps[IR.NUM_4]       = default
+	maps[IR.NUM_5]       = default
+	maps[IR.NUM_6]       = default
+	maps[IR.NUM_7]       = default
+	maps[IR.NUM_8]       = default
+	maps[IR.NUM_9]       = default
 
 	return maps
 
@@ -177,7 +187,11 @@ class Classic(Device):
 						render.tick(self.display.canvas)
 						self.display.show(TRANSITION.NONE)
 						continue
-						
+
+				if isinstance(msg, Terms):
+					print('got terms')
+					self.menu.searcher.add_dict_terms(msg.terms)
+					continue						
 
 				if isinstance(msg, Stat):
 					if msg.event == 'STMt':
@@ -197,6 +211,13 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, Tactile):
+					if self.menu.focused().parent == self.menu.searcher:
+						if not self.enough_stress(msg.code, msg.stress):
+							continue
+						if self.menu.searcher.consume(msg.code):
+							#render = self.menu.searcher.ticker()
+							continue
+				
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.
