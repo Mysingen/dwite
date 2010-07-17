@@ -14,10 +14,10 @@ class Render:
 	canvas  = None
 	timeout = datetime.now()
 
-	# Render objects keep track of their internal frame rate by setting a timeout
-	# (in absolute wall clock time) at which the next frame should be drawn. it
-	# should expect that a user of the object calls its tick() method regularly
-	# to drive this.
+	# Render objects keep track of their internal frame rate by setting a
+	# timeout (in absolute wall clock time) at which the next frame should
+	# be drawn. it should expect that a user of the object calls its tick()
+	# method regularly to drive this.
 
 	# subclasses must implement the curry() method
 	def curry(self):

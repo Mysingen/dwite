@@ -7,7 +7,7 @@
 import sys
 import struct
 import socket
-import simplejson as json # remove for Python 2.6 or later
+import json
 
 from tactile import IR
 

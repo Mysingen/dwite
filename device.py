@@ -111,7 +111,7 @@ class Classic(Device):
 	def select_render(self):
 		# get the guids for the currently playing track (if any) and the
 		# currently visible menu item. if they happen to be the same, then
-		# prefer the render for the currently playing track.
+		# prefer the rendering ticker for the currently playing track.
 		(guid1, render1) = self.menu.ticker()
 		(guid2, render2) = self.player.ticker()
 		if guid1 == guid2:
@@ -211,13 +211,6 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, Tactile):
-					if self.menu.focused().parent == self.menu.searcher:
-						if not self.enough_stress(msg.code, msg.stress):
-							continue
-						if self.menu.searcher.consume(msg.code):
-							#render = self.menu.searcher.ticker()
-							continue
-				
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.
@@ -236,9 +229,9 @@ class Classic(Device):
 						(guid, render, transition) = self.menu.down()
 						render = self.select_render()
 					elif msg.code == IR.RIGHT:
-						(guid, render, transition) = self.menu.enter()
+						(guid, render, transition) = self.menu.right()
 					elif msg.code == IR.LEFT:
-						(guid, render, transition) = self.menu.leave()
+						(guid, render, transition) = self.menu.left()
 
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
@@ -316,24 +309,10 @@ class Classic(Device):
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
 						pass
 
-					elif msg.code == IR.NUM_1:
-						self.player.stop()
-					elif msg.code == IR.NUM_2:
-						pass
-					elif msg.code == IR.NUM_3:
-						pass
-					elif msg.code == IR.NUM_4:
-						pass
-					elif msg.code == IR.NUM_5:
-						pass
-					elif msg.code == IR.NUM_6:
-						pass
-					elif msg.code == IR.NUM_7:
-						pass
-					elif msg.code == IR.NUM_8:
-						pass
-					elif msg.code == IR.NUM_9:
-						pass
+					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
+					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,
+					                  IR.NUM_7, IR.NUM_8, IR.NUM_9]:
+						(guid, render, transition) = self.menu.number(msg.code)
 
 					elif msg.code == IR.NOW_PLAYING:
 						self.display.next_visualizer()

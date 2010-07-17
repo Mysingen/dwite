@@ -176,6 +176,7 @@ class Playlist(Tree):
 			print('Could not remove %s' % item)
 			pass
 
+
 class Searcher(Tree):
 	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
 	terms  = None # list of actual search terms
@@ -184,12 +185,10 @@ class Searcher(Tree):
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
 		self.children   = [Empty(self)]
-		self.focused    = 0 # index of currently focused child item
 		self.t9dict     = {}
 		self.term       = ''   # search term built in T9 style (digits only)
 		self.candidates = None # T9 encoded strings (i.e. digits only)
 		self.query      = []   # all built search terms (translated strings)
-		#self.render = ProgressRender()
 	
 	def add_dict_terms(self, terms):
 		for t in terms:
@@ -235,65 +234,79 @@ class Searcher(Tree):
 	def set_search_terms(self, terms):
 		self.terms = terms
 
-	def consume(self, code):
-		if code == IR.RIGHT:
-			if self.term:
-				# complete the current term against the focused candidate
-				self.query.append(self.focused)
-				self.term       = ''
-				self.focused    = None
-				self.candidates = None
+	def get_candidates(self, term, clear=False):
+		if clear or not self.candidates:
+			self.candidates = self.t9dict.keys()
+		self.candidates = [c for c in self.candidates if c.startswith(term)]
+		pretty = []
+		for c in self.candidates:
+			pretty.extend(self.t9dict[c])
+		# sort 'pretty' so that all words with one char appear first,
+		# followed by all words with two chars, et.c.
+		tmp = {}
+		for p in pretty:
+			if len(p) not in tmp:
+				tmp[len(p)] = [p]
 			else:
-				# terminate the query list and run the search
-				print('search for %s' % self.query)
-				self.query      = None
-			return True
-		
-		def get_candidates(term, clear=False):
-			if clear or not self.candidates:
-				self.candidates = self.t9dict.keys()
-			self.candidates = [c for c in self.candidates if c.startswith(term)]
-			pretty = []
-			for c in self.candidates:
-				pretty.extend(self.t9dict[c])
-			# sort 'pretty' so that all words with one char appear first,
-			# followed by all words with two chars, et.c.
-			tmp = {}
-			for p in pretty:
-				if len(p) not in tmp:
-					tmp[len(p)] = [p]
-				else:
-					tmp[len(p)].append(p)
-			# we now have a dict with words from 'pretty' sorted into different
-			# "length buckets". go through them from shortest to longest and
-			# build the final 'pretty'.
-			pretty = []
-			keys = tmp.keys()
-			keys.sort()
-			for i in keys:
-				p = tmp[i]
-				p.sort()
-				pretty.extend(p)
-			return (self.candidates, pretty)
+				tmp[len(p)].append(p)
+		# we now have a dict with words from 'pretty' sorted into different
+		# "length buckets". go through them from shortest to longest and
+		# build the final 'pretty'.
+		pretty = []
+		keys = tmp.keys()
+		keys.sort()
+		for i in keys:
+			p = tmp[i]
+			p.sort()
+			pretty.extend(p)
+		return pretty
 
-		if code == IR.LEFT:
-			if len(self.term) > 0:
-				self.term = self.term[:-1]
-			(candidates, pretty) = get_candidates(self.term, clear=True)
-			if len(candidates) > 0:
-				self.focused = pretty[0]
-			print 'candidates: %s' % ' '.join(pretty)
+	def right(self, focused):
+		if isinstance(focused, Empty):
+			return False
+		if self.term:
+			# complete the current term against the focused candidate
+			self.query.append(focused.label)
+			self.term       = ''
+			self.candidates = None
 			return True
-		
+		else:
+			# terminate the query list and run the search
+			print('search for %s' % self.query)
+			self.query      = []
+			return True
+		return False
+	
+	def left(self):
+		if len(self.term) > 1:
+			self.term = self.term[:-1]
+		else:
+			self.children = [Empty(self)]
+			self.query    = []
+			return False
+		candidates = self.get_candidates(self.term, clear=True)
+		if len(candidates) > 0:
+			self.children = [Tree(c, c, self) for c in candidates]
+		else:
+			self.children = [Empty(self)]
+		print 'candidates: %s' % ' '.join(candidates)
+		return True
+
+	def number(self, code):
 		if code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
 		            IR.NUM_4, IR.NUM_5, IR.NUM_6,
 		            IR.NUM_7, IR.NUM_8, IR.NUM_9]:
 			self.term = self.term + IR.codes_debug[code]
-			(candidates, pretty) = get_candidates(self.term)
+			candidates = self.get_candidates(self.term)
 			if len(candidates) > 0:
-				self.focused = pretty[0]
-			print('candidates: %s' % ' '.join(pretty))
+				self.children = [Tree(c, c, self) for c in candidates]
+			else:
+				self.children = [Empty(self)]
+			print('candidates: %s' % ' '.join(candidates))
 			return True
+
+	def ls(self):
+		return self.children
 
 
 # specialty class to hold the menu system root node
@@ -302,9 +315,7 @@ class Root(Tree):
 
 	def __init__(self):
 		Tree.__init__(self, '/', '/', None)
-		self.playlist = Playlist(self)
 		self.children = []
-		self.children.append(self.playlist)
 		self.children.append(
 			DirTree('Browse files', 'Browse files', self, os.getcwd())
 		)
@@ -325,25 +336,39 @@ class Menu:
 	def __init__(self):
 		self.root = Root()
 		self.cwd  = self.root
+		self.playlist = Playlist(self.root)
 		self.searcher = Searcher('Searcher', 'Search', self.root)
+		self.root.add(self.playlist)
 		self.root.add(self.searcher)
 
 	def add_cm(self, cm):
 		self.root.add(CmDirTree('/', cm.label, self.root, cm))
 
-	def enter(self):
-		if self.focused().ls():
+	def right(self):
+		if self.cwd == self.searcher:
+			if self.searcher.right(self.focused()):
+				transition = TRANSITION.SCROLL_LEFT
+			else:
+				transition = TRANSITION.BOUNCE_LEFT
+
+		elif self.focused().ls():
 			self.cwd     = self.focused()
 			self.current = 0
 			print 'enter %s' % str(self.cwd.guid)
 			transition = TRANSITION.SCROLL_LEFT
+
 		else:
 			# self.current has no listable content and can thus not be entered
 			transition = TRANSITION.BOUNCE_LEFT
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 
-	def leave(self):
+	def left(self):
+		if self.cwd == self.searcher:
+			if self.searcher.left():
+				(guid, render) = self.focused().curry()
+				return (guid, render, TRANSITION.NONE)
+
 		if self.cwd.parent:
 			self.current = self.cwd.parent.children.index(self.cwd)
 			self.cwd     = self.cwd.parent
@@ -370,6 +395,15 @@ class Menu:
 		else:
 			transition = TRANSITION.BOUNCE_UP
 		(guid, render) = self.focused().curry()
+		return (guid, render, transition)
+
+	def number(self, ir_code):
+		if self.cwd == self.searcher:
+			if self.searcher.number(ir_code):
+				transition = TRANSITION.NONE
+			else:
+				transition = TRANSITION.BOUNCE_UP
+			(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 
 	def ticker(self, curry=False):
