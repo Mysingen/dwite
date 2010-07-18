@@ -36,7 +36,7 @@ class Render:
 
 class Window:
 	size    = 0
-	slack   = 0 # the space to keep unpainted when the window contents wrap around
+	slack   = 0 # the space to keep unpainted when the window contents wrap
 	start   = 0
 	current = 0
 	content = 0 # set by the user
@@ -64,50 +64,53 @@ class Window:
 singleton = {}
 
 class TextRender(Render):
-	image   = None
-	font    = None
-	text    = None
-	window  = None
-	timeout = None
+	image    = None
+	font     = None
+	text     = None
+	window   = None
+	timeout  = None
+	position = (0, 0)
 
-	def __new__(cls, font_path, size):
+	def __new__(cls, font_path, size, position):
 		global singleton
-		key = (font_path, size)
+		key = (font_path, size, position)
 		if key in singleton:
 			object = singleton[key]
 		else:
 			object = Render.__new__(cls)
-			TextRender.__init__(object, font_path, size)
+			TextRender.__init__(object, font_path, size, position)
 			singleton[key] = object
 		return object
 
-	def __init__(self, font_path, size):
-		self.font    = ImageFont.truetype(font_path, size)
-		self.image   = None
-		self.window  = None
-		self.timeout = None
+	def __init__(self, font_path, size, position):
+		self.font     = ImageFont.truetype(font_path, size)
+		self.image    = None
+		self.window   = None
+		self.timeout  = None
+		self.position = position
 
 	def curry(self, text):
 		self.text  = text
 		self.image = None
 
-	def make_window(self, size):
-		draw  = ImageDraw.Draw(self.image)
-		(x,y) = draw.textsize(self.text, font=self.font)
-		if x > size[0] - 2:
-			# would render outside image's right side. create a sliding window
-			self.window = Window(size[0], 10, x, 2)
-
 	def draw(self, positions):
 		draw = ImageDraw.Draw(self.image)
 		for p in positions:
-			draw.text((p,0), self.text, font=self.font, fill=1)
+			draw.text(p, self.text, font=self.font, fill=1)
+
+	def make_window(self, size):
+		draw  = ImageDraw.Draw(self.image)
+		(x,y) = draw.textsize(self.text, font=self.font)
+		if x > size[0] - self.position[0]:
+			# would render outside image's right side. create a sliding window
+			return Window(size[0], 10, x, self.position[0])
+		return None
 
 	def tick(self, canvas):
 		if not self.image: # never called this render's tick() before
 			self.image = Image.new('1', canvas.size, 0)
-			self.make_window(canvas.size)
-			self.draw([2])
+			self.window = self.make_window(canvas.size)
+			self.draw([self.position])
 			canvas.paste(self.image)
 			#print('first')
 			if self.image:
@@ -129,6 +132,7 @@ class TextRender(Render):
 
 		#print('now')
 		positions = self.window.advance(5)
+		positions = [(p, self.position[1]) for p in positions]
 		self.image = Image.new('1', canvas.size, 0)
 		self.draw(positions)
 		canvas.paste(self.image)
@@ -208,10 +212,37 @@ class OverlayRender(Render):
 class NowPlayingRender(OverlayRender):
 	def __init__(self, label):
 		home = os.getenv('DWITE_HOME')
-		self.base = TextRender('%s/fonts/LiberationMono-Bold.ttf' % home, 35)
+		self.base = TextRender(
+			'%s/fonts/LiberationMono-Bold.ttf' % home, 35, (2, 0)
+		)
 		self.base.curry(label)
 		self.overlay = ProgressRender()
 
 	def curry(self, progress):
 		self.overlay.curry(progress)
+
+class SearchRender(Render):
+	query = None
+	term  = None
+
+	def __init__(self):
+		home = os.getenv('DWITE_HOME')
+		self.query = TextRender(
+			'%s/fonts/LiberationMono-Regular.ttf' % home, 10, (2, 0)
+		)
+		self.term = TextRender(
+			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10)
+		)
+
+	# TODO: would be nice if ticking of self.query wasn't interrupted by
+	# key presses to form the next term. only applicable when the query
+	# becomes long enough that it has to be scrolled.
+	def tick(self, canvas):
+		t1 = self.query.tick(canvas)
+		t2 = self.term.tick(canvas)
+		return (t1 or t2)
+
+	def curry(self, term_text, query_text):
+		self.query.curry(query_text)
+		self.term.curry(term_text)
 

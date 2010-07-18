@@ -13,7 +13,7 @@ import sys
 
 import protocol
 
-from render   import TextRender
+from render   import TextRender, SearchRender
 from display  import TRANSITION
 from tactile  import IR
 
@@ -29,7 +29,7 @@ class Tree:
 		self.label  = label
 		self.parent = parent
 		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
-		                         % os.getenv('DWITE_HOME'), 27)
+		                         % os.getenv('DWITE_HOME'), 27, (2, 0))
 		self.render.curry(self.label)
 
 	def __str__(self):
@@ -66,7 +66,7 @@ class DirTree(FileTree):
 		FileTree.__init__(self, guid, label, parent)
 		self.path   = path
 		self.render = TextRender('%s/fonts/LiberationSans-Italic.ttf'
-		                         % os.getenv('DWITE_HOME'), 20)
+		                         % os.getenv('DWITE_HOME'), 20, (2, 0))
 
 	def __iter__(self):
 		return self.children.__iter__()
@@ -111,7 +111,7 @@ class CmDirTree(CmFileTree):
 	def __init__(self, guid, label, parent, cm):
 		CmFileTree.__init__(self, guid, label, parent, cm)
 		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
-		                         % os.getenv('DWITE_HOME'), 23)
+		                         % os.getenv('DWITE_HOME'), 23, (2, 0))
 	
 	def __iter__(self):
 		return self.children.__iter__()
@@ -176,6 +176,35 @@ class Playlist(Tree):
 			print('Could not remove %s' % item)
 			pass
 
+class CandidateTree(Tree):
+	query = None
+
+	def __init__(self, guid, label, parent, query):
+		Tree.__init__(self, guid, label, parent)
+		self.query = query
+		self.render = SearchRender()
+		self.render.curry(self.label, query)
+
+	def __str__(self):
+		return "%s (query = %s)" % (self.label, self.query)
+	
+	def __cmp__(self, other):
+		if self.guid == other.guid:
+			return 0
+		if self.guid < other.guid:
+			return -1
+		return 1
+
+	def curry(self):
+		self.render.curry(self.label, self.query)
+		return (self.guid, self.render)
+
+	def ticker(self):
+		return (self.guid, self.render)
+
+	def ls(self):
+		return None
+
 
 class Searcher(Tree):
 	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
@@ -184,7 +213,12 @@ class Searcher(Tree):
 
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
-		self.children   = [Empty(self)]
+		self.children   = [CandidateTree(
+			'<Use T9 typing to add search terms>',
+			'<Use T9 typing to add search terms>',
+			self,
+			'<NO TERMS ADDED>'
+			)]
 		self.t9dict     = {}
 		self.term       = ''   # search term built in T9 style (digits only)
 		self.candidates = None # T9 encoded strings (i.e. digits only)
@@ -242,13 +276,19 @@ class Searcher(Tree):
 		for c in self.candidates:
 			pretty.extend(self.t9dict[c])
 		# sort 'pretty' so that all words with one char appear first,
-		# followed by all words with two chars, et.c.
+		# followed by all words with two chars, et.c. Don't do more than
+		# 20 words (to keep down CPU usage).
 		tmp = {}
+		count = 0
 		for p in pretty:
 			if len(p) not in tmp:
 				tmp[len(p)] = [p]
 			else:
 				tmp[len(p)].append(p)
+
+			count = count + 1
+			if count == 20:
+				break
 		# we now have a dict with words from 'pretty' sorted into different
 		# "length buckets". go through them from shortest to longest and
 		# build the final 'pretty'.
@@ -269,11 +309,24 @@ class Searcher(Tree):
 			self.query.append(focused.label)
 			self.term       = ''
 			self.candidates = None
+			self.children   = [CandidateTree(
+				'<Use T9 typing to add search terms>',
+				'<Use T9 typing to add search terms>',
+				self,
+				' '.join(self.query)
+				)]
+
 			return True
 		else:
 			# terminate the query list and run the search
 			print('search for %s' % self.query)
-			self.query      = []
+			self.children = [CandidateTree(
+				'<SEARCHING>',
+				'<SEARCHING>',
+				self,
+				' '.join(self.query)
+				)]
+			self.query = []
 			return True
 		return False
 	
@@ -286,24 +339,37 @@ class Searcher(Tree):
 			return False
 		candidates = self.get_candidates(self.term, clear=True)
 		if len(candidates) > 0:
-			self.children = [Tree(c, c, self) for c in candidates]
+			self.children = [CandidateTree(c, c, self, ' '.join(self.query))
+			                 for c in candidates]
 		else:
-			self.children = [Empty(self)]
+			self.children = [CandidateTree(
+				'<Use T9 typing to add search terms>',
+				'<Use T9 typing to add search terms>',
+				self,
+				'<NO TERMS ADDED>'
+				)]
 		print 'candidates: %s' % ' '.join(candidates)
 		return True
 
 	def number(self, code):
-		if code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
-		            IR.NUM_4, IR.NUM_5, IR.NUM_6,
-		            IR.NUM_7, IR.NUM_8, IR.NUM_9]:
-			self.term = self.term + IR.codes_debug[code]
-			candidates = self.get_candidates(self.term)
-			if len(candidates) > 0:
-				self.children = [Tree(c, c, self) for c in candidates]
-			else:
-				self.children = [Empty(self)]
-			print('candidates: %s' % ' '.join(candidates))
-			return True
+		if code not in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
+		                IR.NUM_4, IR.NUM_5, IR.NUM_6,
+		                IR.NUM_7, IR.NUM_8, IR.NUM_9]:
+			return False
+		self.term = self.term + IR.codes_debug[code]
+		candidates = self.get_candidates(self.term)
+		if len(candidates) > 0:
+			self.children = [CandidateTree(c, c, self, ' '.join(self.query))
+			                 for c in candidates]
+		else:
+			self.children =  [CandidateTree(
+				'<No match in the T9 dictionary>',
+				'<No match in the T9 dictionary>',
+				self,
+				' '.join(self.query)
+				)]
+		print('candidates: %s' % ' '.join(candidates))
+		return True
 
 	def ls(self):
 		return self.children
