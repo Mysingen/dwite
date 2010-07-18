@@ -33,7 +33,7 @@ class Tree:
 		self.render.curry(self.label)
 
 	def __str__(self):
-		return self.label
+		return 'Tree %s %s' % (self.guid, self.label)
 	
 	def __cmp__(self, other):
 		if self.guid == other.guid:
@@ -105,6 +105,10 @@ class CmMp3Tree(CmFileTree):
 		self.size   = size
 		self.length = length
 
+	def __str__(self):
+		return 'CmMp3Tree %s %s' % (self.guid, self.label)
+	
+
 class CmDirTree(CmFileTree):
 	children = None
 
@@ -147,6 +151,8 @@ class CmDirTree(CmFileTree):
 
 		if len(self.children) == 0:
 			self.children.append(Empty(self))
+		l = min(len(self.children), 10)
+		print self.children[:l]
 		return self.children
 
 

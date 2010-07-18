@@ -10,7 +10,7 @@ import sys
 from threading import Thread
 from Queue     import Queue
 
-from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms
+from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms, Dsco
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
@@ -170,7 +170,6 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, Hail):
-					print str(msg)
 					cm = ContentManager(
 						msg.label, self.cm_wire, msg.stream_ip, msg.stream_port
 					)
@@ -208,6 +207,11 @@ class Classic(Device):
 						#print msg
 					else:
 						print('STAT %s' % msg.event)
+					continue
+
+				if isinstance(msg, Dsco):
+					print(str(msg))
+					self.player.finish()
 					continue
 
 				if isinstance(msg, Tactile):

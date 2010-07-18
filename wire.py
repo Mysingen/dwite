@@ -15,7 +15,8 @@ import errno
 from threading import Thread
 from datetime  import datetime, timedelta
 
-from protocol import *
+import protocol
+import tactile
 
 STOPPED  = 0
 STARTING = 1
@@ -80,7 +81,7 @@ class Wire(Thread):
 			if self.state == STARTING:
 				self.accept()
 
-			print('%s listening' % self.label)
+			print('%s is listening' % self.label)
 			data = ''
 			while self.state == RUNNING:
 				events = select.select([self.socket],[],[self.socket], 0.5)
@@ -92,37 +93,80 @@ class Wire(Thread):
 				if events == ([],[],[]):
 					# do nothing. the select() timeout is just there to make
 					# sure we can break the loop when self.state goes STOPPED.
-					self.handle(None)
+					# the call to handle nothing ensures that stacked up events
+					# get handled. wires with no stacked events are supposed
+					# to return immediately.
+					self.handle(None, None, None)
 					continue
 
 				if len(events[0]) > 0:
-					try:
-						data = data + self.socket.recv(1024)
-					except socket.error, e:
-						if e[0] == errno.ECONNRESET:
-							self.state = STARTING
-							continue
-						print('%s: Unhandled exception %s'
-						      % (self.label, str(e)))
-						continue
+					head = self.recv(8)
+					(kind, size) = protocol.parse_header(head)
+					print('msg kind=%s size=%d' % (kind, size))
 
-					data = self.handle(data)
+					body = self.recv(size)
+					if size != len(body):
+						print body
+						print('WARNING: size field is wrong! %d != %d'
+						      % (size, len(body)))
+					self.handle(kind, size, body)
 
 		self.socket.close()
 		print '%s is dead' % self.label
 
-	def handle(self):
+	def handle(self, kind, size, body):
 		raise Exception, 'Wire subclasses must implement handle()'
 
 	def stop(self):
 		self.state = STOPPED
 
-	def send(self, data):
-		if self.state != RUNNING:
+	def send(self, data, force=False):
+		if self.state != RUNNING and force == False:
 			print('%s restarting. Dropped %s' % (self.label, data[2:6]))
 			return
-		#print('Wire.send %s' % data[2:6])
-		self.socket.send(data)
+		left = len(data)
+		while left > 0 and self.state == RUNNING:
+			try:
+				sent = self.socket.send(data[-left:])
+				left = left - sent
+			except socket.error, e:
+				if e[0] == errno.ECONNRESET:
+					print('%s connection reset' % self.label)
+					self.state = STARTING
+					return
+				if e[0] == errno.EAGAIN:
+					print 'send() EAGAIN'
+					# temporarily unavailable. just do it again
+					continue
+			except Exception, e:
+				print('%s: Unhandled exception %s' % (self.label, str(e)))
+				sys.exit(1)
+
+	def recv(self, size):
+		body = ''
+		left = size
+		while left > 0 and self.state == RUNNING:
+			amount = min(left, 65536)
+			try:
+				r = None
+				r = self.socket.recv(amount)
+				body = body + r
+				left = left - len(r)
+			except socket.error, e:
+				if e[0] == errno.ECONNRESET:
+					print('%s connection reset' % self.label)
+					self.state = STARTING
+					body = None
+					break
+				if e[0] == errno.EAGAIN:
+					# temporarily unavailable. just do it again
+					#print('%s recv() EAGAIN' % self.label)
+					pass
+			except Exception, e:
+				print('%s: Unhandled exception %s' % (self.label, str(e)))
+				sys.exit(1)
+		return body
+
 
 class SlimWire(Wire):
 	escrow = None
@@ -131,8 +175,8 @@ class SlimWire(Wire):
 		Wire.__init__(self, port, queue)
 		self.label = 'SlimWire'
 
-	def handle(self, data):
-		if not data:
+	def handle(self, kind, size, body):
+		if not (kind or size or body):
 			# if we wake up for any non-exceptional reason and there is a
 			# tactile event in escrow, check if it has expired and if so
 			# send its negative version as a signal that the key has been
@@ -143,85 +187,75 @@ class SlimWire(Wire):
 			if self.escrow and self.escrow[1] < datetime.now():
 				code   = -self.escrow[0].code
 				stress =  self.escrow[0].stress
-				self.queue.put(Tactile(code, stress))
+				self.queue.put(protocol.Tactile(code, stress))
 				self.escrow = None
 			return ''
 
-		while parsable(data):
-			(message, data) = parse(data)
-			if not message:
-				break
+		message = protocol.parse_body(kind, size, body)
+		if not message:
+			print('WARNING: slimwire parse_body() produced NOTHING!')
+			return
 
-			if isinstance(message, Bye):
-				self.state = STARTING
-				print(message)
-				continue
+		elif isinstance(message, protocol.Bye):
+			self.state = STARTING
 
-			if isinstance(message, Ureq):
-				self.state = STARTING
-				print(message)
-				time.sleep(1.0)
-				# bypass self.send() to not drop outgoing command
-				self.socket.send(Updn().serialize())
-				continue
+		elif isinstance(message, protocol.Ureq):
+			self.state = STARTING # must set this before sending UPDN to the
+			# device or race conditions come crashing in.
+			time.sleep(1.0)
+			self.send(Updn().serialize(), force=True)
+		
+		elif isinstance(message, protocol.Helo):
+			self.queue.put(message)
 
-			if isinstance(message, Helo):
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Tactile):
+			if message.code in [tactile.IR.FORWARD, tactile.IR.REWIND]:
+				timeout = datetime.now() + timedelta(milliseconds=300)
+				self.escrow = (message, timeout)
+				if message.stress < 5:
+					# don't post an event since we can't tell
+					# yet if the wants a tap or a long press.
+					return
+			self.queue.put(message)
 
-			if isinstance(message, Tactile):
-				if message.code in [IR.FORWARD, IR.REWIND]:
-					timeout = datetime.now() + timedelta(milliseconds=300)
-					self.escrow = (message, timeout)
-					if message.stress < 5:
-						# don't post an event since we can't tell
-						# yet if the wants a tap or a long press.
-						continue
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Stat):
+			self.queue.put(message)
 
-			if isinstance(message, Stat):
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Resp):
+			pass
 
-			if isinstance(message, Resp):
-				print(message)
-				continue
+		elif isinstance(message, protocol.Anic):
+			pass
 
-			if isinstance(message, Anic):
-				continue
+		elif isinstance(message, protocol.Dsco):
+			self.queue.put(message)
 
-			print('%s: No particular handling' % message.head)
-
-		return data # return unconsumed data
+		else:
+			print('%s: No particular handling' % message)
 
 class JsonWire(Wire):
 	def __init__(self, port, queue):
 		Wire.__init__(self, port, queue)
 		self.label = 'JsonWire'
 
-	def handle(self, data):
-		if not data:
-			return ''
+	def handle(self, kind, size, body):
+		if not (kind or size or body):
+			return
 
-		while parsable(data):
-			(message, data) = parse(data)
-			if not message:
-				break;
+		message = protocol.parse_body(kind, size, body)
+		if not message:
+			print('WARNING: jsonwire parse_body() produced NOTHING!')
+			return
 			
-			if isinstance(message, Hail):
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Hail):
+			self.queue.put(message)
 			
-			if isinstance(message, Listing):
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Listing):
+			self.queue.put(message)
 			
-			if isinstance(message, Terms):
-				self.queue.put(message)
-				continue
+		elif isinstance(message, protocol.Terms):
+			self.queue.put(message)
 
-			print('%s: Not handled' % message.head)
-
-		return data # return unsonsumed data
+		else:
+			print('%s: Not handled' % message)
 

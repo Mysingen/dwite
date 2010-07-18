@@ -41,6 +41,16 @@ class ID:
 # virtual function serialize() that all subclasses must implement. The
 # serialized representation shall be writable on the control connection's
 # socket.
+# to make things really funky, the SqueezeBox does not use network order to
+# describe integers. It also uses different integer sizes to describe message
+# and command lengths. On top of this, JSON messages must use a larger size
+# field than SB messages to be useful. Joy...
+#
+# Device message: size field located [4:8], unsigned long, little endian.
+# Device command: size field located [0:2], unsigned short, little endian.
+# JSON message:   exactly like device message.
+# JSON command:   exactly like device message.
+
 
 class Message:
 	head = None # string
@@ -152,7 +162,25 @@ class Ureq(Message):
 	def __str__(self):
 		return 'UREQ: -'
 	
+class Dsco(Message):
+	head   = 'DSCO'
+	reason = 0 # uint8
 
+	def __init__(self, reason):
+		self.reason = reason
+
+	def __str__(self):
+		if self.reason == 0:
+			message = 'Connection closed normally'
+		elif self.reason == 1:
+			message = 'Connection reset by local host'
+		elif self.reason == 2:
+			message = 'Connection reset by remote host'
+		elif self.reason == 3:
+			message = 'Connection is no longer able to work'
+		elif self.reason == 4:
+			message = 'Connection timed out'
+		return 'DSCO: %s' % message
 
 class Command:
 	def serialize(self):
@@ -565,7 +593,7 @@ def parse_json(data, dlen):
 # JSON based commands:
 # commands are formed almost like those accepted by a device:
 #     header: 4 chars ('json')
-#     length: network order uint16
+#     length: network order uint32
 #     params: any string
 # so the main difference is the ordering of the length field.
 class JsonCommand(Command):
@@ -579,7 +607,7 @@ class Ls(JsonCommand):
 
 	def serialize(self):
 		params = json.dumps(['ls', self.guid])
-		length = struct.pack('!H', socket.htons(len(params)))
+		length = struct.pack('<L', socket.htonl(len(params)))
 		return self.cmd + length + params
 
 
@@ -596,9 +624,7 @@ def parsable(data):
 	return True
 
 def human_readable(data):
-	buf = data[0:4]
-	buf = buf + '[' + ' '.join(['%d' % ord(c) for c in data[4:8]]) + ']'
-	for i in range(8, len(data) - 1):
+	for i in range(len(data) - 1):
 		if ((ord(data[i]) >= 65 and ord(data[i]) <= 90)
 		or  (ord(data[i]) >= 97 and ord(data[i]) <= 122)
 		or  (ord(data[i]) in [32, 45, 46, 47, 58, 95])):
@@ -614,54 +640,59 @@ def first_unprintable(data):
 			return i
 	return len(data)
 
-# returns a tuple (message, remainder) where message is a Message instance
-# and remainder is any remaining data that was not consumed by parsing.
-def parse(data):
-	kind = data[0:4]
-	blen = socket.ntohl(struct.unpack('<L', data[4:8])[0])
-	body = data[8:8+blen]
-	if blen != len(body):
-		print('WARNING: length field is wrong! %d != %d' % (blen, len(body)))
-	rem  = data[8+blen:]
+def parse_header(head):
+	try:
+		kind = head[0:4]
+		if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP',
+		                'UREQ', 'JSON', 'DSCO']:
+			print('ERROR: unknown header kind %s' % kind)
+		size = socket.ntohl(struct.unpack('<L', head[4:8])[0])
+		return (kind, size)
+	except Exception, e:
+		print e
+		sys.exit(1)
 
+def parse_body(kind, size, body):
 	if kind == 'HELO':
-		if   blen == 10:
-			msg = parse_helo_10(body, blen)
-		elif blen == 36:
-			msg = parse_helo_36(body, blen)
-		return (msg, rem)
+		if size == 10:
+			msg = parse_helo_10(body, size)
+		elif size == 36:
+			msg = parse_helo_36(body, size)
+		return msg
 
 	if kind == 'ANIC':
-		return (Anic(), rem)
+		return Anic()
 
 	if kind == 'IR  ':
-		return (parse_ir(body, blen), rem)
+		return parse_ir(body, size)
 
 	if kind == 'BYE!':
-		return (parse_bye(body, blen), rem)
+		return parse_bye(body, size)
 	
 	if kind == 'STAT':
-		return (parse_stat(body, blen), rem)
+		return parse_stat(body, size)
 
 	if kind == 'RESP':
-		return (parse_resp(body, blen), rem)
+		return parse_resp(body, size)
 
 	if kind == 'UREQ':
-		return (parse_ureq(body, blen), rem)
+		return parse_ureq(body, size)
 
 	if kind == 'JSON':
-		return (parse_json(body, blen), rem)
+		return parse_json(body, size)
+	
+	if kind == 'DSCO':
+		return parse_dsco(body, size)
 
-	print('unknown message, len %d. first 160 chars:' % dlen)
-	if dlen > 160:
-		dlen = 160
-	print(human_readable(data[:dlen]))
+	print('unknown message, len %d. first 160 chars:' % size)
+	print(human_readable(body))
+	#sys.exit(1)
 	# look for next message in the mess:
-	for i in range(len(data) - 4):
-		if parsable(data[i:]):
-			print('Recovered parsable message')
-			return (None, data[i:])
-	return (None, '')
+	#for i in range(len(data) - 4):
+	#	if parsable(data[i:]):
+	#		print('Recovered parsable message')
+	#		return (None, data[i:])
+	return None
 
 def parse_helo_10(data, dlen):
 	id       = ord(data[0])
@@ -762,4 +793,8 @@ def parse_resp(data, dlen):
 
 def parse_ureq(data, dlen):
 	return Ureq()
+
+def parse_dsco(data, dlen):
+	reason = struct.unpack('<B', data[0])[0]
+	return Dsco(reason)
 

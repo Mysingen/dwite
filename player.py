@@ -93,6 +93,7 @@ class Player:
 	def play(self, item, seek=0):
 		if not isinstance(item, CmMp3Tree):
 			return False
+		print('play %s' % str(item))
 
 		# stop the currently playing track, if any
 		if self.playing:
