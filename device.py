@@ -44,7 +44,7 @@ class Device(Thread):
 		self.queue   = queue
 		self.guid    = guid
 		self.menu    = Menu()
-		self.cm_wire = JsonWire(3484, queue)
+		self.cm_wire = JsonWire(None, 3484, queue)
 		self.cm_wire.start()
 
 	def run(self):

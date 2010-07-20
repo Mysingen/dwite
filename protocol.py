@@ -49,7 +49,6 @@ class ID:
 # Device message: size field located [4:8], unsigned long, little endian.
 # Device command: size field located [0:2], unsigned short, little endian.
 # JSON message:   exactly like device message.
-# JSON command:   exactly like device message.
 
 
 class Message:
@@ -181,6 +180,19 @@ class Dsco(Message):
 		elif self.reason == 4:
 			message = 'Connection timed out'
 		return 'DSCO: %s' % message
+
+class Ls(Message):
+	head = 'ls'
+	guid = None
+
+	def __init__(self, guid):
+		self.guid = guid
+	
+	def __str__(self):
+		return 'ls %s' % self.guid
+
+
+
 
 class Command:
 	def serialize(self):
@@ -553,62 +565,121 @@ class VisuSpectrum(Visu):
 
 
 
-# JSON based messages:
+# internal messages. used for interthread communication. not based on other
+# message classes
+class Connected:
+	host = None
+	port = 0
+
+	def __init__(self, host, port):
+		self.host = host
+		self.port = port
+
+
+
+# JSON based messages. Note that there is no Command class for JSON messaging.
+# all communication is done with a common tree of message classes.
 class JsonMessage(Message):
 	head = 'JSON'
 
+	def dump(self):
+		print('ERROR: Your JsonMessage subclass must implement dump()')
+		sys.exit(1)
+
+	def serialize(self):
+		data   = self.dump()
+		length = struct.pack('<L', socket.htonl(len(data)))
+		return self.head + length + data
+
+# this command is used by a content manager to hail a device manager. There
+# is no reply message class.
 class Hail(JsonMessage):
-	def __init__(self, obj):
-		self.label       = obj['label']
-		self.stream_ip   = obj['stream_ip']
-		self.stream_port = obj['stream_port']
+	label       = None
+	stream_ip   = None # the ip address of the device manager's streamer
+	stream_port = None # the port of the device manager's streamer
+
+	def __init__(self, label, stream_ip, stream_port):
+		self.label       = label
+		self.stream_ip   = stream_ip
+		self.stream_port = stream_port
 
 	def __str__(self):
-		return 'Hail: %s %d:%d' % (self.label, self.stream_ip, self.stream_port)
+		return 'Hail(%s %d:%d)' % (self.label, self.stream_ip, self.stream_port)
 
+	def dump(self):
+		return json.dumps(['Hail', {'label'      :self.label,
+		                            'stream_ip'  :self.stream_ip,
+		                            'stream_port':self.stream_port}])
 
-class Listing(JsonMessage):
-	def __init__(self, obj):
-		self.guid    = obj['guid']
-		self.listing = obj['listing']
-
-class Terms(JsonMessage):
-	def __init__(self, obj):
-		self.terms = obj['terms']
-
-def parse_json(data, dlen):
-	obj = json.loads(data)
-
-	if obj[0] == 'Hail':
-		return Hail(obj[1])
-	
-	if obj[0] == 'Listing':
-		return Listing(obj[1])
-
-	if obj[0] == 'Terms':
-		return Terms(obj[1])
-
-	return None
-
-# JSON based commands:
-# commands are formed almost like those accepted by a device:
-#     header: 4 chars ('json')
-#     length: network order uint32
-#     params: any string
-# so the main difference is the ordering of the length field.
-class JsonCommand(Command):
-	cmd = 'json'
-
-class Ls(JsonCommand):
+# used by device manager to ask content manager for a listing of the contents
+# of some item by GUID. use Listing to reply.
+class Ls(JsonMessage):
 	guid = None
 
 	def __init__(self, guid):
 		self.guid = guid
 
-	def serialize(self):
-		params = json.dumps(['ls', self.guid])
-		length = struct.pack('<L', socket.htonl(len(params)))
-		return self.cmd + length + params
+	def __str__(self):
+		return 'Ls(%s)' % self.guid
+	
+	def dump(self):
+		return json.dumps(['Ls', {'guid': self.guid}])
+
+# used to list the contents of a content manager item by GUID.
+class Listing(JsonMessage):
+	guid    = None
+	listing = None
+
+	def __init__(self, guid, listing):
+		self.guid    = guid
+		self.listing = listing
+
+	def __str__(self):
+		return 'Listing(%s): %s' % (self.guid, self.listing)
+	
+	def dump(self):
+		return json.dumps(['Listing', {'guid'   :self.guid,
+		                               'listing':self.listing}])
+
+# used by content managers to send available search terms to the device
+# manager. there is no reply message class.
+class Terms(JsonMessage):
+	terms = None
+
+	def __init__(self, terms):
+		self.terms = terms
+
+	def __str__(self):
+		return 'Terms(): %s' % self.terms
+	
+	def dump(self):
+		return json.dumps(['Terms', {'terms': self.terms}])
+
+
+
+
+def parse_json(data):
+	obj  = json.loads(data)
+	head = obj[0]
+	body = obj[1]
+
+	print('head, body: %s, %s' % (head, body))
+
+	if head == 'Hail':
+		return Hail(**body)
+	
+	if head == 'Ls':
+		return Ls(**body)
+	
+	if head == 'Listing':
+		return Listing(**body)
+
+	if head == 'Terms':
+		return Terms(**body)
+
+	return None
+
+
 
 
 
@@ -679,7 +750,7 @@ def parse_body(kind, size, body):
 		return parse_ureq(body, size)
 
 	if kind == 'JSON':
-		return parse_json(body, size)
+		return parse_json(body)
 	
 	if kind == 'DSCO':
 		return parse_dsco(body, size)

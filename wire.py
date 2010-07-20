@@ -12,35 +12,49 @@ import traceback
 import time
 import errno
 
+from Queue     import Queue
 from threading import Thread
 from datetime  import datetime, timedelta
 
 import protocol
 import tactile
 
-STOPPED  = 0
 STARTING = 1
 RUNNING  = 2
+PAUSED   = 3
+STOPPED  = 4
 
 class Wire(Thread):
-	label    = None
-	state    = STOPPED
-	socket   = None
-	port     = 0
-	receiver = None
+	label     = None
+	state     = PAUSED
+	socket    = None
+	host      = None
+	port      = 0
+	accept    = True
+	in_queue  = None # in_queue is used by Wire's public methods to post
+	out_queue = None # messages that should be handled by the event loop.
+	                 # out_queue is passed in from outside to let us post
+	                 # messages to whoever instantiated the Wire.
 
-	def __new__(cls, port, queue):
-		object = Thread.__new__(cls, None, Wire.run, 'Wire', (), {})
-		return object
+	def __init__(self, host, port, queue, accept=True):
+		Thread.__init__(self, target=Wire.run, name='Wire')
+		self.label     = 'Wire'
+		self.state     = STARTING
+		self.host      = host
+		self.port      = port
+		self.accept    = accept
+		self.in_queue  = Queue(100)
+		self.out_queue = queue
 
-	def __init__(self, port, queue):
-		Thread.__init__(self)
-		self.label = 'Wire'
-		self.state = STARTING
-		self.port  = port
-		self.queue = queue
+	def stop(self):
+		self.state = STOPPED
 
-	def accept(self):
+	def send(self, payload):
+		self.in_queue.put(payload)
+
+	# protected methods below. only to be called by self (incl. subclasses)
+
+	def _accept(self):
 		if self.state != STARTING:
 			print('%s.accept() called in wrong state %d'
 			      % (self.label, self.state))
@@ -75,16 +89,50 @@ class Wire(Thread):
 			except:
 				pass
 
+	def _connect(self):
+		if self.socket:
+			self.socket.close()
+		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.socket.settimeout(0.5)
+		while self.state != STOPPED:
+			try:
+				self.socket.connect((self.host, self.port))
+				self.socket.setblocking(False)
+				self.state = RUNNING
+				self.out_queue.put(protocol.Connected(self.host, self.port))
+				break
+			except Exception, e:
+				print e
+				time.sleep(1) # stop pointless runaway loop
+
 	def run(self):
 		while self.state != STOPPED:
+		
+			if self.state == PAUSED:
+				time.sleep(0.5)
+				continue
 
 			if self.state == STARTING:
-				self.accept()
+				if self.accept:
+					self._accept()
+				else:
+					self._connect()
 
 			print('%s is listening' % self.label)
-			data = ''
+			payload = None
 			while self.state == RUNNING:
-				events = select.select([self.socket],[],[self.socket], 0.5)
+				# check first if we have payloads to send on the socket. don't
+				# block on empty queue.
+				if not payload:
+					try:
+						payload = self.in_queue.get(block=False, timeout=None)
+						wlist = [self.socket]
+					except:
+						wlist = []
+
+				rlist = [self.socket]
+				xlist = [self.socket]
+				events = select.select(rlist, wlist, xlist, 0.02)
 				if len(events[2]) > 0:
 					print('%s EXCEPTIONAL EVENT' % self.label)
 					self.state = STOPPED
@@ -96,33 +144,42 @@ class Wire(Thread):
 					# the call to handle nothing ensures that stacked up events
 					# get handled. wires with no stacked events are supposed
 					# to return immediately.
-					self.handle(None, None, None)
+					self._handle(None, None, None)
 					continue
 
+				if len(events[1]) > 0:
+					# it is conceivable that payload was assigned at a time
+					# when the socket was not writable. in such cases we do
+					# not wait for it to become writable and just skip to
+					# receiving instead. in this case the payload will remain
+					# for another round in the event loop.
+					if payload:
+						self._send(payload)
+						payload = None
+
 				if len(events[0]) > 0:
-					head = self.recv(8)
+					# all socket messages start with an 8 byte header that
+					# contains some meta data: message kind and it's size.
+					head = self._recv(8)
 					(kind, size) = protocol.parse_header(head)
 					print('msg kind=%s size=%d' % (kind, size))
 
-					body = self.recv(size)
+					# receive the rest of the message
+					body = self._recv(size)
 					if size != len(body):
-						print body
 						print('WARNING: size field is wrong! %d != %d'
 						      % (size, len(body)))
-					self.handle(kind, size, body)
+					self._handle(kind, size, body)
 
 		self.socket.close()
 		print '%s is dead' % self.label
 
-	def handle(self, kind, size, body):
+	def _handle(self, kind, size, body):
 		raise Exception, 'Wire subclasses must implement handle()'
 
-	def stop(self):
-		self.state = STOPPED
-
-	def send(self, data, force=False):
+	def _send(self, data, force=False):
 		if self.state != RUNNING and force == False:
-			print('%s restarting. Dropped %s' % (self.label, data[2:6]))
+			print('%s restarting. Dropped %s' % (self.label, data))
 			return
 		left = len(data)
 		while left > 0 and self.state == RUNNING:
@@ -134,15 +191,17 @@ class Wire(Thread):
 					print('%s connection reset' % self.label)
 					self.state = STARTING
 					return
-				if e[0] == errno.EAGAIN:
+				elif e[0] == errno.EAGAIN:
 					print 'send() EAGAIN'
 					# temporarily unavailable. just do it again
 					continue
+				else:
+					print('Unhandled socket error %d' % e[0])
 			except Exception, e:
 				print('%s: Unhandled exception %s' % (self.label, str(e)))
 				sys.exit(1)
 
-	def recv(self, size):
+	def _recv(self, size):
 		body = ''
 		left = size
 		while left > 0 and self.state == RUNNING:
@@ -158,10 +217,12 @@ class Wire(Thread):
 					self.state = STARTING
 					body = None
 					break
-				if e[0] == errno.EAGAIN:
+				elif e[0] == errno.EAGAIN:
 					# temporarily unavailable. just do it again
 					#print('%s recv() EAGAIN' % self.label)
 					pass
+				else:
+					print('Unhandled socket error %d' % e[0])
 			except Exception, e:
 				print('%s: Unhandled exception %s' % (self.label, str(e)))
 				sys.exit(1)
@@ -171,11 +232,11 @@ class Wire(Thread):
 class SlimWire(Wire):
 	escrow = None
 
-	def __init__(self, port, queue):
-		Wire.__init__(self, port, queue)
+	def __init__(self, host, port, queue, accept=True):
+		Wire.__init__(self, host, port, queue, accept)
 		self.label = 'SlimWire'
 
-	def handle(self, kind, size, body):
+	def _handle(self, kind, size, body):
 		if not (kind or size or body):
 			# if we wake up for any non-exceptional reason and there is a
 			# tactile event in escrow, check if it has expired and if so
@@ -187,7 +248,7 @@ class SlimWire(Wire):
 			if self.escrow and self.escrow[1] < datetime.now():
 				code   = -self.escrow[0].code
 				stress =  self.escrow[0].stress
-				self.queue.put(protocol.Tactile(code, stress))
+				self.out_queue.put(protocol.Tactile(code, stress))
 				self.escrow = None
 			return ''
 
@@ -203,10 +264,10 @@ class SlimWire(Wire):
 			self.state = STARTING # must set this before sending UPDN to the
 			# device or race conditions come crashing in.
 			time.sleep(1.0)
-			self.send(Updn().serialize(), force=True)
+			self._send(Updn().serialize(), force=True)
 		
 		elif isinstance(message, protocol.Helo):
-			self.queue.put(message)
+			self.out_queue.put(message)
 
 		elif isinstance(message, protocol.Tactile):
 			if message.code in [tactile.IR.FORWARD, tactile.IR.REWIND]:
@@ -216,10 +277,10 @@ class SlimWire(Wire):
 					# don't post an event since we can't tell
 					# yet if the wants a tap or a long press.
 					return
-			self.queue.put(message)
+			self.out_queue.put(message)
 
 		elif isinstance(message, protocol.Stat):
-			self.queue.put(message)
+			self.out_queue.put(message)
 
 		elif isinstance(message, protocol.Resp):
 			pass
@@ -228,17 +289,17 @@ class SlimWire(Wire):
 			pass
 
 		elif isinstance(message, protocol.Dsco):
-			self.queue.put(message)
+			self.out_queue.put(message)
 
 		else:
 			print('%s: No particular handling' % message)
 
 class JsonWire(Wire):
-	def __init__(self, port, queue):
-		Wire.__init__(self, port, queue)
+	def __init__(self, host, port, queue, accept=True):
+		Wire.__init__(self, host, port, queue, accept)
 		self.label = 'JsonWire'
 
-	def handle(self, kind, size, body):
+	def _handle(self, kind, size, body):
 		if not (kind or size or body):
 			return
 
@@ -248,13 +309,16 @@ class JsonWire(Wire):
 			return
 			
 		elif isinstance(message, protocol.Hail):
-			self.queue.put(message)
+			self.out_queue.put(message)
 			
 		elif isinstance(message, protocol.Listing):
-			self.queue.put(message)
+			self.out_queue.put(message)
 			
 		elif isinstance(message, protocol.Terms):
-			self.queue.put(message)
+			self.out_queue.put(message)
+
+		elif isinstance(message, protocol.Ls):
+			self.out_queue.put(message)
 
 		else:
 			print('%s: Not handled' % message)

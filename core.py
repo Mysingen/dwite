@@ -23,7 +23,7 @@ def main():
 		queue = Queue(100)
 		# give the same queue to both protocol wires so they have somewhere to
 		# post events.
-		wire = SlimWire(3483, queue)
+		wire = SlimWire(None, 3483, queue)
 		wire.start()
 	except: # user pressed CTRL-C before the subsystems could initialize?
 		info = sys.exc_info()
