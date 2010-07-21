@@ -3,11 +3,14 @@ import sys
 import select
 import errno
 import re
+import urllib
 
 # mutagen dependency
 import mutagen.mp3
 
 from threading import Thread
+
+from threaded_backend import POST
 
 STOPPED  = 0
 STARTING = 1
@@ -142,9 +145,13 @@ class Streamer(Thread):
 		try:
 			m = re.search('GET (.+?) HTTP/1\.0', data, re.MULTILINE)
 			print 'GET %s' % m.group(1)
-			track = self.backend.get_item(m.group(1))
-			print 'Get %s' % track.uri
-			decoder = MP3_Decoder(track.uri)
+			track = POST(self.backend.get_item, guid=m.group(1))
+			if track.uri.startswith('file://'):
+				start = 7
+			else:
+				start = 0
+			print 'Get %s' % urllib.unquote(track.uri[start:])
+			decoder = MP3_Decoder(urllib.unquote(track.uri[start:]))
 		except Exception, e:
 			print 'oooops %s' % str(e)
 			#info = sys.exc_info()

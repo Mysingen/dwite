@@ -9,7 +9,7 @@ from Queue     import Queue
 from threading import Thread
 
 from wire     import JsonWire
-from backend  import BansheeDB
+from threaded_backend  import BansheeDB, POST
 from streamer import Streamer
 
 import protocol
@@ -33,6 +33,7 @@ class Cleo(Thread):
 		self.streamer = Streamer(3485, self.backend)
 		self.queue    = Queue(100)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
+		self.backend.start()
 		self.streamer.start()
 		self.jsonwire.start()
 		self.state    = RUNNING
@@ -57,18 +58,18 @@ class Cleo(Thread):
 
 			if isinstance(msg, protocol.Connected):
 				print('Cleo hails')
-				hail = protocol.Hail(self.backend.pretty, 0, 3485)
+				hail = protocol.Hail(self.backend.name, 0, 3485)
 				self.jsonwire.send(hail.serialize())
 
 			if isinstance(msg, protocol.Ls):
 				print('message Ls')
-				listing = self.backend.get_children(msg.guid)
+				listing = POST(self.backend.get_children, guid=msg.guid)
 				payload = protocol.Listing(msg.guid, listing).serialize()
 				self.jsonwire.send(payload)
 
 			
 		print('Cleo hails')
-		hail = protocol.Hail(self.backend.pretty, 0, 3485)
+		hail = protocol.Hail(self.backend.name, 0, 3485)
 		self.jsonwire.send(hail.serialize())
 
 		print('Cleo is dead')

@@ -656,8 +656,6 @@ class Terms(JsonMessage):
 		return json.dumps(['Terms', {'terms': self.terms}])
 
 
-
-
 def parse_json(data):
 	obj  = json.loads(data)
 	head = obj[0]

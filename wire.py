@@ -192,8 +192,8 @@ class Wire(Thread):
 					self.state = STARTING
 					return
 				elif e[0] == errno.EAGAIN:
-					print 'send() EAGAIN'
 					# temporarily unavailable. just do it again
+					#print('%s recv() EAGAIN' % self.label)
 					continue
 				else:
 					print('Unhandled socket error %d' % e[0])
