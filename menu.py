@@ -97,13 +97,13 @@ class CmFileTree(Tree):
 		self.cm = cm
 
 class CmMp3Tree(CmFileTree):
-	size   = 0   # bytes
-	length = 0.0 # seconds
+	size     = 0 # bytes
+	duration = 0 # milliseconds
 
-	def __init__(self, guid, label, size, length, parent, cm):
+	def __init__(self, guid, label, size, duration, parent, cm):
 		CmFileTree.__init__(self, guid, label, parent, cm)
-		self.size   = size
-		self.length = length
+		self.size     = size
+		self.duration = duration
 
 	def __str__(self):
 		return 'CmMp3Tree %s %s' % (self.guid, self.label)
@@ -143,18 +143,15 @@ class CmDirTree(CmFileTree):
 				continue
 			
 			if kind == 'mp3':
-				size   = l['size']
-				length = l['length']
+				size     = l['size']
+				duration = l['duration']
 				self.children.append(
-					CmMp3Tree(guid, label, size, length, self, self.cm)
+					CmMp3Tree(guid, label, size, duration, self, self.cm)
 				)
 
 		if len(self.children) == 0:
 			self.children.append(Empty(self))
-		l = min(len(self.children), 10)
-		print self.children[:l]
 		return self.children
-
 
 class Empty(Tree):
 	def __init__(self, parent):

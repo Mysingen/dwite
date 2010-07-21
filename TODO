@@ -1,0 +1,14 @@
+Make the wire detect when the other end of the socket is closed.
+
+Test suites...
+
+Player doesn't update progress.
+
+Can streamer use wire?
+
+Playlists?
+
+Do something about menu population. Way too slow with thousands of entries.
+
+Add file:line printouts to all exception printouts.
+

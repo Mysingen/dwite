@@ -650,8 +650,6 @@ def parse_json(data):
 	head = obj[0]
 	body = obj[1]
 
-	print('head, body: %s, %s' % (head, body))
-
 	if head == 'Hail':
 		return Hail(**body)
 	
@@ -704,11 +702,12 @@ def parse_header(head):
 		if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP',
 		                'UREQ', 'JSON', 'DSCO']:
 			print('ERROR: unknown header kind %s' % kind)
+			return (None, 0)
 		size = socket.ntohl(struct.unpack('<L', head[4:8])[0])
 		return (kind, size)
 	except Exception, e:
 		print e
-		sys.exit(1)
+		return (None, 0)
 
 def parse_body(kind, size, body):
 	if kind == 'HELO':

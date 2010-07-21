@@ -173,8 +173,8 @@ class Wire(Thread):
 					# contains some meta data: message kind and it's size.
 					head = self._recv(8)
 					(kind, size) = protocol.parse_header(head)
-					print('msg kind=%s size=%d' % (kind, size))
-
+					if not kind:
+						continue
 					# receive the rest of the message
 					body = self._recv(size)
 					if size != len(body):

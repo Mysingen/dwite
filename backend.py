@@ -80,10 +80,10 @@ class Album(Item):
 #		return count
 
 class Track(Item):
-	album  = None
-	uri    = None
-	size   = None
-	length = None
+	album    = None
+	uri      = None
+	size     = None
+	duration = None
 
 	def __init__(self, row, db, album):
 		if row.Uri.lower().endswith('.mp3'):
@@ -93,18 +93,18 @@ class Track(Item):
 			label = os.path.basename(row.Uri)
 			kind  = Item.FILE
 		Item.__init__(self, 'track:%d' % row.TrackID, label, kind)
-		self.db     = db
-		self.album  = album
-		self.uri    = row.Uri
-		self.size   = row.FileSize
-		self.length = row.Duration
+		self.db       = db
+		self.album    = album
+		self.uri      = row.Uri
+		self.size     = row.FileSize
+		self.duration = row.Duration
 
 	def json(self):
-		return {'guid'  : self.guid,
-		        'label' : self.label,
-		        'kind'  : self.kind,
-		        'size'  : self.size,
-		        'length': self.length}
+		return {'guid'    : self.guid,
+		        'label'   : self.label,
+		        'kind'    : self.kind,
+		        'size'    : self.size,
+		        'duration': self.duration}
 
 	def get_children(self):
 		return []

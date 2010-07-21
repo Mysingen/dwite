@@ -99,7 +99,7 @@ class Player:
 		if self.playing:
 			self.stop()
 
-		self.playing = NowPlaying(item, int(item.length * 1000), seek)
+		self.playing = NowPlaying(item, item.duration, seek)
 		strm = StrmStartMpeg(
 			item.cm.stream_ip, item.cm.stream_port, item.guid, seek
 		)
