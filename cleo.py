@@ -30,8 +30,8 @@ class Cleo(Thread):
 	def __init__(self):
 		Thread.__init__(self, target=Cleo.run, name='Cleo')
 		self.backend  = BansheeDB('Banshee')
-		self.streamer = Streamer(3485, self.backend)
 		self.queue    = Queue(100)
+		self.streamer = Streamer(3485, self.backend, self.queue)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
 		self.backend.start()
 		self.streamer.start()
@@ -41,9 +41,25 @@ class Cleo(Thread):
 	def stop(self):
 		self.streamer.stop()
 		self.jsonwire.stop()
+		self.backend.stop()
 		self.state = STOPPED
 
 	def run(self):
+		msg1 = self.queue.get(block=True)
+		msg2 = self.queue.get(block=True)
+		if isinstance(msg1, protocol.Connected):
+			print('connected')
+		if isinstance(msg2, protocol.Connected):
+			print('connected')
+		if isinstance(msg1, protocol.Accepting):
+			print('accepting')
+		if isinstance(msg2, protocol.Accepting):
+			print('accepting')
+
+		print('Cleo hails')
+		hail = protocol.Hail(self.backend.name, 0, 3485)
+		self.jsonwire.send(hail.serialize())
+
 		while self.state != STOPPED:
 
 			if self.state == PAUSED:
@@ -55,11 +71,6 @@ class Cleo(Thread):
 				msg = self.queue.get(block=True, timeout=0.5)
 			except Exception, e:
 				pass
-
-			if isinstance(msg, protocol.Connected):
-				print('Cleo hails')
-				hail = protocol.Hail(self.backend.name, 0, 3485)
-				self.jsonwire.send(hail.serialize())
 
 			if isinstance(msg, protocol.Ls):
 				print('message Ls')

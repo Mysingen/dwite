@@ -11,6 +11,7 @@ import mutagen.mp3
 from threading import Thread
 
 from threaded_backend import POST
+from protocol import Accepting
 
 STOPPED  = 0
 STARTING = 1
@@ -24,11 +25,12 @@ class Streamer(Thread):
 	decoder = None # a Decoder object
 	backend = None
 
-	def __init__(self, port, backend):
+	def __init__(self, port, backend, queue):
 		Thread.__init__(self, target=Streamer.run, name='Streamer')
 		self.state   = STARTING
 		self.port    = port
 		self.backend = backend
+		self.queue   = queue
 
 	def accept(self):
 		if self.state != STARTING:
@@ -47,8 +49,9 @@ class Streamer(Thread):
 				self.port = self.port + 1
 				pass
 		print('Streamer accepting on %d' % self.port)
-
+		
 		self.state = RUNNING
+		self.queue.put(Accepting('', self.port))
 
 		# socket.accept() hangs and you can't abort by hitting CTRL-C on the
 		# command line (because the thread isn't the program main loop that

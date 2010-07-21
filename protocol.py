@@ -575,6 +575,14 @@ class Connected:
 		self.host = host
 		self.port = port
 
+class Accepting:
+	host = None
+	port = 0
+
+	def __init__(self, host, port):
+		self.host = host
+		self.port = port
+	
 
 
 # JSON based messages. Note that there is no Command class for JSON messaging.
