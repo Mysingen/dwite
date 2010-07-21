@@ -8,9 +8,9 @@ import time
 from Queue     import Queue
 from threading import Thread
 
-from wire     import JsonWire
-from threaded_backend  import BansheeDB, POST
-from streamer import Streamer
+from wire     import JsonWire, Connected
+from backend  import BansheeDB
+from streamer import Streamer, Accepting
 
 import protocol
 
@@ -31,7 +31,7 @@ class Cleo(Thread):
 		Thread.__init__(self, target=Cleo.run, name='Cleo')
 		self.backend  = BansheeDB('Banshee')
 		self.queue    = Queue(100)
-		self.streamer = Streamer(3485, self.backend, self.queue)
+		self.streamer = Streamer(self.backend, self.queue)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
 		self.backend.start()
 		self.streamer.start()
@@ -45,19 +45,19 @@ class Cleo(Thread):
 		self.state = STOPPED
 
 	def run(self):
-		msg1 = self.queue.get(block=True)
-		msg2 = self.queue.get(block=True)
-		if isinstance(msg1, protocol.Connected):
-			print('connected')
-		if isinstance(msg2, protocol.Connected):
-			print('connected')
-		if isinstance(msg1, protocol.Accepting):
-			print('accepting')
-		if isinstance(msg2, protocol.Accepting):
-			print('accepting')
+		# wait for other subsystems to come up before going on
+		todo = 2
+		while todo > 0:
+			msg = self.queue.get(block=True)
+			if isinstance(msg, Connected):
+				todo -= 1
+			if isinstance(msg, Accepting):
+				streamer_port = msg.port
+				todo -= 1
 
+		# ready to hail the DM with all necessary info about cleo subsystems
 		print('Cleo hails')
-		hail = protocol.Hail(self.backend.name, 0, 3485)
+		hail = protocol.Hail(self.backend.name, 0, streamer_port)
 		self.jsonwire.send(hail.serialize())
 
 		while self.state != STOPPED:
@@ -74,14 +74,9 @@ class Cleo(Thread):
 
 			if isinstance(msg, protocol.Ls):
 				print('message Ls')
-				listing = POST(self.backend.get_children, guid=msg.guid)
+				listing = self.backend.get_children(msg.guid)
 				payload = protocol.Listing(msg.guid, listing).serialize()
 				self.jsonwire.send(payload)
-
-			
-		print('Cleo hails')
-		hail = protocol.Hail(self.backend.name, 0, 3485)
-		self.jsonwire.send(hail.serialize())
 
 		print('Cleo is dead')
 

@@ -563,25 +563,6 @@ class VisuSpectrum(Visu):
 		length = struct.pack('<h', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
-
-
-# internal messages. used for interthread communication. not based on other
-# message classes
-class Connected:
-	host = None
-	port = 0
-
-	def __init__(self, host, port):
-		self.host = host
-		self.port = port
-
-class Accepting:
-	host = None
-	port = 0
-
-	def __init__(self, host, port):
-		self.host = host
-		self.port = port
 	
 
 

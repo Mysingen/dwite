@@ -24,6 +24,16 @@ RUNNING  = 2
 PAUSED   = 3
 STOPPED  = 4
 
+class Connected:
+	host = None
+	port = 0
+	wire = None
+
+	def __init__(self, host, port, wire):
+		self.host = host
+		self.port = port
+		self.wire = wire
+
 class Wire(Thread):
 	label     = None
 	state     = PAUSED
@@ -83,7 +93,8 @@ class Wire(Thread):
 			try:
 				self.socket, address = self.socket.accept()
 				self.socket.setblocking(False)
-				print('%s connected on %d' % (self.label, self.port))
+				print('%s connected to %s:%d' % (self.label, address,self.port))
+				self.out_queue.put(Connected(address, self.port, self))
 				self.state = RUNNING
 				break
 			except:
@@ -99,10 +110,10 @@ class Wire(Thread):
 				self.socket.connect((self.host, self.port))
 				self.socket.setblocking(False)
 				self.state = RUNNING
-				self.out_queue.put(protocol.Connected(self.host, self.port))
+				self.out_queue.put(Connected(self.host, self.port, self))
 				break
 			except Exception, e:
-				print e
+				#print e
 				time.sleep(1) # stop pointless runaway loop
 
 	def run(self):

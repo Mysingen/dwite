@@ -10,12 +10,17 @@ import mutagen.mp3
 
 from threading import Thread
 
-from threaded_backend import POST
-from protocol import Accepting
-
 STOPPED  = 0
 STARTING = 1
 RUNNING  = 2
+
+class Accepting:
+	host = None
+	port = 0
+
+	def __init__(self, host, port):
+		self.host = host
+		self.port = port
 
 # accepts connections to a socket and then feeds data on that socket.
 class Streamer(Thread):
@@ -25,10 +30,10 @@ class Streamer(Thread):
 	decoder = None # a Decoder object
 	backend = None
 
-	def __init__(self, port, backend, queue):
+	def __init__(self, backend, queue):
 		Thread.__init__(self, target=Streamer.run, name='Streamer')
 		self.state   = STARTING
-		self.port    = port
+		self.port    = 3485
 		self.backend = backend
 		self.queue   = queue
 
@@ -40,7 +45,6 @@ class Streamer(Thread):
 			self.socket.close()
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		print('Streamer waiting for port %d to become available' % self.port)
 		while self.state != STOPPED: # in case someone forces a full teardown.
 			try:
 				self.socket.bind(('', self.port))
@@ -148,7 +152,7 @@ class Streamer(Thread):
 		try:
 			m = re.search('GET (.+?) HTTP/1\.0', data, re.MULTILINE)
 			print 'GET %s' % m.group(1)
-			track = POST(self.backend.get_item, guid=m.group(1))
+			track = self.backend.get_item(m.group(1))
 			if track.uri.startswith('file://'):
 				start = 7
 			else:

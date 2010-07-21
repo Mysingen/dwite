@@ -3,7 +3,9 @@
 import time
 import os.path
 
-from sqlite3 import dbapi2
+from sqlite3   import dbapi2
+from threading import Thread, current_thread
+from Queue     import Queue
 
 import db_row
 
@@ -149,12 +151,45 @@ class SQLiteDB:
 		return result
 
 
+RUNNING = 1
+STOPPED = 2
 
-class Backend:
-	pretty = None
+class Backend(Thread):
+	state     = RUNNING
+	name      = None
+	in_queue  = None
+	out_queue = None
 	
-	def __init__(self, pretty):
-		self.pretty = pretty
+	def __init__(self, name):
+		Thread.__init__(self, target=self.run, name=name)
+		self.name      = name
+		self.in_queue  = Queue(10)
+		self.out_queue = Queue(10)
+
+	def stop(self):
+		self.state = STOPPED
+
+	def run(self):
+		print('starting %s' % current_thread().name)
+		self.on_start()
+		while self.state != STOPPED:
+			try:
+				task = self.in_queue.get(block=True, timeout=0.5)
+			except:
+				continue
+			self.out_queue.put(task.next())
+		self.on_stop()
+		print('%s is dead' % current_thread().name)
+
+	def _post(self, generator):
+		self.in_queue.put(generator)
+		return self.out_queue.get()
+
+	def on_start(self):
+		raise Exception('Your backend must implement on_start()')
+
+	def on_stop(self):
+		raise Exception('Your backend must implement on_stop()')
 
 	def get_children(self, guid):
 		raise Exception('Your backend must implement get_children()')
@@ -167,10 +202,15 @@ class BansheeDB(Backend):
 	db         = None
 	library_id = None
 
-	def __init__(self, pretty):
-		Backend.__init__(self, pretty)
+	def __init__(self, name):
+		Backend.__init__(self, name)
+	
+	def on_start(self):
 		self.open_db(os.path.expanduser("~/.config/banshee-1/banshee.db"))
 		self.library_id = self.get_library_id()
+
+	def on_stop(self):
+		self.close_db()
 
 	def open_db(self, path):
 		self.db = SQLiteDB(path)
@@ -184,46 +224,51 @@ class BansheeDB(Backend):
 		return row.PrimarySourceID
 
 	def get_item(self, guid):
-		if guid == '/':
-			return Item('/', self.pretty, Item.DIR)
+		def do_it(guid):
+			if guid == '/':
+				yield Item('/', self.name, Item.DIR)
 
-		if guid == '/Artists':
-			return Item('/Artists', 'Artists', Item.DIR)
+			if guid == '/Artists':
+				yield Item('/Artists', 'Artists', Item.DIR)
 
-		if guid == '/Albums':
-			return Item('/Albums', 'Albums', Item.DIR)
+			if guid == '/Albums':
+				yield Item('/Albums', 'Albums', Item.DIR)
 
-		(kind, uid) = guid.split(':')
-		if kind == 'artist':
-			return self.get_artist_with_id(uid)
-		
-		if kind == 'album':
-			return self.get_album_with_id(uid)
+			(kind, uid) = guid.split(':')
+			if kind == 'artist':
+				yield self._get_artist_with_id(uid)
 
-		if kind == 'track':
-			return self.get_track_with_id(uid)
+			if kind == 'album':
+				yield self._get_album_with_id(uid)
+
+			if kind == 'track':
+				yield self._get_track_with_id(uid)
+		return self._post(do_it(guid))
 
 	def get_children(self, guid):
-		if guid == '/':
-			return [Item('/Artists', 'Artists', Item.DIR).json(),
-			        Item('/Albums',  'Albums',  Item.DIR).json()]
+		def do_it(guid):
+			if guid == '/':
+				yield [Item('/Artists', 'Artists', Item.DIR).json(),
+				        Item('/Albums',  'Albums',  Item.DIR).json()]
 
-		if guid == '/Artists':
-			return [a.json() for a in self.get_artists()]
+			if guid == '/Artists':
+				yield [a.json() for a in self._get_artists()]
 
-		if guid == '/Albums':
-			return [a.json() for a in self.get_albums()]
+			if guid == '/Albums':
+				yield [a.json() for a in self._get_albums()]
 
-		(kind, uid) = guid.split(':')
-		if kind == 'artist':
-			albums = self.get_artist_with_id(uid).get_children()
-			return [a.json() for a in albums]
+			(kind, uid) = guid.split(':')
+			if kind == 'artist':
+				albums = self._get_artist_with_id(uid).get_children()
+				yield [a.json() for a in albums]
 		
-		if kind == 'album':
-			tracks = self.get_album_with_id(uid).get_children()
-			return [t.json() for t in tracks]
+			if kind == 'album':
+				tracks = self._get_album_with_id(uid).get_children()
+				yield [t.json() for t in tracks]
+		return self._post(do_it(guid))
 
-	def get_artists(self):
+
+	def _get_artists(self):
 		def query_db():
 			q = "select * from CoreArtists where ArtistID in "\
 				"(select distinct(ArtistID) from CoreTracks where "\
@@ -233,7 +278,7 @@ class BansheeDB(Backend):
 
 		return query_db()
 
-	def get_albums(self):
+	def _get_albums(self):
 		def query_db():
 			q = "select * from CoreAlbums where AlbumID in "\
 				"(select distinct(AlbumID) from CoreTracks where "\
@@ -243,47 +288,48 @@ class BansheeDB(Backend):
 
 		return query_db()
 
-#	def get_music_playlists(self):
-#		return self.get_playlists(self.library_id,
-#								  MusicPlaylist,
-#								  MusicSmartPlaylist)
+	'''
+	def get_music_playlists(self):
+		return self.get_playlists(self.library_id,
+								  MusicPlaylist,
+								  MusicSmartPlaylist)
 
-#	def get_playlists(self, source_id, PlaylistClass, SmartPlaylistClass):
-#		playlists = []
-#
-#		def query_db():
-#			q = 'select * from CorePlaylists where PrimarySourceID=? order '\
-#				'by Name'
-#			for row in self.db.sql_execute(q, source_id):
-#				playlist = PlaylistClass(row, self)
-#				playlists.append(playlist)
-#				yield playlist
-#
-#			q = 'select * from CoreSmartPlaylists where PrimarySourceID=? '\
-#				'order by Name'
-#			for row in self.db.sql_execute(q, source_id):
-#				playlist = SmartPlaylistClass(row, self)
-#				playlists.append(playlist)
-#				yield playlist
-#
-#		return query_db()
+	def get_playlists(self, source_id, PlaylistClass, SmartPlaylistClass):
+		playlists = []
 
-	def get_artist_with_id(self, artist_id):
+		def query_db():
+			q = 'select * from CorePlaylists where PrimarySourceID=? order '\
+				'by Name'
+			for row in self.db.sql_execute(q, source_id):
+				playlist = PlaylistClass(row, self)
+				playlists.append(playlist)
+				yield playlist
+
+			q = 'select * from CoreSmartPlaylists where PrimarySourceID=? '\
+				'order by Name'
+			for row in self.db.sql_execute(q, source_id):
+				playlist = SmartPlaylistClass(row, self)
+				playlists.append(playlist)
+				yield playlist
+
+		return query_db()
+	'''
+	def _get_artist_with_id(self, artist_id):
 		q = "select * from CoreArtists where ArtistID=? limit 1"
 		row = self.db.sql_execute(q, artist_id)[0]
 		return Artist(row, self.db, self.library_id)
-
+	'''
 	def get_artist_with_name(self, name):
 		q = "select * from CoreArtists where Name=? limit 1"
 		row = self.db.sql_execute(q, name)[0]
 		return Artist(row, self.db, self.library_id)
-
-	def get_album_with_id(self, album_id):
+	'''
+	def _get_album_with_id(self, album_id):
 		q = "select * from CoreAlbums where AlbumID=? limit 1"
 		row = self.db.sql_execute(q, album_id)[0]
-		artist = self.get_artist_with_id(row.ArtistID)
+		artist = self._get_artist_with_id(row.ArtistID)
 		return Album(row, self.db)
-
+	'''
 	def get_playlist_with_id(self, playlist_id, PlaylistClass):
 		q = "select * from CorePlaylists where PlaylistID=? limit 1"
 		row = self.db.sql_execute(q, playlist_id)[0]
@@ -299,19 +345,13 @@ class BansheeDB(Backend):
 
 	def get_music_smart_playlist_with_id(self, playlist_id):
 		return self.get_smart_playlist_with_id(playlist_id, MusicSmartPlaylist)
-
-	def get_video_playlist_with_id(self, playlist_id):
-		return self.get_playlist_with_id(playlist_id, VideoPlaylist)
-
-	def get_video_smart_playlist_with_id(self, playlist_id):
-		return self.get_smart_playlist_with_id(playlist_id, VideoSmartPlaylist)
-
-	def get_track_with_id(self, track_id):
+	'''
+	def _get_track_with_id(self, track_id):
 		q = "select * from CoreTracks where TrackID=? limit 1"
 		row = self.db.sql_execute(q, track_id)[0]
-		album = self.get_album_with_id(row.AlbumID)
+		album = self._get_album_with_id(row.AlbumID)
 		return Track(row, self.db, album)
-
+	'''
 	def get_track_for_uri(self, track_uri):
 		q = "select * from CoreTracks where Uri=? limit 1"
 		try:
@@ -345,33 +385,13 @@ class BansheeDB(Backend):
 		dfr = task.coiterate(query_db())
 		dfr.addCallback(lambda gen: tracks)
 		return dfr
-
-	def get_video_with_id(self, video_id):
-		q = "select * from CoreTracks where TrackID=? limit 1"
-		row = self.db.sql_execute(q, video_id)[0]
-		return Video(row, self.db)
-
-	def get_videos(self):
-		videos = []
-
-		def query_db():
-			source_id = self.get_local_video_library_id()
-			q = "select * from CoreTracks where TrackID in "\
-				"(select distinct(TrackID) from CoreTracks where "\
-				"PrimarySourceID=?)"
-			for row in self.db.sql_execute(q, source_id):
-				video = Video(row, self.db, source_id)
-				videos.append(video)
-				yield video
-
-		dfr = task.coiterate(query_db())
-		dfr.addCallback(lambda gen: videos)
-		return dfr
-	
+	'''
 
 if __name__ == '__main__':
-	db = BansheeDB()
+	db = BansheeDB('foo')
+	db.start()
 
+	print(db.say_hi())
 	for c in db.get_children('/'):
 		print c
 
@@ -380,4 +400,10 @@ if __name__ == '__main__':
 
 	for c in db.get_children('artist:83'):
 		print c
+
+	try:
+		while True:
+			pass
+	except:
+		db.stop()
 
