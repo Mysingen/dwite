@@ -51,6 +51,25 @@ class Tree:
 
 	def ls(self):
 		return self.children
+	
+	def next(self):
+		if not self.parent:
+			return None
+		try:
+			index = self.parent.children.index(self) + 1
+			return self.parent.children[index]
+		except:
+			return None
+
+	def prev(self):
+		if not self.parent:
+			return None
+		try:
+			index = self.parent.children.index(self) - 1
+			return self.parent.children[index]
+		except:
+			return None
+			
 
 class FileTree(Tree):
 	def __init__(self, guid, label, parent):
@@ -380,8 +399,6 @@ class Searcher(Tree):
 
 # specialty class to hold the menu system root node
 class Root(Tree):
-	playlist = None
-
 	def __init__(self):
 		Tree.__init__(self, '/', '/', None)
 		self.children = []
@@ -405,8 +422,8 @@ class Menu:
 	def __init__(self):
 		self.root = Root()
 		self.cwd  = self.root
-		self.playlist = Playlist(self.root)
 		self.searcher = Searcher('Searcher', 'Search', self.root)
+		self.playlist = Playlist(self.root)
 		self.root.add(self.playlist)
 		self.root.add(self.searcher)
 
@@ -487,7 +504,4 @@ class Menu:
 			# item has disappeared. e.g. when an item is removed from playlist
 			self.current = len(self.cwd.children) - 1
 		return self.cwd.children[self.current]
-
-	def playlist(self):
-		return self.root.playlist
 

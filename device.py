@@ -197,14 +197,24 @@ class Classic(Device):
 						self.player.set_progress(msg.msecs)
 						self.player.set_buffers(msg.in_fill, msg.out_fill)
 					elif msg.event == 'STMo':
+						# find next item to play, if any
+						next = self.player.playing.item.next()
+						# finish the currently playing track
 						self.player.set_progress(msg.msecs)
 						self.player.set_buffers(msg.in_fill, msg.out_fill)
 						self.player.finish()
 						self.seeker = None
-						# curry the currently focused menu item to ensure that
-						# it is correctly redrawn after the track stops playing
-						self.menu.ticker(curry=True)
-						#print msg
+						# play next item, if any. otherwise clean the display
+						if next:
+							while not self.player.play(next):
+								next = next.next()
+						if next:
+							(guid, render) = self.player.ticker()
+						else:
+							# curry the currently focused menu item to ensure
+							# that it is correctly redrawn after the track
+							# stops playing
+							self.menu.ticker(curry=True)
 					else:
 						print('STAT %s' % msg.event)
 					continue
@@ -242,14 +252,14 @@ class Classic(Device):
 
 					elif msg.code == IR.ADD:
 						item = self.menu.focused()
-						if self.menu.cwd == self.menu.playlist():
+						if self.menu.cwd == self.menu.playlist:
 							# if the user is browsing the playlist, then ADD
-							# results in removing the focused item.
-							self.menu.playlist().remove(item)
+							# removes the focused item.
+							self.menu.playlist.remove(item)
 							(guid, render) = self.menu.ticker(curry=True)
 							#transition = TRANSITION.SCROLL_UP
 						else:
-							self.menu.playlist().add(item)
+							self.menu.playlist.add(item)
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()
@@ -291,7 +301,17 @@ class Classic(Device):
 							# is correctly redrawn without a progres bar:
 							self.menu.ticker(curry=True)
 						else:
-							print('FORWARD one track')
+							next = self.player.playing.item.next()
+							if next:
+								while not self.player.play(next):
+									next = next.next()
+							if next:
+								(guid, render) = self.player.ticker()
+							else:
+								# curry the currently focused menu item to
+								# ensure that it is correctly redrawn after
+								# the track stops playing
+								self.menu.ticker(curry=True)
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
 							if not self.player.playing:
@@ -303,7 +323,17 @@ class Classic(Device):
 							# is correctly redrawn without a progres bar:
 							self.menu.ticker(curry=True)
 						else:
-							print('REWIND one track')
+							prev = self.player.playing.item.prev()
+							if prev:
+								while not self.player.play(prev):
+									next = next.prev()
+							if prev:
+								(guid, render) = self.player.ticker()
+							else:
+								# curry the currently focused menu item to
+								# ensure that it is correctly redrawn after
+								# the track stops playing
+								self.menu.ticker(curry=True)
 
 					elif msg.code == IR.VOLUME_UP:
 						self.player.volume_up()

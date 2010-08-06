@@ -156,7 +156,6 @@ class Player:
 
 	def set_progress(self, msecs):
 		if not self.playing:
-			print('Nothing playing, nothing to progress')
 			return
 		self.playing.set_progress(msecs)
 
