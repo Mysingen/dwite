@@ -1,4 +1,4 @@
-# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+# Copyright 2009-2010 Klas Lindberg <klas.lindberg@gmail.com>
 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 3, as published
@@ -12,7 +12,7 @@ import time
 import traceback
 import threading
 
-from Queue    import Queue
+from Queue    import Queue, Empty
 
 from device   import Classic
 from wire     import SlimWire
@@ -20,15 +20,23 @@ from protocol import ID, Helo
 
 def main():
 	try:
+		# create a message queue that will be used by the SlimWire protocol
+		# handler to post messages from a physical device to a device manager
+		# (currently only "Classic" is supported):
 		queue = Queue(100)
-		# give the same queue to both protocol wires so they have somewhere to
-		# post events.
+		# hand the message queue to the protocol handler. SlimWire knows how
+		# to connect to a device and parse messages from it. those messages can
+		# then be gotten from the queue as protocol objects (see protocol.py).
 		wire = SlimWire(None, 3483, queue)
 		wire.start()
-	except: # user pressed CTRL-C before the subsystems could initialize?
-		info = sys.exc_info()
-		traceback.print_tb(info[2])
-		print info[1]
+	except KeyboardInterrupt:
+		# the user pressed CTRL-C before the wire's socket could even start
+		# accepting connctions.
+		#info = sys.exc_info()
+		#traceback.print_tb(info[2])
+		#print info[1]
+		if wire:
+			wire.stop()
 		return
 
 	device = None
@@ -38,13 +46,17 @@ def main():
 	while True:
 		try:
 			msg = queue.get(block=True, timeout=0.5)
-		except:
+		except Empty:
 			# no message in the queue. try again
 			continue
+		except KeyboardInterrupt:
+			# the user pressed CTRL-C. stop the wire's thread and return.
+			wire.stop()
+			return
 
 		# in the following, if a device class instance is created, the queue
 		# for events is given over to that instance. from then on the main loop
-		# cannot see what is going on on the protocol wire!
+		# must not try to see what is going on on the protocol wire.
 
 		if isinstance(msg, Helo):
 			print(msg)
@@ -59,10 +71,15 @@ def main():
 
 	device.start()
 
+	# from here, the main loop just checks for interrupts (e.g. the user hits
+	# CTRL-C) and unhandled internal exceptions. it also quits if all other
+	# threads die.
 	try:
 		while len(threading.enumerate()) > 1:
 			#print threading.enumerate()
 			time.sleep(0.5)
+	except KeyboardInterrupt:
+		pass
 	except:
 		info = sys.exc_info()
 		traceback.print_tb(info[2])

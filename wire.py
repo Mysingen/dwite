@@ -72,6 +72,7 @@ class Wire(Thread):
 		if self.socket:
 			self.socket.close()
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
 
 		print('%s waiting for port %d to become available'
 		      % (self.label, self.port))
@@ -129,7 +130,9 @@ class Wire(Thread):
 				else:
 					self._connect()
 
-			print('%s is listening' % self.label)
+			if self.state == RUNNING:
+				print('%s is listening' % self.label)
+
 			payload = None
 			while self.state == RUNNING:
 				# check first if we have payloads to send on the socket. don't

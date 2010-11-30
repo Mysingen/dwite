@@ -31,15 +31,9 @@ class Device(Thread):
 	seeker   = None
 	playlist = None
 
-	def __new__(cls, sb_wire, queue, guid):
-		object = super(Device, cls).__new__(
-			cls, None, Device.run, 'Device', (),{})
-		Device.__init__(object, sb_wire, queue, guid)
-		return object
-
-	def __init__(self, sb_wire, queue, guid):
+	def __init__(self, sb_wire, queue, guid, name='Device'):
 		print 'Device __init__'
-		Thread.__init__(self)
+		Thread.__init__(self, name=name)
 		self.sb_wire = sb_wire
 		self.queue   = queue
 		self.guid    = guid
@@ -88,12 +82,9 @@ class Classic(Device):
 	                    # maps so keep a mapping from message codes to arrays
 	                    # of stress levels. only used for tactile events.
 
-	def __new__(cls, sb_wire, queue, guid):
-		object = super(Classic, cls).__new__(cls, sb_wire, queue, guid)
-		return object
-
 	def __init__(self, sb_wire, queue, guid):
 		print 'Classic __init__'
+		Device.__init__(self, sb_wire, queue, guid, 'Classic')
 		self.display      = Display((320,32), sb_wire)
 		self.acceleration = init_acceleration_maps()
 
