@@ -1,4 +1,4 @@
-# Copyright 2009 Klas Lindberg <klas.lindberg@gmail.com>
+# Copyright 2009-2011 Klas Lindberg <klas.lindberg@gmail.com>
 
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 3, as published
@@ -189,7 +189,7 @@ class Wire(Thread):
 		print '%s is dead' % self.label
 
 	def _handle(self, kind, size, body):
-		raise Exception, 'Wire subclasses must implement handle()'
+		raise Exception, 'Wire subclasses must implement _handle()'
 
 	def _send(self, data, force=False):
 		if self.state != RUNNING and force == False:
@@ -289,7 +289,7 @@ class SlimWire(Wire):
 				self.escrow = (message, timeout)
 				if message.stress < 5:
 					# don't post an event since we can't tell
-					# yet if the wants a tap or a long press.
+					# yet if the user wants a tap or a long press.
 					return
 			self.out_queue.put(message)
 

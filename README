@@ -1,0 +1,7 @@
+Dwite is a "device manager" for the Squeezebox music streamer created by Slim
+Devices (nowadays the product is developed by Logitech). As a device manager,
+its primary task is to interact with the hardware. In contrast, the server
+shipped by Logitech also serves content to the device. Decoupling the
+functionalities permits a simpler design of the device manager and also makes
+it easier to make content managers as they only need to implement a small RPC
+API to satisfy the device manager.
