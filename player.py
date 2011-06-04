@@ -16,19 +16,19 @@ from menu     import CmMp3Tree
 class Player:
 	guid        = None # used when telling the device how to present itself
 	wire        = None
-	gain_l      = (0,0) # 16bit.16bit fixed point, expressed as two uint16's
-	gain_r      = (0,0) # useful range is 0.0 to 5.65000 in steps of 0.5000
-	preamp      = 0    # 0-255
+	vol_l       = 0    # percentage integer. 0 is mute? what about aude?
+	vol_r       = 0    # percentage integer. 0 is mute? what about aude?
+	preamp      = 255  # 0-255
 	cm          = None
 	playing     = None # NowPlaying instance
 
 	def __init__(self, wire, guid):
-		self.guid     = guid
-		self.wire     = wire
+		self.guid = guid
+		self.wire = wire
 
 		self.stop()
 		self.mute(False, False)
-		self.set_volume(200, (1,15000), (1,15000))
+		self.set_volume(50, 50)
 	
 	def close(self):
 		pass
@@ -41,44 +41,22 @@ class Player:
 		aude.digital = not digital
 		self.wire.send(aude.serialize())
 
-	def increase_gain(self, gain, increment):
-		if gain[1] + increment > 65535:
-			new_gain = (gain[0] + 1, (gain[1] + increment) - 65535)
-		else:
-			new_gain = (gain[0], gain[1] + increment)
-		if new_gain[0] > 65535:
-			return (65535,65535)
-		return new_gain
-
-	def decrease_gain(self, gain, decrement):
-		if gain[1] - decrement < 0:
-			new_gain = (gain[0] - 1, 65535 + (gain[1] - decrement))
-		else:
-			new_gain = (gain[0], gain[1] - decrement)
-		if new_gain[0] < 0:
-			return (0,0)
-		return new_gain
-
 	def volume_up(self):
-		left  = self.increase_gain(self.gain_l, 1500)
-		right = self.increase_gain(self.gain_r, 1500)
-		self.set_volume(self.preamp, left, right)
+		self.vol_l += 1
+		self.vol_r += 1
+		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
+		self.wire.send(audg.serialize())
 
 	def volume_down(self):
-		left  = self.decrease_gain(self.gain_l, 1500)
-		right = self.decrease_gain(self.gain_r, 1500)
-		self.set_volume(self.preamp, left, right)
+		self.vol_l -= 1
+		self.vol_r -= 1
+		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
+		self.wire.send(audg.serialize())
 
-	def set_volume(self, preamp, gain_left, gain_right):
-		self.preamp = preamp
-		self.gain_l = gain_left
-		self.gain_r = gain_right
-
-		audg        = Audg()
-		audg.dvc    = True
-		audg.left   = gain_left
-		audg.right  = gain_right
-		audg.preamp = preamp
+	def set_volume(self, left, right):
+		self.vol_l = left
+		self.vol_r = right
+		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
 		self.wire.send(audg.serialize())
 
 	# playback manipulations

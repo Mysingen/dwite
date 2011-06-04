@@ -8,6 +8,7 @@ import sys
 import struct
 import socket
 import json
+import math
 
 from tactile import IR
 
@@ -406,25 +407,41 @@ class Aude(Command):
 		return length + cmd + params
 
 class Audg(Command):
-	# gains are integer tuples: (16bit,16bit)
+	# gain is represented as (16bit,16bit) fixed point floats. in practice it
+	# is easier to calculate them as long integers and send them in network
+	# order, instead of as 4 shorts in small endian order.
 	# dvc (digital volume control?) is boolean
 	# preamp must fit in a uint8
 	# legacy is the old-style gain control. not used, send junk
-	left     = (0,0)
-	right    = (0,0)
+	left     = 0
+	right    = 0
 	dvc      = False
 	preamp   = 255  # default to maximum
 	legacy   = struct.pack('<LL', 0, 0)
-	
+
+	def __init__(self, dvc, preamp, vol_l, vol_r):
+		vol_l = min(max(vol_l, 0), 100)
+		vol_r = min(max(vol_r, 0), 100)
+		print('volume: %d %d' % (vol_l, vol_r))
+		self.dvc    = dvc
+		self.preamp = preamp
+		self.left   = self.volume2gain(vol_l)
+		self.right  = self.volume2gain(vol_r)
+
+	def volume2gain(self, volume):
+		db = (volume - 100) / 2.0
+		multiplier = math.pow(10.0, db / 20.0)
+		if db >= -30.0 and db <= 0.0:
+			gain = int(multiplier * 256.0 + 0.5) << 8
+		else:
+			gain = int(multiplier * 65536.0 + 0.5)
+		return gain
+
 	def serialize(self):
 		cmd    = 'audg'
-		params = ( self.legacy
-		         + struct.pack('<B', self.dvc)
-		         + struct.pack('<B', self.preamp)
-		         + struct.pack('<HH', socket.htons(self.left[0]),
-		                              socket.htons(self.left[1]))
-		         + struct.pack('<HH', socket.htons(self.right[0]),
-		                              socket.htons(self.right[1])) )
+		params = self.legacy + struct.pack(
+         	'!BBLL', self.dvc, self.preamp, self.left, self.right
+		)
 		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
