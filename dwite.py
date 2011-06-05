@@ -11,6 +11,7 @@ import array
 import time
 import traceback
 import threading
+import os
 
 from Queue    import Queue, Empty
 
@@ -19,6 +20,13 @@ from wire     import SlimWire
 from protocol import ID, Helo
 
 def main():
+	# check for directory of configuration files
+	path = os.environ['DWITE_CFG_DIR']
+	if not os.path.exists(path):
+		os.mkdir(path)
+	if not os.path.isdir(path):
+		raise Exception('No configuration directory "%s"' % path)
+
 	try:
 		# create a message queue that will be used by the SlimWire protocol
 		# handler to post messages from a physical device to a device manager

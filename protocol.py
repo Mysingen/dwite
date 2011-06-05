@@ -438,10 +438,12 @@ class Audg(Command):
 		return gain
 
 	def serialize(self):
+		# note that the packing order of the left/right fields really ARE
+		# big-endian. it's not a mistake!
 		cmd    = 'audg'
-		params = self.legacy + struct.pack(
-         	'!BBLL', self.dvc, self.preamp, self.left, self.right
-		)
+		params = ( self.legacy
+		       + struct.pack('<BB', self.dvc, self.preamp)
+		       + struct.pack('>LL', self.left, self.right) )
 		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 

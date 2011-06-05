@@ -15,7 +15,10 @@ import time
 
 from cleo import Cleo
 
-os.environ['CLEO_HOME'] = os.path.dirname(os.path.realpath(sys.argv[0]))
+path = os.path.expanduser('~/.dwite')
+os.environ['DWITE_CFG_DIR'] = path
+if not os.path.isdir(path):
+	raise Exception('No configuration directory "%s"' % path)
 cm = Cleo()
 cm.start()
 

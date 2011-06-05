@@ -90,6 +90,13 @@ class TextRender(Render):
 		self.position = position
 
 	def curry(self, text):
+		if type(text) != unicode:
+			raise Exception(
+				'type(TextRender.text = %s) != unicode (%s)'
+				% (str(text), type(text))
+			)
+		if len(text) < 1:
+			raise Exception('len(TextRender.text = %s) < 1' % text)
 		self.text  = text
 		self.image = None
 

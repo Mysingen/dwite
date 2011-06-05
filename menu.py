@@ -70,43 +70,9 @@ class Tree:
 		except:
 			return None
 			
-
-class FileTree(Tree):
-	def __init__(self, guid, label, parent):
-		Tree.__init__(self, guid, label, parent)
-
-class DirTree(FileTree):
-	children = None
-	path     = None
-
-	def __init__(self, guid, label, parent, path):
-		if not os.path.isdir(path):
-			raise Exception, 'DirTree(): %s is not a directory' % path
-		FileTree.__init__(self, guid, label, parent)
-		self.path   = path
-		self.render = TextRender('%s/fonts/LiberationSans-Italic.ttf'
-		                         % os.getenv('DWITE_HOME'), 20, (2, 0))
-
-	def __iter__(self):
-		return self.children.__iter__()
-
-	def ls(self):
-		self.children = []
-		listing = os.listdir(self.path)
-		listing.sort()
-		for l in listing:
-			path = os.path.join(self.path, l)
-			if os.path.isdir(path):
-				self.children.append(DirTree(l, l, self, path))
-			else:
-				self.children.append(FileTree(l, l, self))
-		if len(self.children) == 0:
-			self.children.append(Empty(self))
-		return self.children
-
 class Waiting(Tree):
 	def __init__(self, parent):
-		Tree.__init__(self, '<WAITING>', '<WAITING>', parent)
+		Tree.__init__(self, u'<WAITING>', u'<WAITING>', parent)
 
 class CmFileTree(Tree):
 	cm = None
@@ -120,6 +86,14 @@ class CmMp3Tree(CmFileTree):
 	duration = 0 # milliseconds
 
 	def __init__(self, guid, label, size, duration, parent, cm):
+		if type(size) != int:
+			raise Exception(
+				'CmMp3Tree.size != int: %s (guid:%s)' % (str(size), guid)
+			)
+		if type(duration) != int:
+			raise Exception(
+				'CmMp3Tree.duration != int: %s (guid:%s)' % (str(duration),guid)
+			)
 		CmFileTree.__init__(self, guid, label, parent, cm)
 		self.size     = size
 		self.duration = duration
@@ -174,11 +148,11 @@ class CmDirTree(CmFileTree):
 
 class Empty(Tree):
 	def __init__(self, parent):
-		Tree.__init__(self, '<EMPTY>', '<EMPTY>', parent)
+		Tree.__init__(self, u'<EMPTY>', u'<EMPTY>', parent)
 
 class Playlist(Tree):
 	def __init__(self, parent):
-		Tree.__init__(self, 'Playlist', 'Playlist', parent)
+		Tree.__init__(self, u'Playlist', u'Playlist', parent)
 		self.children = [Empty(self)]
 
 	def add(self, item):
@@ -236,10 +210,10 @@ class Searcher(Tree):
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
 		self.children   = [CandidateTree(
-			'<Use T9 typing to add search terms>',
-			'<Use T9 typing to add search terms>',
+			u'<Use T9 typing to add search terms>',
+			u'<Use T9 typing to add search terms>',
 			self,
-			'<NO TERMS ADDED>'
+			u'<NO TERMS ADDED>'
 			)]
 		self.t9dict     = {}
 		self.term       = ''   # search term built in T9 style (digits only)
@@ -332,10 +306,10 @@ class Searcher(Tree):
 			self.term       = ''
 			self.candidates = None
 			self.children   = [CandidateTree(
-				'<Use T9 typing to add search terms>',
-				'<Use T9 typing to add search terms>',
+				u'<Use T9 typing to add search terms>',
+				u'<Use T9 typing to add search terms>',
 				self,
-				' '.join(self.query)
+				u' '.join(self.query)
 				)]
 
 			return True
@@ -343,10 +317,10 @@ class Searcher(Tree):
 			# terminate the query list and run the search
 			print('search for %s' % self.query)
 			self.children = [CandidateTree(
-				'<SEARCHING>',
-				'<SEARCHING>',
+				u'<SEARCHING>',
+				u'<SEARCHING>',
 				self,
-				' '.join(self.query)
+				u' '.join(self.query)
 				)]
 			self.query = []
 			return True
@@ -365,10 +339,10 @@ class Searcher(Tree):
 			                 for c in candidates]
 		else:
 			self.children = [CandidateTree(
-				'<Use T9 typing to add search terms>',
-				'<Use T9 typing to add search terms>',
+				u'<Use T9 typing to add search terms>',
+				u'<Use T9 typing to add search terms>',
 				self,
-				'<NO TERMS ADDED>'
+				u'<NO TERMS ADDED>'
 				)]
 		print 'candidates: %s' % ' '.join(candidates)
 		return True
@@ -385,10 +359,10 @@ class Searcher(Tree):
 			                 for c in candidates]
 		else:
 			self.children =  [CandidateTree(
-				'<No match in the T9 dictionary>',
-				'<No match in the T9 dictionary>',
+				u'<No match in the T9 dictionary>',
+				u'<No match in the T9 dictionary>',
 				self,
-				' '.join(self.query)
+				u' '.join(self.query)
 				)]
 		print('candidates: %s' % ' '.join(candidates))
 		return True
@@ -400,11 +374,8 @@ class Searcher(Tree):
 # specialty class to hold the menu system root node
 class Root(Tree):
 	def __init__(self):
-		Tree.__init__(self, '/', '/', None)
+		Tree.__init__(self, u'/', u'/', None)
 		self.children = []
-		self.children.append(
-			DirTree('Browse files', 'Browse files', self, os.getcwd())
-		)
 
 	def add(self, item):
 		if isinstance(item, Tree):
@@ -422,13 +393,13 @@ class Menu:
 	def __init__(self):
 		self.root = Root()
 		self.cwd  = self.root
-		self.searcher = Searcher('Searcher', 'Search', self.root)
+		self.searcher = Searcher(u'Searcher', u'Search', self.root)
 		self.playlist = Playlist(self.root)
 		self.root.add(self.playlist)
 		self.root.add(self.searcher)
 
 	def add_cm(self, cm):
-		self.root.add(CmDirTree('/', cm.label, self.root, cm))
+		self.root.add(CmDirTree(u'/', cm.label, self.root, cm))
 
 	def right(self):
 		if self.cwd == self.searcher:

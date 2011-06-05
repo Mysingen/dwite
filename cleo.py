@@ -12,9 +12,9 @@ import time
 from Queue     import Queue
 from threading import Thread
 
-from wire     import JsonWire, Connected
-from backend  import BansheeDB
-from streamer import Streamer, Accepting
+from wire       import JsonWire, Connected
+from backend_fs import FileSystem
+from streamer   import Streamer, Accepting
 
 import protocol
 
@@ -33,7 +33,7 @@ class Cleo(Thread):
 
 	def __init__(self):
 		Thread.__init__(self, target=Cleo.run, name='Cleo')
-		self.backend  = BansheeDB('Banshee')
+		self.backend  = FileSystem()
 		self.queue    = Queue(100)
 		self.streamer = Streamer(self.backend, self.queue)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)

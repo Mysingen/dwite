@@ -119,8 +119,8 @@ class Streamer(Thread):
 						continue
 					else:
 						raise Exception, ( 'streamer got weird stuff to read:\n'
-						                 + 'len=%d\n' % len(data)
-						                 + 'data=%s\n' % data )
+						                 + 'len=%d\n' % len(in_data)
+						                 + 'data=%s\n' % in_data )
 
 				if len(events[1]) > 0:
 					if out_left == 0:
