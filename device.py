@@ -9,6 +9,7 @@ import sys
 
 from threading import Thread
 from Queue     import Queue
+from datetime  import datetime
 
 from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms, Dsco
 from display   import Display, TRANSITION
@@ -19,6 +20,7 @@ from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
 from cm        import ContentManager
+from volume    import Volume
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
@@ -30,6 +32,7 @@ class Device(Thread):
 	player   = None
 	seeker   = None
 	playlist = None
+	volume   = None  # Volume object
 
 	def __init__(self, sb_wire, queue, guid, name='Device'):
 		print 'Device __init__'
@@ -57,8 +60,8 @@ def init_acceleration_maps():
 	maps[IR.LEFT]        = default
 	maps[IR.RIGHT]       = default
 	maps[IR.BRIGHTNESS]  = default
-	maps[IR.VOLUME_UP]   = default
-	maps[IR.VOLUME_DOWN] = default
+	maps[IR.VOLUME_UP]   = [0]
+	maps[IR.VOLUME_DOWN] = [0]
 	maps[IR.FORWARD]     = [0]
 	maps[IR.REWIND]      = [0]
 	maps[-IR.FORWARD]    = [0]
@@ -87,6 +90,7 @@ class Classic(Device):
 		Device.__init__(self, sb_wire, queue, guid, 'Classic')
 		self.display      = Display((320,32), sb_wire)
 		self.acceleration = init_acceleration_maps()
+		self.volume       = Volume(sb_wire, 255, 70, 70, True)
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -100,6 +104,10 @@ class Classic(Device):
 		return False
 
 	def select_render(self):
+		# if the user recently manipulated the volume, check if the last
+		# rendering should be kept for a little longer.
+		if self.volume.timeout > datetime.now():
+			return self.volume.meter
 		# get the guids for the currently playing track (if any) and the
 		# currently visible menu item. if they happen to be the same, then
 		# prefer the rendering ticker for the currently playing track.
@@ -327,9 +335,11 @@ class Classic(Device):
 								self.menu.ticker(curry=True)
 
 					elif msg.code == IR.VOLUME_UP:
-						self.player.volume_up()
+						self.volume.up()
+						render = self.volume.meter
 					elif msg.code == IR.VOLUME_DOWN:
-						self.player.volume_down()
+						self.volume.down()
+						render = self.volume.meter
 
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
 						pass
@@ -364,4 +374,5 @@ class Classic(Device):
 
 		self.player.close()
 		print('device is Dead')
+
 

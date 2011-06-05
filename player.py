@@ -9,7 +9,7 @@ import sys
 import os.path
 
 from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
-from protocol import Aude, Audg, StrmPause, StrmUnpause
+from protocol import StrmPause, StrmUnpause
 from render   import NowPlayingRender
 from menu     import CmMp3Tree
 
@@ -25,39 +25,10 @@ class Player:
 	def __init__(self, wire, guid):
 		self.guid = guid
 		self.wire = wire
-
 		self.stop()
-		self.mute(False, False)
-		self.set_volume(50, 50)
 	
 	def close(self):
 		pass
-
-	# volume manipulations
-
-	def mute(self, analog, digital):
-		aude         = Aude()
-		aude.analog  = not analog  # not mute == enable
-		aude.digital = not digital
-		self.wire.send(aude.serialize())
-
-	def volume_up(self):
-		self.vol_l += 1
-		self.vol_r += 1
-		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
-		self.wire.send(audg.serialize())
-
-	def volume_down(self):
-		self.vol_l -= 1
-		self.vol_r -= 1
-		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
-		self.wire.send(audg.serialize())
-
-	def set_volume(self, left, right):
-		self.vol_l = left
-		self.vol_r = right
-		audg = Audg(True, self.preamp, self.vol_l, self.vol_r)
-		self.wire.send(audg.serialize())
 
 	# playback manipulations
 

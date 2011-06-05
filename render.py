@@ -126,10 +126,12 @@ class TextRender(Render):
 				self.timeout = datetime.now() + timedelta(days=1)
 			return True
 
+		'''
 		if not self.window:
 			#print('never')
 			canvas.paste(self.image)
 			return False # no need to redraw. ever.
+		'''
 
 		now = datetime.now()
 		if now < self.timeout:
@@ -138,12 +140,62 @@ class TextRender(Render):
 			return False
 
 		#print('now')
-		positions = self.window.advance(5)
-		positions = [(p, self.position[1]) for p in positions]
 		self.image = Image.new('1', canvas.size, 0)
-		self.draw(positions)
+		if self.window:
+			positions = self.window.advance(5)
+			positions = [(p, self.position[1]) for p in positions]
+			self.draw(positions)
+		else:
+			self.draw([self.position])
 		canvas.paste(self.image)
 		self.timeout = now + timedelta(milliseconds=100)
+		return True
+
+class VolumeMeter(Render):
+	level    = 0 # integer 0-100
+	size     = (200, 30)
+	position = (59, 1)
+	image    = None
+	
+	def __new__(cls):
+		global singleton
+		if cls in singleton:
+			obj = singleton[cls]
+		else:
+			object = Render.__new__(cls)
+			singleton[cls] = obj
+		VolumeMeter.__init__(obj, level)
+		return obj
+	
+	def __init__(self):
+		pass
+	
+	def curry(self, level):
+		if type(level) != int or level < 0 or level > 100:
+			raise Exception('Invalid VolumeMeter.level = %s' % str(level))
+		self.level = level
+	
+	def draw(self):
+		# draw one vertical bar per level. space them by on pixel from left
+		# to right, starting at position[0].
+		draw = ImageDraw.Draw(self.image)
+		for i in range(0, self.level):
+			draw.line(
+				[(self.position[0] + i * 2, self.position[1]),
+				 (self.position[0] + i * 2, self.position[1] + self.size[1])],
+				fill=1
+			)
+	
+	def tick(self, canvas):
+		if not self.image: # never called this render's tick() before
+			self.image = Image.new('1', canvas.size, 0)
+			self.draw()
+			canvas.paste(self.image)
+			return True
+		
+		self.image = Image.new('1', canvas.size, 0)
+		self.draw()
+		canvas.paste(self.image)
 		return True
 
 class ProgressRender(Render):
@@ -155,14 +207,13 @@ class ProgressRender(Render):
 
 	def __new__(cls, progress=0):
 		global singleton
-		key = cls
-		if key in singleton:
-			object = singleton[key]
+		if cls in singleton:
+			obj = singleton[cls]
 		else:
-			object = Render.__new__(cls)
-			singleton[key] = object
-		ProgressRender.__init__(object, progress)
-		return object
+			obj = Render.__new__(cls)
+			singleton[cls] = obj
+		ProgressRender.__init__(obj, progress)
+		return obj
 
 	def __init__(self, progress=0.0):
 		self.progress = progress
