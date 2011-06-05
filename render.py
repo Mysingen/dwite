@@ -126,13 +126,6 @@ class TextRender(Render):
 				self.timeout = datetime.now() + timedelta(days=1)
 			return True
 
-		'''
-		if not self.window:
-			#print('never')
-			canvas.paste(self.image)
-			return False # no need to redraw. ever.
-		'''
-
 		now = datetime.now()
 		if now < self.timeout:
 			#print('later')

@@ -461,7 +461,8 @@ class Menu:
 			else:
 				transition = TRANSITION.BOUNCE_UP
 			(guid, render) = self.focused().curry()
-		return (guid, render, transition)
+			return (guid, render, transition)
+		return (0, None, TRANSITION.NONE)
 
 	def ticker(self, curry=False):
 		if curry:
