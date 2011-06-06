@@ -83,17 +83,13 @@ class Player:
 		self.playing = None
 
 	def pause(self):
-		print '0'
 		if not self.playing:
-			print '1'
 			return
 		try:
 			if not self.playing.paused():
-				print '2'
 				self.playing.enter_state(NowPlaying.PAUSED)
 				self.wire.send(StrmPause().serialize())
 			else:
-				print '3'
 				self.playing.enter_state(NowPlaying.BUFFERING)
 				self.wire.send(StrmUnpause().serialize())
 		except Exception, e:
