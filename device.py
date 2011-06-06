@@ -192,30 +192,18 @@ class Classic(Device):
 					continue						
 
 				if isinstance(msg, Stat):
-					if msg.event == 'STMt':
-						self.player.set_progress(msg.msecs)
-						self.player.set_buffers(msg.in_fill, msg.out_fill)
-					elif msg.event == 'STMo':
-						# find next item to play, if any
-						next = self.player.playing.item.next()
-						# finish the currently playing track
-						self.player.set_progress(msg.msecs)
-						self.player.set_buffers(msg.in_fill, msg.out_fill)
-						self.player.finish()
-						self.seeker = None
-						# play next item, if any. otherwise clean the display
-						if next:
-							while not self.player.play(next):
-								next = next.next()
-						if next:
-							(guid, render) = self.player.ticker()
-						else:
-							# curry the currently focused menu item to ensure
-							# that it is correctly redrawn after the track
-							# stops playing
-							self.menu.ticker(curry=True)
+					next = self.player.handle_stat(msg)
+					# play next item, if any. otherwise clean the display
+					if next:
+						while not self.player.play(next):
+							next = next.next()
+					if next:
+						(guid, render) = self.player.ticker()
 					else:
-						print('STAT %s' % msg.event)
+						# curry the currently focused menu item to ensure
+						# that it is correctly redrawn after the track
+						# stops playing
+						self.menu.ticker(curry=True)
 					continue
 
 				if isinstance(msg, Dsco):

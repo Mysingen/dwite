@@ -7,8 +7,9 @@
 import traceback
 import sys
 import os.path
+import struct
 
-from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip
+from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip, Stat
 from protocol import StrmPause, StrmUnpause
 from render   import NowPlayingRender
 from menu     import CmMp3Tree
@@ -16,9 +17,6 @@ from menu     import CmMp3Tree
 class Player:
 	guid        = None # used when telling the device how to present itself
 	wire        = None
-	vol_l       = 0    # percentage integer. 0 is mute? what about aude?
-	vol_r       = 0    # percentage integer. 0 is mute? what about aude?
-	preamp      = 255  # 0-255
 	cm          = None
 	playing     = None # NowPlaying instance
 
@@ -42,7 +40,6 @@ class Player:
 	def play(self, item, seek=0):
 		if not isinstance(item, CmMp3Tree):
 			return False
-		print('play %s' % str(item))
 
 		# stop the currently playing track, if any
 		if self.playing:
@@ -86,13 +83,17 @@ class Player:
 		self.playing = None
 
 	def pause(self):
+		print '0'
 		if not self.playing:
+			print '1'
 			return
 		try:
-			if self.playing.paused():
+			if not self.playing.paused():
+				print '2'
 				self.playing.enter_state(NowPlaying.PAUSED)
 				self.wire.send(StrmPause().serialize())
 			else:
+				print '3'
 				self.playing.enter_state(NowPlaying.BUFFERING)
 				self.wire.send(StrmUnpause().serialize())
 		except Exception, e:
@@ -124,6 +125,75 @@ class Player:
 		else:
 			return (None, None)
 
+	def handle_stat(self, stat):
+		if not isinstance(stat, Stat):
+			raise Exception('Invalid Player.handle_stat(stat): %s' % str(stat))
+		if stat.event == 'STMt':
+			# SBS sources calls this the "timer" event. it seems to mean that
+			# the device has a periodic timeout going, because the STMt is sent
+			# with an interval of about 1-2 seconds. the interesting content is
+			# buffer fullness (which should perhaps be tracked by the server).
+			self.set_progress(stat.msecs)
+			self.set_buffers(stat.in_fill, stat.out_fill)
+			return None
+		if stat.event == 'STMo':
+			# find next item to play, if any
+			next = self.playing.item.next()
+			# finish the currently playing track
+			self.set_progress(stat.msecs)
+			self.set_buffers(stat.in_fill, stat.out_fill)
+			self.finish()
+			return next
+
+		# not terribly interesting events:
+		if stat.event == '\0\0\0\0':
+			print('Device is alive')
+			# undocumented but always received right after the device connects
+			# to the server. probably just a state indication without any event
+			# semantics.
+			return None
+		if stat.event == 'STMf':
+			# SBS sources say "closed", but this makes no sense as it will be
+			# received whether the device was previously connected to a streamer
+			# or not. it's also not about flushed buffers as those are typically
+			# reported as unaffected.
+			print('Device closed the stream connection')
+			return None
+		if stat.event == 'STMc':
+			# SBS sources say this means "connected", but to what? probably the
+			# streamer even though it is received before ACK of strm command.
+			print('Device connected to streamer')
+			return None
+		if stat.event == 'STMe':
+			# connection established with streamer. i.e. more than just an open
+			# socket.
+			print('Device established connection to streamer')
+			return None
+		if stat.event == 'STMh':
+			# "end of headers", but which ones? probably the header sent by the
+			# streamer in response to HTTP GET.
+			print('Device finished reading headers')
+			return None
+		if stat.event == 'STMs':
+			print('Device started playing')
+			self.playing.enter_state(NowPlaying.PLAYING)
+			return None
+		if stat.event == 'STMp':
+			print('Device paused playback')
+			return None
+		if stat.event == 'STMr':
+			print('Device resumed playback')
+			return None
+
+		# simple ACKs of commands sent to the device. ignore:
+		if stat.event in ['strm', 'aude', 'audg']:
+			return None
+		
+		bytes = struct.unpack('%dB' % len(stat.event), stat.event)
+		print('UNHANDLED STAT EVENT: %s' % str(bytes))
+		print str(stat)
+		return None		
+	
 class NowPlaying:
 	# state definitions
 	BUFFERING = 0 # forced pause to give a device's buffers time to fill up

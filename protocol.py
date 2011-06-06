@@ -104,26 +104,45 @@ class Bye(Message):
 
 class Stat(Message):
 	head     = 'STAT'
-	event    = None # 4 byte string
-	crlfs    = 0    # uint8
-	mas_init = 0    # uint8
-	mas_mode = 0    # uint8
-	in_size  = 0    # uint32
-	in_fill  = 0    # uint32
-	recv_hi  = 0    # uint32
-	recv_lo  = 0    # uint32
-	wifi_pow = 0    # uint16
-	jiffies  = 0    # uint32
-	out_size = 0    # uint32
-	out_fill = 0    # uint32
-	seconds  = 0    # uint32
-	voltage  = 0    # uint32
-	msecs    = 0    # uint32
-	stamp    = 0    # uint32
-	error    = 0    # uint16 (only set in STAT/STMn?)
+	event    = None # 4 byte string. this is what SBS sources have to say about
+	# them: vfdc - vfd received, i2cc - i2c command recevied, STMa - AUTOSTART
+	# STMc - CONNECT, STMe - ESTABLISH, STMf - CLOSE, STMh - ENDOFHEADERS,
+	# STMp - PAUSE, STMr - UNPAUSE, STMt - TIMER, STMu - UNDERRUN,
+	# STMl - FULL (triggers start of synced playback), STMd - DECODE_READY
+	# (decoder has no more data), STMs - TRACK_STARTED (a new track started
+	# playing), STMn - NOT_SUPPORTED (decoder does not support the track format)
+	# STMz - pseudo-status defived from DSCO meaning end-of-stream.
+
+	# my understanding is that the STMz is not sent by the device but by the
+	# SBS to itself when it receives the DiSCOnnect message from the device.
+	
+	# there are also a couple of undocumented events: STMo - the currently
+	# playing track is running out, aude - ACK of aude command, audg - ACK of
+	# audg command, strm - ACK of strm command (but which kind?).
+	
+	# finally there is the undocumented non-event '\0\0\0\0' which is maybe only
+	# sent when the device connects to reveal transient state that survived in
+	# disconnected mode.
+	
+	crlfs    = 0    # uint8   number of rc/lf seen during header parsing
+	mas_init = 0    # uint8   'm' or 'p'. don't know what it is
+	mas_mode = 0    # uint8   SBS code comment only says "serdes mode"
+	in_size  = 0    # uint32  size of RX buffer. (SBS code comments are wrong.)
+	in_fill  = 0    # uint32  RX buffer fill. (SBS code comments are wrong.)
+	recv_hi  = 0    # uint64, high bits.  total bytes received
+	recv_lo  = 0    # uint64, low bits.   total bytes received
+	wifi_pow = 0    # uint16  wifi signal strength
+	jiffies  = 0    # uint32  some sort of time slice indication
+	out_size = 0    # uint32  output buffer size
+	out_fill = 0    # uint32  output buffer fullness
+	seconds  = 0    # uint32  elapsed playback seconds
+	voltage  = 0    # uint32  analog output voltage. related to preamp value?
+	msecs    = 0    # uint32  elapsed playback milliseconds
+	stamp    = 0    # uint32  server timestamp used for latency tracking
+	error    = 0    # uint16  only set in STAT/STMn? no SBS documentation
 
 	def __str__(self):
-		tmp1 = ( 'Event    = %s\n' % self.event
+		tmp1 = ( 'Event    = "%s"\n' % self.event
 		       + 'CRLFs    = %d\n' % self.crlfs
 		       + 'MAS init = %d\n' % self.mas_init
 	           + 'MAS mode = %d\n' % self.mas_mode
@@ -144,7 +163,7 @@ class Stat(Message):
 		       + 'Stamp    = %d\n' % self.stamp
 		       + 'Error    = %d\n' % self.error )
 
-		return 'STAT:\n%s%s%s' % (tmp1, tmp2, tmp3)
+		return '%s%s%s' % (tmp1, tmp2, tmp3)
 
 class Resp(Message):
 	head        = 'RESP'
@@ -422,7 +441,6 @@ class Audg(Command):
 	def __init__(self, dvc, preamp, vol_l, vol_r):
 		vol_l = min(max(vol_l, 0), 100)
 		vol_r = min(max(vol_r, 0), 100)
-		print('volume: %d %d' % (vol_l, vol_r))
 		self.dvc    = dvc
 		self.preamp = preamp
 		self.left   = self.volume2gain(vol_l)
