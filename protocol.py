@@ -213,6 +213,7 @@ class Ls(Message):
 
 
 
+### COMMANDS ###################################################################
 
 class Command:
 	def serialize(self):
@@ -600,7 +601,16 @@ class VisuSpectrum(Visu):
 		length = struct.pack('<h', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
-	
+class Ping(Command):
+	# there is no command to explicitly poll a device for liveness, but the
+	# 'stat' command works fine for this purpose. will receive back a STAT
+	# message with .event=='stat'.
+	def serialize(self):
+		cmd    = 'stat'
+		params = ''
+		length = struct.pack('<H', socket.htons(len(cmd + params)))
+		return length + cmd + params
+
 
 
 # JSON based messages. Note that there is no Command class for JSON messaging.

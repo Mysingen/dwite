@@ -11,7 +11,7 @@ from threading import Thread
 from Queue     import Queue
 from datetime  import datetime
 
-from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms, Dsco
+from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms, Dsco, Ping
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
@@ -21,6 +21,7 @@ from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
 from cm        import ContentManager
 from volume    import Volume
+from watchdog  import Watchdog
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
@@ -33,6 +34,7 @@ class Device(Thread):
 	seeker   = None
 	playlist = None
 	volume   = None  # Volume object
+	watchdog = None
 
 	def __init__(self, sb_wire, queue, guid, name='Device'):
 		print 'Device __init__'
@@ -43,11 +45,13 @@ class Device(Thread):
 		self.menu    = Menu()
 		self.cm_wire = JsonWire(None, 3484, queue)
 		self.cm_wire.start()
+		self.watchdog = Watchdog(1000)
 
 	def run(self):
-		raise Excepion, 'Device subclasses must implement run()'
+		raise Exception('Device subclasses must implement run()')
 	
 	def stop(self):
+		self.sb_wire.stop()
 		self.cm_wire.stop()
 		self.alive = False
 
@@ -152,8 +156,14 @@ class Classic(Device):
 				# single core in an Intel Core2 Duo system, so lets do that
 				# to get good resolution in all ticking activities.
 				msg = self.queue.get(block=True, timeout=0.02)
+				self.watchdog.reset()
 			except Exception, e:
-				pass # most likely, it's just the timeout that triggered.
+				# most likely, it's just the timeout that triggered.
+				if self.watchdog.wakeup():
+					self.sb_wire.send(Ping().serialize())
+				elif self.watchdog.expired():
+					self.stop()
+					continue
 
 			if not msg:
 				self.default_ticking()
@@ -167,6 +177,7 @@ class Classic(Device):
 					render.tick(self.display.canvas)
 					self.display.show(TRANSITION.NONE)
 					continue
+
 
 				if isinstance(msg, Hail):
 					cm = ContentManager(
@@ -330,6 +341,7 @@ class Classic(Device):
 						render = self.volume.meter
 
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
+						
 						pass
 
 					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
@@ -358,9 +370,8 @@ class Classic(Device):
 				info = sys.exc_info()
 				traceback.print_tb(info[2])
 				print info[1]
-				self.alive = False
+				self.stop()
 
-		self.player.close()
 		print('device is Dead')
 
 

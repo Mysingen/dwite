@@ -25,9 +25,6 @@ class Player:
 		self.wire = wire
 		self.stop()
 	
-	def close(self):
-		pass
-
 	# playback manipulations
 
 	def get_in_threshold(self, size):
@@ -143,10 +140,15 @@ class Player:
 
 		# not terribly interesting events:
 		if stat.event == '\0\0\0\0':
-			print('Device is alive')
 			# undocumented but always received right after the device connects
 			# to the server. probably just a state indication without any event
 			# semantics.
+			return None
+		if stat.event == 'stat':
+			# undocumented event. received when the undocumented 'stat' command
+			# is sent to the device. all STAT fields have well defined contents
+			# but we don't care much as it is only received when the device and
+			# server are otherwise idle.
 			return None
 		if stat.event == 'STMf':
 			# SBS sources say "closed", but this makes no sense as it will be
