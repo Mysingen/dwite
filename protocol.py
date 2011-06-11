@@ -201,16 +201,6 @@ class Dsco(Message):
 			message = 'Connection timed out'
 		return 'DSCO: %s' % message
 
-class Ls(Message):
-	head = 'ls'
-	guid = None
-
-	def __init__(self, guid):
-		self.guid = guid
-	
-	def __str__(self):
-		return 'ls %s' % self.guid
-
 
 
 ### COMMANDS ###################################################################
@@ -691,6 +681,13 @@ class Terms(JsonMessage):
 	def dump(self):
 		return json.dumps(['Terms', {'terms': self.terms}])
 
+class Bark(JsonMessage):
+	
+	def __str__(self):
+		return 'Bark'
+	
+	def dump(self):
+		return json.dumps(['Bark', {}])
 
 def parse_json(data):
 	obj  = json.loads(data)
@@ -708,6 +705,9 @@ def parse_json(data):
 
 	if head == 'Terms':
 		return Terms(**body)
+
+	if head == 'Bark':
+		return Bark()
 
 	return None
 

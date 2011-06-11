@@ -334,6 +334,9 @@ class JsonWire(Wire):
 		elif isinstance(message, protocol.Ls):
 			self.out_queue.put(message)
 
+		elif isinstance(message, protocol.Bark):
+			self.out_queue.put(message)
+
 		else:
 			print('%s: Not handled' % message)
 

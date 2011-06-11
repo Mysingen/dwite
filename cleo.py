@@ -77,10 +77,12 @@ class Cleo(Thread):
 				pass
 
 			if isinstance(msg, protocol.Ls):
-				print('message Ls')
 				listing = self.backend.get_children(msg.guid)
 				payload = protocol.Listing(msg.guid, listing).serialize()
 				self.jsonwire.send(payload)
+			
+			if isinstance(msg, protocol.Bark):
+				self.jsonwire.send(protocol.Bark().serialize())
 
 		print('Cleo is dead')
 
