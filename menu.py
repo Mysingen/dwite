@@ -69,6 +69,12 @@ class Tree:
 			return self.parent.children[index]
 		except:
 			return None
+
+	def is_parent_of(self, other):
+		while other.parent:
+			if other.parent.guid == self.guid:
+				return True
+			other = other.parent
 			
 class Waiting(Tree):
 	def __init__(self, parent):
@@ -384,6 +390,17 @@ class Root(Tree):
 		else:
 			print('Will not add non-Tree object to Root: %s' % item)
 
+	def remove(self, item):
+		print('Root remove %s' % item)
+		try:
+			index = self.children.index(item)
+			del self.children[index]
+			if len(self.children) == 0:
+				self.children = [Empty(self)]
+		except:
+			print('Could not remove %s' % item)
+			pass
+
 class Menu:
 	root     = None # must always point to a Tree instance that implements ls()
 	cwd      = None # must always point to a Tree instance that implements ls()
@@ -400,6 +417,14 @@ class Menu:
 
 	def add_cm(self, cm):
 		self.root.add(CmDirTree(u'/', cm.label, self.root, cm))
+
+	def rem_cm(self, cm):
+		focused = self.focused()
+		removed = CmDirTree(u'/', cm.label, self.root, cm)
+		self.root.remove(removed)
+		if removed.is_parent_of(focused):
+			self.cwd     = self.root
+			self.current = 0
 
 	def right(self):
 		if self.cwd == self.searcher:
