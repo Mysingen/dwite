@@ -99,11 +99,9 @@ def main():
 					msg = cm_queue.get(block=False)
 					if isinstance(msg, Hail):
 						print 'Hail'
+						cm = make_cm(cm_wire, cm_queue, dm_queue, msg)
 						if dm:
-							cm = make_cm(cm_wire, cm_queue, dm.queue, msg)
 							dm.add_cm(cm)
-						else:
-							cm = make_cm(cm_wire, cm_queue, dm_queue, msg)
 						wait_cm = False # stop listening on this queue
 				except Empty:
 					pass

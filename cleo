@@ -19,13 +19,16 @@ path = os.path.expanduser('~/.dwite')
 os.environ['DWITE_CFG_DIR'] = path
 if not os.path.isdir(path):
 	raise Exception('No configuration directory "%s"' % path)
-cm = Cleo()
-cm.start()
 
 try:
-	while len(threading.enumerate()) > 1:
-		#print threading.enumerate()
-		time.sleep(0.5)
+	cm = Cleo()
+	cm.start()
+	while True:
+		if cm.isAlive():
+			time.sleep(0.5)
+		else:
+			cm = Cleo()
+			cm.start()
 except:
 	info = sys.exc_info()
 	traceback.print_tb(info[2])

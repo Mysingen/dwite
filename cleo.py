@@ -9,12 +9,13 @@ import os
 import os.path
 import time
 
-from Queue     import Queue
+from Queue     import Queue, Empty
 from threading import Thread
 
 from wire       import JsonWire, Connected
 from backend_fs import FileSystem
 from streamer   import Streamer, Accepting
+from watchdog   import Watchdog
 
 import protocol
 
@@ -30,6 +31,7 @@ class Cleo(Thread):
 	streamer  = None
 	jsonwire  = None
 	queue     = None
+	watchdog  = None
 
 	def __init__(self):
 		Thread.__init__(self, target=Cleo.run, name='Cleo')
@@ -58,6 +60,7 @@ class Cleo(Thread):
 			if isinstance(msg, Accepting):
 				streamer_port = msg.port
 				todo -= 1
+		self.watchdog = Watchdog(2000)
 
 		# ready to hail the DM with all necessary info about cleo subsystems
 		print('Cleo hails')
@@ -73,8 +76,13 @@ class Cleo(Thread):
 			msg = None
 			try:
 				msg = self.queue.get(block=True, timeout=0.5)
-			except Exception, e:
-				pass
+				self.watchdog.reset()
+			except Empty:
+				if self.watchdog.wakeup():
+					self.jsonwire.send(protocol.Bark().serialize())
+				elif self.watchdog.expired():
+					self.stop()
+				continue
 
 			if isinstance(msg, protocol.Ls):
 				listing = self.backend.get_children(msg.guid)
@@ -82,7 +90,7 @@ class Cleo(Thread):
 				self.jsonwire.send(payload)
 			
 			if isinstance(msg, protocol.Bark):
-				self.jsonwire.send(protocol.Bark().serialize())
+				continue
 
 		print('Cleo is dead')
 

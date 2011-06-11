@@ -32,7 +32,7 @@ class ContentManager(Thread):
 		self.stream_port = stream_port
 		self.in_queue    = in_queue
 		self.out_queue   = out_queue
-		self.watchdog    = Watchdog(1000)
+		self.watchdog    = Watchdog(2000)
 
 	def stop(self):
 		self.wire.stop()
@@ -43,18 +43,22 @@ class ContentManager(Thread):
 			try:
 				msg = self.in_queue.get(block=True, timeout=0.5)
 				self.watchdog.reset()
-				if not isinstance(msg, Bark):
-					self.out_queue.put(msg)
 			except Queue.Empty:
 				if self.watchdog.wakeup():
 					self.wire.send(Bark().serialize())
 				elif self.watchdog.expired():
 					self.stop()
+				continue
 			except:
 				# unknown exception. print stack trace.
 				info = sys.exc_info()
 				traceback.print_tb(info[2])
 				print info[1]
+
+			if isinstance(msg, Bark):
+				continue
+
+			self.out_queue.put(msg)
 				
 		print('%s is dead' % self.label)
 
