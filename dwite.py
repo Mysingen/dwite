@@ -16,41 +16,34 @@ import os
 from Queue    import Queue, Empty
 
 from device   import Classic
-from wire     import SlimWire
-from protocol import ID, Helo
+from wire     import SlimWire, JsonWire
+from protocol import ID, Helo, Hail
+from cm       import ContentManager
 
-def make_wire(queue):
-	try:
-		# hand the message queue to the protocol handler. SlimWire knows how
-		# to connect to a device and parse messages from it. those messages can
-		# then be gotten from the queue as protocol objects (see protocol.py).
-		wire = SlimWire(None, 3483, queue)
-		wire.start()
-		return wire
-	except KeyboardInterrupt:
-		# the user pressed CTRL-C before the wire's socket could even start
-		# accepting connctions.
-		#info = sys.exc_info()
-		#traceback.print_tb(info[2])
-		#print info[1]
-		if wire:
-			wire.stop()
-	return None
-
-def make_device(queue, wire, msg):
+def make_dm(dm_wire, queue, msg):
 	# in the following, if a device class instance is created, the queue
 	# for events is given over to that instance. from then on the main 	loop
 	# must not try to see what is going on on the protocol wire.
 	if isinstance(msg, Helo):
 		if (msg.id == ID.SQUEEZEBOX3
 		or  msg.id == ID.SOFTSQUEEZE):
-			device = Classic(wire, queue, msg.mac_addr)
-			device.queue.put(msg) # let device handle Helo as well
+			device = Classic(dm_wire, queue, msg.mac_addr)
+			queue.put(msg) # let device class handle Helo as well
 			device.start()
 			return device
-	print('The core loop only handles HELO messages from devices')
+	print(
+		'The core loop only handles HELO messages from devices and Hail '
+		'messages from content managers'
+	)
 	print(msg)
 	return None
+
+def make_cm(cm_wire, in_queue, out_queue, msg):
+	cm = ContentManager(
+		msg.label, cm_wire, msg.stream_ip, msg.stream_port, in_queue, out_queue
+	)
+	cm.start()
+	return cm
 
 def main():
 	# check for directory of configuration files
@@ -60,48 +53,77 @@ def main():
 	if not os.path.isdir(path):
 		raise Exception('No configuration directory "%s"' % path)
 
-	while True:
-		# create a message queue that will be used by the SlimWire protocol
-		# handler to post messages from a physical device to a device manager
-		# (currently only "Classic" is supported):
-		queue = Queue(100)
+	# device and content managers. the device manager is threaded.
+	dm = None
+	cm = None
+	# threaded "wire" objects handle the socket connections with devices and
+	# content managers.
+	dm_wire = None
+	cm_wire = None
+	# the queue is really owned by the DM, but created here so that it can be
+	# passed to everyone else who must post messages to the DM.
+	dm_queue = Queue(100)
+	cm_queue = Queue(100)
+	# can only wait on dm's and cm's queues when expecting HELO or Hail:
+	wait_dm = False
+	wait_cm = False
 
-		wire = make_wire(queue)
-		if not wire:
-			break
-	
-		# wait for a HELO message from a device so that we know what device
-		# class to instantiate:
+	try:
 		while True:
-			try:
-				msg = queue.get(block=True, timeout=0.5)
-				dev = make_device(queue, wire, msg)
-				if dev:
-					break
-			except Empty:
-				# no message in the queue. try again
-				continue
-			except KeyboardInterrupt:
-				# the user pressed CTRL-C. stop the wire's thread and return.
-				wire.stop()
-				return
+			# the wires die when their respective device or content manager
+			# disconnect. simply create new ones if that happens.
+			if not (dm_wire and dm_wire.isAlive()):
+				dm_wire = SlimWire(None, 3483, dm_queue)
+				dm_wire.start()
+				wait_dm = True
+			if not (cm_wire and cm_wire.isAlive()):
+				if dm:
+					dm.rem_cm(cm)
+				cm_wire = JsonWire(None, 3484, cm_queue)
+				cm_wire.start()
+				wait_cm = True
+			# wait for a HELO or Hail message from a device or CM.
+			if wait_dm:
+				try:
+					msg = dm_queue.get(block=False)
+					if isinstance(msg, Helo):
+						print 'HELO'
+						dm = make_dm(dm_wire, dm_queue, msg)
+						wait_dm = False # stop listening on this queue
+						if cm:
+							dm.add_cm(cm)
+				except Empty:
+					pass
+			if wait_cm:
+				try:
+					msg = cm_queue.get(block=False)
+					if isinstance(msg, Hail):
+						print 'Hail'
+						if dm:
+							cm = make_cm(cm_wire, cm_queue, dm.queue, msg)
+							dm.add_cm(cm)
+						else:
+							cm = make_cm(cm_wire, cm_queue, dm_queue, msg)
+						wait_cm = False # stop listening on this queue
+				except Empty:
+					pass
+			time.sleep(0.1)
+	except KeyboardInterrupt:
+		# the user pressed CTRL-C
+		pass
+	except:
+		# unknown exception. print stack trace.
+		info = sys.exc_info()
+		traceback.print_tb(info[2])
+		print info[1]
 
-		# from here, the main loop checks for interrupts (e.g. the user hits
-		# CTRL-C) and unhandled internal exceptions. if the device stops in a
-		# graceful manner it will simply be restarted.
-		try:
-			while dev.isAlive():
-				dev.join(0.5)
-			# device gets restarted now. topmost while loop has not been broken
-			continue
-		except KeyboardInterrupt:
-			dev.stop()
-			sys.exit(1)
-		except:
-			info = sys.exc_info()
-			traceback.print_tb(info[2])
-			print info[1]
-			dev.stop()
-			sys.exit(1)
-
+	# stop all threaded objects and quit
+	if dm:
+		dm.stop()
+	if cm:
+		cm.stop()
+	if dm_wire:
+		dm_wire.stop()
+	if cm_wire:
+		cm_wire.stop()
 

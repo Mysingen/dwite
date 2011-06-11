@@ -11,7 +11,7 @@ from threading import Thread
 from Queue     import Queue
 from datetime  import datetime
 
-from protocol  import Helo, Hail, Tactile, Stat, Listing, Terms, Dsco, Ping
+from protocol  import Helo, Tactile, Stat, Listing, Terms, Dsco, Ping
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
@@ -19,15 +19,27 @@ from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
-from cm        import ContentManager
 from volume    import Volume
 from watchdog  import Watchdog
+
+# private message classes. only used to implement public API's
+class AddCM:
+	cm = None
+	
+	def __init__(self, cm):
+		self.cm = cm
+
+class RemCM:
+	cm = None
+	
+	def __init__(self, cm):
+		self.cm = cm
 
 class Device(Thread):
 	queue    = None  # let other threads post events here
 	alive    = True  # controls the main loop
 	sb_wire  = None  # must have a wire to send actual commands to the device
-	cm_wire  = None  # must have a wire to talk to the content manager
+	cm       = None  # content manager
 	menu     = None  # all devices must have a menu system
 	guid     = None  # string. uniqely identifies the device. usualy MAC addr.
 	player   = None
@@ -43,8 +55,6 @@ class Device(Thread):
 		self.queue   = queue
 		self.guid    = guid
 		self.menu    = Menu()
-		self.cm_wire = JsonWire(None, 3484, queue)
-		self.cm_wire.start()
 		self.watchdog = Watchdog(1000)
 
 	def run(self):
@@ -52,8 +62,15 @@ class Device(Thread):
 	
 	def stop(self):
 		self.sb_wire.stop()
-		self.cm_wire.stop()
+		if self.cm:
+			self.cm.stop()
 		self.alive = False
+
+	def add_cm(self, cm):
+		self.queue.put(AddCM(cm))
+	
+	def rem_cm(self, cm):
+		self.queue.put(RemCM(cm))
 
 def init_acceleration_maps():
 	maps    = {}
@@ -148,7 +165,7 @@ class Classic(Device):
 		# threads.
 		self.player = Player(self.sb_wire, self.guid)
 
-		while self.alive :
+		while self.alive:
 			msg = None
 
 			try:
@@ -178,15 +195,16 @@ class Classic(Device):
 					self.display.show(TRANSITION.NONE)
 					continue
 
+				if isinstance(msg, AddCM):
+					self.menu.add_cm(msg.cm)
+					continue
 
-				if isinstance(msg, Hail):
-					cm = ContentManager(
-						msg.label, self.cm_wire, msg.stream_ip, msg.stream_port
-					)
-					self.menu.add_cm(cm)
+				if isinstance(msg, RemCM):
+					self.menu.rem_cm(msg.cm)
 					continue
 
 				if isinstance(msg, Listing):
+					print 'Listing %s' % msg.guid
 					parent = self.menu.focused().parent
 					if parent.guid == msg.guid:
 						parent.add(msg.listing)
@@ -341,7 +359,7 @@ class Classic(Device):
 						render = self.volume.meter
 
 					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
-						
+						self.stop()
 						pass
 
 					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
