@@ -9,6 +9,7 @@ class Watchdog:
 		if type(timeout) != int:
 			raise Exception('Invalid Watchdog(timeout): %s' % str(timeout))
 		self.value = timeout
+		self.reset()
 
 	def wakeup(self):
 		if self.sleep and self.sleep < datetime.now():
@@ -17,7 +18,7 @@ class Watchdog:
 		return False
 
 	def expired(self):
-		return self.timer < datetime.now()
+		return self.timer and self.timer < datetime.now()
 
 	def reset(self):
 		self.sleep = datetime.now() + timedelta(milliseconds=1000)
