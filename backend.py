@@ -25,7 +25,7 @@ class Backend(Thread):
 		while self.state != STOPPED:
 			try:
 				msg = self.in_queue.get(block=True, timeout=0.5)
-				self._handle(msg)
+				self.handle(msg)
 			except Empty:
 				continue
 		self.on_stop()
