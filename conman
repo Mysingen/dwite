@@ -13,7 +13,7 @@ import traceback
 import threading
 import time
 
-from cleo import Cleo
+from conman import Conman
 
 path = os.path.expanduser('~/.dwite')
 os.environ['DWITE_CFG_DIR'] = path
@@ -21,7 +21,7 @@ if not os.path.isdir(path):
 	raise Exception('No configuration directory "%s"' % path)
 
 try:
-	cm = Cleo()
+	cm = Conman()
 	cm.start()
 	while True:
 		if cm.isAlive():

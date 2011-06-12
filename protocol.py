@@ -36,7 +36,7 @@ class ID:
 	}
 
 # there are Messages and Commands. Messages are inbound from the device and
-# are used in communication between dwite and cleo. Commands are outbound to
+# are used in communication between dwite and conman. Commands are outbound to
 # the hardware device.
 # The parser produces Message instances while the Command base class has a
 # virtual function serialize() that all subclasses must implement. The

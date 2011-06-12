@@ -15,7 +15,7 @@ class FileSystem(Backend):
 	name     = u'File system'
 
 	def __init__(self):
-		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'cleo.json')
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
 		if os.path.exists(path):
 			f             = open(path)
 			cfg           = json.load(f)
