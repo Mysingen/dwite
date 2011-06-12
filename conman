@@ -27,7 +27,7 @@ try:
 		if cm.isAlive():
 			time.sleep(0.5)
 		else:
-			cm = Cleo()
+			cm = Conman()
 			cm.start()
 except:
 	info = sys.exc_info()
