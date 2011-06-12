@@ -2,6 +2,8 @@ import os
 import mutagen
 import json
 
+import protocol
+
 from backend import Backend
 
 class Track:
@@ -14,7 +16,7 @@ class FileSystem(Backend):
 	root_dir = u'/'
 	name     = u'File system'
 
-	def __init__(self):
+	def __init__(self, out_queue):
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
 		if os.path.exists(path):
 			f             = open(path)
@@ -22,17 +24,22 @@ class FileSystem(Backend):
 			self.root_dir = cfg['backends']['file_system']['root_dir']
 			self.name     = cfg['backends']['file_system']['name']
 			f.close()
-		
-		Backend.__init__(self, self.name)
-		
-	
+		Backend.__init__(self, self.name, out_queue)
+
 	def on_start(self):
 		pass
 	
 	def on_stop(self):
 		pass
+
+	def handle(self, msg):
+		if isinstance(msg, protocol.Ls):
+			payload = self._get_children(msg.guid)
+			self.out_queue.put(protocol.Listing(msg.guid, payload))
+			return
+		raise Exception('Unhandled message: %s' % str(msg))
 	
-	def get_children(self, guid):
+	def _get_children(self, guid):
 		children = []
 		if guid == '/':
 			guid = ''

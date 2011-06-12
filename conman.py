@@ -35,8 +35,8 @@ class Conman(Thread):
 
 	def __init__(self):
 		Thread.__init__(self, target=Conman.run, name='Conman')
-		self.backend  = FileSystem()
 		self.queue    = Queue(100)
+		self.backend  = FileSystem(self.queue)
 		self.streamer = Streamer(self.backend, self.queue)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
 		self.backend.start()
@@ -85,9 +85,14 @@ class Conman(Thread):
 				continue
 
 			if isinstance(msg, protocol.Ls):
-				listing = self.backend.get_children(msg.guid)
-				payload = protocol.Listing(msg.guid, listing).serialize()
-				self.jsonwire.send(payload)
+				print 'Ls'
+				self.backend.in_queue.put(msg)
+				continue
+			
+			if isinstance(msg, protocol.Listing):
+				print 'Listing'
+				self.jsonwire.send(msg.serialize())
+				continue
 			
 			if isinstance(msg, protocol.Bark):
 				continue

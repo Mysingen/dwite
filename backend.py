@@ -1,5 +1,5 @@
 from threading import Thread, current_thread
-from Queue     import Queue
+from Queue     import Queue, Empty
 
 RUNNING = 1
 STOPPED = 2
@@ -10,11 +10,11 @@ class Backend(Thread):
 	in_queue  = None
 	out_queue = None
 	
-	def __init__(self, name):
+	def __init__(self, name, out_queue):
 		Thread.__init__(self, target=self.run, name=name)
 		self.name      = name
 		self.in_queue  = Queue(10)
-		self.out_queue = Queue(10)
+		self.out_queue = out_queue
 
 	def stop(self):
 		self.state = STOPPED
@@ -24,16 +24,12 @@ class Backend(Thread):
 		self.on_start()
 		while self.state != STOPPED:
 			try:
-				task = self.in_queue.get(block=True, timeout=0.5)
-			except:
+				msg = self.in_queue.get(block=True, timeout=0.5)
+				self._handle(msg)
+			except Empty:
 				continue
-			self.out_queue.put(task.next())
 		self.on_stop()
 		print('%s is dead' % current_thread().name)
-
-	def _post(self, generator):
-		self.in_queue.put(generator)
-		return self.out_queue.get()
 
 	def on_start(self):
 		raise Exception('Your backend must implement on_start()')
@@ -41,9 +37,9 @@ class Backend(Thread):
 	def on_stop(self):
 		raise Exception('Your backend must implement on_stop()')
 
-	def get_children(self, guid):
-		raise Exception('Your backend must implement get_children()')
-
 	def get_item(self, guid):
 		raise Exception('Your backend must implement get_item()')
+
+	def handle(self, msg):
+		raise Exception('Your backend must implement _handle()')
 
