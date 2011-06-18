@@ -28,6 +28,10 @@ class Backend(Thread):
 				self.handle(msg)
 			except Empty:
 				continue
+			except Exception, e:
+				print('INTERNAL ERROR: Backend.run():')
+				traceback.print_exc()
+				break
 		self.on_stop()
 		print('%s is dead' % current_thread().name)
 

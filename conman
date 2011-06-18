@@ -27,8 +27,9 @@ try:
 		if cm.isAlive():
 			time.sleep(0.5)
 		else:
-			cm = Conman()
-			cm.start()
+			break
+			#cm = Conman()
+			#cm.start()
 except:
 	info = sys.exc_info()
 	traceback.print_tb(info[2])

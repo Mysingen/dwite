@@ -8,6 +8,7 @@ import sys
 import os
 import os.path
 import time
+import traceback
 
 from Queue     import Queue, Empty
 from threading import Thread
@@ -60,7 +61,7 @@ class Conman(Thread):
 			if isinstance(msg, Accepting):
 				streamer_port = msg.port
 				todo -= 1
-		self.watchdog = Watchdog(2000)
+		self.watchdog = Watchdog(5000)
 
 		# ready to hail the DM with all necessary info about conman subsystems
 		print('Conman hails')
@@ -81,8 +82,12 @@ class Conman(Thread):
 				if self.watchdog.wakeup():
 					self.jsonwire.send(protocol.Bark().serialize())
 				elif self.watchdog.expired():
+					print 'expired'
 					self.stop()
 				continue
+			except Exception, e:
+				print 'VERY BAD!'
+				print str(e)
 
 			if isinstance(msg, protocol.Ls):
 				print 'Ls'
@@ -90,7 +95,7 @@ class Conman(Thread):
 				continue
 			
 			if isinstance(msg, protocol.Listing):
-				print 'Listing'
+				print 'Listing()'
 				self.jsonwire.send(msg.serialize())
 				continue
 			
