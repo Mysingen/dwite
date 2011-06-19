@@ -11,7 +11,8 @@ from threading import Thread
 from Queue     import Queue
 from datetime  import datetime
 
-from protocol  import Helo, Tactile, Stat, Listing, Terms, Dsco, Ping
+from protocol  import(Helo, Tactile, Stat, Listing, Terms, Dsco, Ping,
+                      StrmStatus)
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu
@@ -201,7 +202,6 @@ class Classic(Device):
 
 				if isinstance(msg, RemCM):
 					self.menu.rem_cm(msg.cm)
-					continue
 
 				if isinstance(msg, Listing):
 					print 'Listing %s' % msg.guid
@@ -223,9 +223,8 @@ class Classic(Device):
 				if isinstance(msg, Stat):
 					next = self.player.handle_stat(msg)
 					# play next item, if any. otherwise clean the display
-					if next:
-						while not self.player.play(next):
-							next = next.next()
+					while next and not self.player.play(next):
+						next = next.next()
 					if next:
 						(guid, render) = self.player.ticker()
 					else:
@@ -293,7 +292,7 @@ class Classic(Device):
 							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
-						self.seeker.seek(1000)
+						self.seeker.seek(5000)
 						render = self.select_render()
 					elif msg.code == IR.REWIND:
 						if not self.player.playing:
@@ -303,7 +302,7 @@ class Classic(Device):
 							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
-						self.seeker.seek(-1000)
+						self.seeker.seek(-5000)
 						render = self.select_render()
 					elif msg.code == -IR.FORWARD:
 						print('-IR.FORWARD')
@@ -318,9 +317,8 @@ class Classic(Device):
 							self.menu.ticker(curry=True)
 						else:
 							next = self.player.playing.item.next()
-							if next:
-								while not self.player.play(next):
-									next = next.next()
+							while next and not self.player.play(next):
+								next = next.next()
 							if next:
 								(guid, render) = self.player.ticker()
 							else:
@@ -366,6 +364,7 @@ class Classic(Device):
 					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,
 					                  IR.NUM_7, IR.NUM_8, IR.NUM_9]:
 						(guid, render, transition) = self.menu.number(msg.code)
+						self.sb_wire.send(StrmStatus().serialize())
 
 					elif msg.code == IR.NOW_PLAYING:
 						self.display.next_visualizer()
