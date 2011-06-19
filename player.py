@@ -8,11 +8,12 @@ import traceback
 import sys
 import os.path
 import struct
+import time
 
-from protocol import Strm, StrmStartMpeg, StrmStop, StrmFlush, StrmSkip, Stat
-from protocol import StrmPause, StrmUnpause
+from protocol import(Strm, StrmStartMpeg, StrmStartFlac, StrmStop, StrmFlush,
+                     StrmSkip, Stat, StrmPause, StrmUnpause)
 from render   import NowPlayingRender
-from menu     import CmMp3Tree
+from menu     import CmAudio
 
 class Player:
 	guid        = None # used when telling the device how to present itself
@@ -35,28 +36,32 @@ class Player:
 		return 10 # I'm just guessing
 	
 	def play(self, item, seek=0):
-		if not isinstance(item, CmMp3Tree):
+		if not isinstance(item, CmAudio):
 			return False
 
-		# stop the currently playing track, if any
-		if self.playing:
-			self.stop()
-
+		# always send stop command before initiating a new stream.
+		self.stop()
 		self.playing = NowPlaying(item, item.duration, seek)
-		strm = StrmStartMpeg(
-			item.cm.stream_ip, item.cm.stream_port, item.guid, seek
-		)
+		if item.format == 'mp3':
+			Cls = StrmStartMpeg
+		elif item.format == 'flac':
+			Cls = StrmStartFlac
+		strm = Cls(item.cm.stream_ip, item.cm.stream_port, item.guid, seek)
 		strm.in_threshold = self.get_in_threshold(item.size)
+		time.sleep(0.1) # necessary to make sure the device doesn't get confused
 		self.wire.send(strm.serialize())
 		return True
 
 	def jump(self, position):
 		item = self.playing.item
 		self.wire.send(StrmStop().serialize())
-		strm = StrmStartMpeg(
-			item.cm.stream_ip, item.cm.stream_port, item.guid, position
-		)
+		if item.format == 'mp3':
+			Cls = StrmStartMpeg
+		elif item.format == 'flac':
+			Cls = StrmStartFlac
+		strm = Cls(item.cm.stream_ip, item.cm.stream_port, item.guid, position)
 		strm.in_threshold = self.get_in_threshold(item.size)
+		time.sleep(0.1) # necessary to make sure the device doesn't get confused
 		self.wire.send(strm.serialize())
 		self.playing.start    = position
 		self.playing.progress = 0
@@ -97,17 +102,22 @@ class Player:
 #			return
 #		self.wire.send(StrmSkip(msecs).serialize())
 
-	def set_progress(self, msecs):
+	def set_progress(self, msecs, in_fill, out_fill):
 		if not self.playing:
 			return
-		self.playing.set_progress(msecs)
+		if out_fill > 0:
+			self.playing.set_progress(msecs)
+			return None
+		elif self.playing.state == NowPlaying.BUFFERING:
+			return None
+		else:
+			try:
+				return self.playing.item.next()
+			except:
+				return None
 
 	def get_progress(self):
 		return self.playing.position()
-
-	def set_buffers(self, in_fill, out_fill):
-		pass
-		#print('in/out = %d/%d' % (in_fill, out_fill))
 
 	def finish(self):
 		self.playing = None
@@ -121,24 +131,29 @@ class Player:
 	def handle_stat(self, stat):
 		if not isinstance(stat, Stat):
 			raise Exception('Invalid Player.handle_stat(stat): %s' % str(stat))
+		print(stat.log(level=1))
 		if stat.event == 'STMt':
 			# SBS sources calls this the "timer" event. it seems to mean that
 			# the device has a periodic timeout going, because the STMt is sent
 			# with an interval of about 1-2 seconds. the interesting content is
-			# buffer fullness (which should perhaps be tracked by the server).
-			self.set_progress(stat.msecs)
-			self.set_buffers(stat.in_fill, stat.out_fill)
-			return None
+			# buffer fullness.
+			next = self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
+			if next:
+				self.stop()
+				print 'STMt next = %s' % str(next)
+			return next
 		if stat.event == 'STMo':
 			# find next item to play, if any
-			next = self.playing.item.next()
+			try:
+				next = self.playing.item.next()
+				print 'STMo next = %s' % str(next)
+			except:
+				next = None
+				print 'STMo next = None'
 			# finish the currently playing track
-			self.set_progress(stat.msecs)
-			self.set_buffers(stat.in_fill, stat.out_fill)
+			self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
 			self.finish()
 			return next
-
-		# not terribly interesting events:
 		if stat.event == '\0\0\0\0':
 			# undocumented but always received right after the device connects
 			# to the server. probably just a state indication without any event
@@ -198,7 +213,7 @@ class NowPlaying:
 	PLAYING   = 1
 	PAUSED    = 2
 
-	item     = None # playable menu item (e.g. an CmMp3Tree object)
+	item     = None # playable menu item (e.g. an CmAudio object)
 	render   = None
 	state    = BUFFERING
 	start    = 0 # current playback position (in milliseconds) is calculated

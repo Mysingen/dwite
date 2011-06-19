@@ -80,39 +80,45 @@ class Waiting(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, u'<WAITING>', u'<WAITING>', parent)
 
-class CmFileTree(Tree):
+class CmFile(Tree):
 	cm = None
 
 	def __init__(self, guid, label, parent, cm):
 		Tree.__init__(self, guid, label, parent)
 		self.cm = cm
 
-class CmMp3Tree(CmFileTree):
+class CmAudio(CmFile):
 	size     = 0 # bytes
 	duration = 0 # milliseconds
+	format   = None # 'mp3' or 'flac'
 
-	def __init__(self, guid, label, size, duration, parent, cm):
+	def __init__(self, guid, label, size, duration, format, parent, cm):
 		if type(size) != int:
 			raise Exception(
-				'CmMp3Tree.size != int: %s (guid:%s)' % (str(size), guid)
+				'CmAudio.size != int: %s (guid:%s)' % (str(size), guid)
 			)
 		if type(duration) != int:
 			raise Exception(
-				'CmMp3Tree.duration != int: %s (guid:%s)' % (str(duration),guid)
+				'CmAudio.duration != int: %s (guid:%s)' % (str(duration), guid)
 			)
-		CmFileTree.__init__(self, guid, label, parent, cm)
+		if format not in ['mp3', 'flac']:
+			raise Exception(
+				'Invald CmAudio.format: %s (guid:%s)' % (str(format), guid)
+			)
+		CmFile.__init__(self, guid, label, parent, cm)
 		self.size     = size
 		self.duration = duration
+		self.format   = format
 
 	def __str__(self):
-		return 'CmMp3Tree %s %s' % (self.guid, self.label)
+		return 'CmAudio %s %s' % (self.guid, self.label)
 	
 
-class CmDirTree(CmFileTree):
+class CmDir(CmFile):
 	children = None
 
 	def __init__(self, guid, label, parent, cm):
-		CmFileTree.__init__(self, guid, label, parent, cm)
+		CmFile.__init__(self, guid, label, parent, cm)
 		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
 		                         % os.getenv('DWITE_HOME'), 23, (2, 0))
 	
@@ -134,20 +140,21 @@ class CmDirTree(CmFileTree):
 			kind  = l['kind']
 
 			if kind == 'dir':
-				self.children.append(CmDirTree(guid, label, self, self.cm))
+				self.children.append(CmDir(guid, label, self, self.cm))
 				continue
 
 			if kind == 'file':
-				self.children.append(CmFileTree(guid, label, self, self.cm))
+				self.children.append(CmFile(guid, label, self, self.cm))
 				continue
 			
-			if kind == 'mp3':
+			if kind in ['mp3', 'flac']:
 				size     = l['size']
 				duration = l['duration']
 				self.children.append(
-					CmMp3Tree(guid, label, size, duration, self, self.cm)
+					CmAudio(guid, label, size, duration, kind, self, self.cm)
 				)
-
+				continue
+			
 		if len(self.children) == 0:
 			self.children.append(Empty(self))
 		return self.children
@@ -416,11 +423,11 @@ class Menu:
 		self.root.add(self.searcher)
 
 	def add_cm(self, cm):
-		self.root.add(CmDirTree(u'/', cm.label, self.root, cm))
+		self.root.add(CmDir(u'/', cm.label, self.root, cm))
 
 	def rem_cm(self, cm):
 		focused = self.focused()
-		removed = CmDirTree(u'/', cm.label, self.root, cm)
+		removed = CmDir(u'/', cm.label, self.root, cm)
 		self.root.remove(removed)
 		if removed.is_parent_of(focused):
 			self.cwd     = self.root

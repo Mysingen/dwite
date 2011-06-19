@@ -111,7 +111,7 @@ class Stat(Message):
 	# STMl - FULL (triggers start of synced playback), STMd - DECODE_READY
 	# (decoder has no more data), STMs - TRACK_STARTED (a new track started
 	# playing), STMn - NOT_SUPPORTED (decoder does not support the track format)
-	# STMz - pseudo-status defived from DSCO meaning end-of-stream.
+	# STMz - pseudo-status derived from DSCO meaning end-of-stream.
 
 	# my understanding is that the STMz is not sent by the device but by the
 	# SBS to itself when it receives the DiSCOnnect message from the device.
@@ -127,8 +127,8 @@ class Stat(Message):
 	crlfs    = 0    # uint8   number of rc/lf seen during header parsing
 	mas_init = 0    # uint8   'm' or 'p'. don't know what it is
 	mas_mode = 0    # uint8   SBS code comment only says "serdes mode"
-	in_size  = 0    # uint32  size of RX buffer. (SBS code comments are wrong.)
-	in_fill  = 0    # uint32  RX buffer fill. (SBS code comments are wrong.)
+	in_size  = 0    # uint32  size of RX buffer
+	in_fill  = 0    # uint32  RX buffer fill
 	recv_hi  = 0    # uint64, high bits.  total bytes received
 	recv_lo  = 0    # uint64, low bits.   total bytes received
 	wifi_pow = 0    # uint16  wifi signal strength
@@ -164,6 +164,14 @@ class Stat(Message):
 		       + 'Error    = %d\n' % self.error )
 
 		return '%s%s%s' % (tmp1, tmp2, tmp3)
+
+	def log(self, level):
+		if level > 0:
+			return (
+				'stat event=%s crlf=%d in-fill=%d rx=%d out-fill=%d'
+				% (self.event, self.crlfs, self.in_fill,
+				   self.recv_hi << 32 | self.recv_lo, self.out_fill)
+			)
 
 class Resp(Message):
 	head        = 'RESP'
@@ -231,7 +239,7 @@ class Strm(Command):
 	# formats
 	FORMAT_MPEG = 'm'
 	FORMAT_WAV  = 'p' # also for AIF
-	FORMAT_FLC  = 'f'
+	FORMAT_FLAC = 'f'
 	FORMAT_WMA  = 'w' # also for ASX
 	FORMAT_OGG  = 'o'
 	
@@ -333,8 +341,7 @@ class Strm(Command):
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
 		if self.operation == Strm.OP_START:
-			s = str('GET %s HTTP/1.0\r\n'
-			        'Seek-Time: %d\r\n'
+			s = str('GET %s?seek=%s HTTP/1.0\r\n'
 			        % (self.resource, self.seek))
 			params = tmp + struct.pack('%ds' % len(s), s)
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
@@ -346,9 +353,8 @@ class Strm(Command):
 		length = struct.pack('<H', socket.htons(len(cmd + params)))
 		return length + cmd + params
 
-class StrmStartMpeg(Strm):
+class StrmStart(Strm):
 	operation = Strm.OP_START
-	format    = Strm.FORMAT_MPEG
 
 	def __init__(self, ip, port, resource, seek=0, background=False):
 		print('%d %d %s %d' % (ip, port, resource, seek))
@@ -362,6 +368,18 @@ class StrmStartMpeg(Strm):
 		else:
 			self.autostart = Strm.AUTOSTART_YES
 
+class StrmStartMpeg(StrmStart):
+	format = Strm.FORMAT_MPEG
+
+	def __init__(self, ip, port, resource, seek=0, background=False):
+		StrmStart.__init__(self, ip, port, resource, seek, background)
+
+class StrmStartFlac(StrmStart):
+	format = Strm.FORMAT_FLAC
+	
+	def __init__(self, ip, port, resource, seek=0, background=False):
+		StrmStart.__init__(self, ip, port, resource, seek, background)
+
 class StrmPause(Strm):
 	operation = Strm.OP_PAUSE
 
@@ -373,6 +391,9 @@ class StrmStop(Strm):
 
 class StrmFlush(Strm):
 	operation = Strm.OP_FLUSH
+
+class StrmStatus(Strm):
+	operation = Strm.OP_STATUS
 
 class StrmSkip(Strm):
 	operation = Strm.OP_SKIP

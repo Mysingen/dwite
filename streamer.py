@@ -5,14 +5,16 @@
 # by the Free Software Foundation.
 
 import socket
-import sys
 import select
 import errno
 import re
 import urllib
+import os
+import flac.decoder
+import traceback
 
 # mutagen dependency
-import mutagen.mp3
+import mutagen
 
 from threading import Thread
 
@@ -45,9 +47,21 @@ class Streamer(Thread):
 
 	def accept(self):
 		if self.state != STARTING:
-			print('Streamer.accept() called in wrong state %d' % self.state)
-			sys.exit(1)
+			raise Excepion(
+				'Streamer.accept() called in wrong state %d' % self.state
+			)
 		if self.socket:
+			try:
+				#self.socket.flush()
+				self.socket.shutdown(socket.SHUT_RDWR)
+			except Exception, e:
+				if type(e) == socket.error and e[0] == errno.ENOTCONN:
+					pass
+				else:
+					print('INTERNAL ERROR')
+					traceback.print_exc()
+					self.stop()
+					return
 			self.socket.close()
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -67,7 +81,7 @@ class Streamer(Thread):
 		# command line (because the thread isn't the program main loop that
 		# receives the resulting SIGINT), so to be able to abort we set the
 		# socket to time out and then try again if self.state still permits it.
-		self.socket.listen(1)
+		self.socket.listen(0)
 		self.socket.settimeout(0.5)
 		while self.state != STOPPED:
 			try:
@@ -83,8 +97,6 @@ class Streamer(Thread):
 			
 			if self.state == STARTING:
 				self.accept()
-			
-			print('Streamer listening')
 
 			selected = [[self.socket], [], [self.socket]]
 			out_data = None
@@ -108,8 +120,10 @@ class Streamer(Thread):
 							print('Streamer connection RESET')
 							self.state = STARTING
 							continue
-						print('Streamer: Unhandled exception %s' % str(e))
-						continue
+					except Exception, e:
+						print('INTERNAL ERROR')
+						traceback.print_exc()
+						self.stop()
 
 					if in_data.startswith('GET '):
 						out_data = self.handle_http_get(in_data)
@@ -142,11 +156,9 @@ class Streamer(Thread):
 							sent = self.socket.send(out_data[-out_left:])
 							out_left = out_left - sent
 						except:
-							#info = sys.exc_info()
-							#traceback.print_tb(info[2])
-							#print(info[1])
-							self.state = STARTING
-							break
+							print('INTERNAL ERROR')
+							traceback.print_exc()
+							self.stop()
 						continue
 
 		print('streamer is dead')
@@ -156,38 +168,35 @@ class Streamer(Thread):
 		# at some offset:
 		print data
 		try:
-			m = re.search('GET (.+?) HTTP/1\.0', data, re.MULTILINE)
-			print 'GET %s' % m.group(1)
+			m = re.search('GET (.+?)\?seek=(\d+) HTTP/1\.0', data, re.MULTILINE)
 			track = self.backend.get_item(m.group(1))
+			seek  = m.group(2)
 			if track.uri.startswith('file://'):
-				start = 7
+				path = track.uri[7:]
 			else:
-				start = 0
-			print 'Get %s' % urllib.unquote(track.uri[start:])
-			decoder = MP3_Decoder(urllib.unquote(track.uri[start:]))
+				path = track.uri
+			path = urllib.unquote(path)
+			# if path is the same as for previous request, then the user is
+			# seeking in the file and we can keep the old decoder. otherwise
+			# create a new one:
+			if (not self.decoder) or (self.decoder.path != path):
+				self.decoder = Decoder(path)
 		except Exception, e:
 			print 'oooops %s' % str(e)
-			#info = sys.exc_info()
-			#traceback.print_tb(info[2])
-			#print info[1]
-			# not an mp3 resource
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'
 
 		try:
-			m = re.search('Seek-Time: (\d+)', data, re.MULTILINE)
-			decoder.seek(int(m.group(1)))
-		except:
-			#info = sys.exc_info()
-			#traceback.print_tb(info[2])
-			#print info[1]
+			self.decoder.seek(int(seek))
+		except Exception, e:
+			print e
 			pass
-
-		self.decoder = decoder
 
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
-		response = 'HTTP/1.0 200 OK\r\n\r\n'
-		return response + self.decoder.read(4096 - len(response))
+		response = ( 'HTTP/1.0 200 OK\r\n'
+		           + 'Content-Type: %s\r\n' % self.decoder.mimetype
+		           + '\r\n\r\n' )
+		return response
 
 	def stop(self):
 		self.state = STOPPED
@@ -196,41 +205,79 @@ class Streamer(Thread):
 # support both files and remote streams.
 
 class Decoder:
-	file = None
-	path = None
+	path     = None
+	file     = None
+	audio    = None
+	frames   = None # FLAC (and other formats) must be streamed frame-aligned.
+	                # create the list of aligned offsets as needed.
+	mimetype = None
 
-	def open(self, path):
+	def __init__(self, path):
+		self.path  = path
+		self.audio = mutagen.File(path, easy=True)
 		self.file = open(path, 'rb')
-		self.path = path
+		if type(self.audio) == mutagen.mp3.EasyMP3:
+			self.mimetype = 'audio/mpeg'
+		elif type(self.audio) == mutagen.flac.FLAC:
+			self.mimetype = 'audio/flac'
 
-	def read(self, amount=4096):
+	def read(self, amount=65536):
 		if self.file:
 			return self.file.read(amount)
 		return None
 
-	# translate time (floating point seconds) to an offset into the file and
-	# let further read()'s continue from there.
-	def seek(self, time):
-		raise Exception, 'Your decoder must implement seek()'
-
-class MP3_Decoder(Decoder):
-	duration = 0 # float: seconds
-	bitrate  = 0 # int: bits per second
-
-	def __init__(self, path):
-		audio         = mutagen.mp3.MP3(path)
-		self.duration = audio.info.length
-		self.bitrate  = audio.info.bitrate
-		self.open(path)
-
 	def time_to_offset(self, msec):
-		return int(((self.bitrate / 1000.0) * (msec / 8.0)))
+		if type(self.audio) == mutagen.mp3.EasyMP3:
+			if msec == 0:
+				return 0
+			# bits per msec: bitrate / 1000
+			# bytes per msec: bits per msec / 8
+			# offset: bytes per msec * time
+			return (self.audio.info.bitrate * msec) / 8000
+		if type(self.audio) == mutagen.flac.FLAC:
+			# find an aligned byte offset by picking the .frames[] index that
+			# most closely matches the seek value.
+			def make_frames():
+				if self.frames:
+					return
+				def metadata_cb(decoder, block):
+					pass
+				def error_cb(decoder, status):
+					raise Exception('error_cb()')
+				def write_cb(decoder, buff, size):
+					pass
+				self.frames = []
+				dec = flac.decoder.StreamDecoder()
+				# path parameter must not be unicode:
+				dec.init(str(self.path), write_cb, metadata_cb, error_cb)
+				dec.process_until_end_of_metadata()
+				while dec.get_state() != 4:
+					self.frames.append(dec.get_decode_position())
+					dec.skip_single_frame()
+			try:
+				make_frames()
+			except Exception, e:
+				traceback.print_exc()
+				
+			duration = self.audio.info.length * 1000
+			index = int((msec / duration) * len(self.frames))
+			if msec <= duration:
+				result = self.frames[index]
+			else:
+				result = self.frames[-1]
+			print(
+				'flac seek %d of %d msec = %d byte offset (of %d)'
+				% (msec, int(duration), result, os.path.getsize(self.path))
+			)
+			return result
 
+		raise Exception('Unhandled execution path')
+
+	# translate time to an offset into the file and let further read()'s
+	# continue from there.
 	def seek(self, msec):
-		if msec > self.duration * 1000:
+		if msec > int(self.audio.info.length * 1000):
 			print('Too large time seek value %d' % msec)
 			return
-		offset = self.time_to_offset(msec)
-		#print('seek(%d)' % offset)
-		self.file.seek(offset)
+		self.file.seek(self.time_to_offset(msec))
 
