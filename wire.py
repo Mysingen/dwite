@@ -162,11 +162,11 @@ class Wire(Thread):
 					continue
 
 				if len(events[1]) > 0:
-					# it is conceivable that payload was assigned at a time
-					# when the socket was not writable. in such cases we do
-					# not wait for it to become writable and just skip to
-					# receiving instead. in this case the payload will remain
-					# for another round in the event loop.
+					# it is conceivable that outgoing payload was assigned at
+					# a time when the socket was not writable. we do not wait
+					# for it to become writable and just skip to receiving
+					# instead. in this case the payload still remains. send it
+					# now.
 					if payload:
 						self._send(payload)
 						payload = None
