@@ -125,8 +125,11 @@ class Streamer(Thread):
 						traceback.print_exc()
 						self.stop()
 
+					if len(in_data) == 0:
+						continue
+
 					if in_data.startswith('GET '):
-						out_data = self.handle_http_get(in_data)
+						out_data = self.handle_http_get(in_data.decode('utf-8'))
 						out_left = len(out_data)
 						if out_left > 0:
 							selected[1] = [self.socket]

@@ -341,8 +341,8 @@ class Strm(Command):
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
 		if self.operation == Strm.OP_START:
-			s = str('GET %s?seek=%s HTTP/1.0\r\n'
-			        % (self.resource, self.seek))
+			s = 'GET %s?seek=%s HTTP/1.0\r\n' % (self.resource, self.seek)
+			s = s.encode('utf-8')
 			params = tmp + struct.pack('%ds' % len(s), s)
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
 			#if len(params) % 2 != 0:
