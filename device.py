@@ -338,9 +338,8 @@ class Classic(Device):
 							self.menu.ticker(curry=True)
 						else:
 							prev = self.player.playing.item.prev()
-							if prev:
-								while not self.player.play(prev):
-									next = next.prev()
+							while prev and not self.player.play(prev):
+								prev = prev.prev()
 							if prev:
 								(guid, render) = self.player.ticker()
 							else:

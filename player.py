@@ -13,7 +13,7 @@ import time
 from protocol import(Strm, StrmStartMpeg, StrmStartFlac, StrmStop, StrmFlush,
                      StrmSkip, Stat, StrmPause, StrmUnpause)
 from render   import NowPlayingRender
-from menu     import CmAudio
+from menu     import CmAudio, Link
 
 class Player:
 	guid        = None # used when telling the device how to present itself
@@ -36,12 +36,19 @@ class Player:
 		return 10 # I'm just guessing
 	
 	def play(self, item, seek=0):
+		link = None
+		if isinstance(item, Link):
+			link = item
+			item = item.linkee
 		if not isinstance(item, CmAudio):
 			return False
 
 		# always send stop command before initiating a new stream.
 		self.stop()
-		self.playing = NowPlaying(item, item.duration, seek)
+		if link:
+			self.playing = NowPlaying(link, item.duration, seek)
+		else:
+			self.playing = NowPlaying(item, item.duration, seek)
 		if item.format == 'mp3':
 			Cls = StrmStartMpeg
 		elif item.format == 'flac':
@@ -53,18 +60,7 @@ class Player:
 		return True
 
 	def jump(self, position):
-		item = self.playing.item
-		self.wire.send(StrmStop().serialize())
-		if item.format == 'mp3':
-			Cls = StrmStartMpeg
-		elif item.format == 'flac':
-			Cls = StrmStartFlac
-		strm = Cls(item.cm.stream_ip, item.cm.stream_port, item.guid, position)
-		strm.in_threshold = self.get_in_threshold(item.size)
-		time.sleep(0.1) # necessary to make sure the device doesn't get confused
-		self.wire.send(strm.serialize())
-		self.playing.start    = position
-		self.playing.progress = 0
+		self.play(self.playing.item, position)
 
 	def duration(self):
 		return self.playing.duration
@@ -131,7 +127,7 @@ class Player:
 	def handle_stat(self, stat):
 		if not isinstance(stat, Stat):
 			raise Exception('Invalid Player.handle_stat(stat): %s' % str(stat))
-		print(stat.log(level=1))
+		#print(stat.log(level=1))
 		if stat.event == 'STMt':
 			# SBS sources calls this the "timer" event. it seems to mean that
 			# the device has a periodic timeout going, because the STMt is sent

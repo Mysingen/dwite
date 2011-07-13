@@ -10,6 +10,7 @@ import os
 import os.path
 import traceback
 import sys
+import random
 
 import protocol
 
@@ -57,6 +58,7 @@ class Tree:
 			return None
 		try:
 			index = self.parent.children.index(self) + 1
+			index %= len(self.parent.children)
 			return self.parent.children[index]
 		except:
 			return None
@@ -66,6 +68,7 @@ class Tree:
 			return None
 		try:
 			index = self.parent.children.index(self) - 1
+			index %= len(self.parent.children)
 			return self.parent.children[index]
 		except:
 			return None
@@ -75,7 +78,7 @@ class Tree:
 			if other.parent.guid == self.guid:
 				return True
 			other = other.parent
-			
+
 class Waiting(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, u'<WAITING>', u'<WAITING>', parent)
@@ -112,7 +115,6 @@ class CmAudio(CmFile):
 
 	def __str__(self):
 		return 'CmAudio %s %s' % (self.guid, self.label)
-	
 
 class CmDir(CmFile):
 	children = None
@@ -163,16 +165,27 @@ class Empty(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, u'<EMPTY>', u'<EMPTY>', parent)
 
+class Link(Tree):
+	linkee = None # Tree object
+
+	def __init__(self, linkee, parent):
+		assert isinstance(linkee, Tree)
+		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
+		Tree.__init__(self, guid, linkee.label, parent)
+		self.linkee = linkee
+
 class Playlist(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, u'Playlist', u'Playlist', parent)
 		self.children = [Empty(self)]
 
 	def add(self, item):
+		if not isinstance(item, CmAudio):
+			return
 		print('Playlist add %s' % item)
 		if isinstance(self.children[0], Empty):
 			self.children = []
-		self.children.append(item)
+		self.children.append(Link(item, self))
 
 	def remove(self, item):
 		print('Playlist remove %s' % item)
