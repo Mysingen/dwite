@@ -52,7 +52,7 @@ class ID:
 # JSON message:   exactly like device message.
 
 
-class Message:
+class Message(object):
 	head = None # string
 
 class Helo(Message):
@@ -213,7 +213,7 @@ class Dsco(Message):
 
 ### COMMANDS ###################################################################
 
-class Command:
+class Command(object):
 	def serialize(self):
 		raise Exception, 'All Command subclasses must implement serialize()'
 	
@@ -661,32 +661,43 @@ class Hail(JsonMessage):
 # used by device manager to ask content manager for a listing of the contents
 # of some item by GUID. use Listing to reply.
 class Ls(JsonMessage):
-	guid = None
+	guid      = None
+	recursive = False
+	seqn      = 0
 
-	def __init__(self, guid):
-		self.guid = guid
+	def __init__(self, guid, recursive=False, seqn=0):
+		assert type(seqn) == int
+		self.guid      = guid
+		self.recursive = recursive
+		self.seqn      = seqn
 
 	def __str__(self):
-		return 'Ls(%s)' % self.guid
+		return 'Ls(%s, %s, %i)' % (self.guid,unicode(self.recursive),self.seqn)
 	
 	def dump(self):
-		return json.dumps(['Ls', {'guid': self.guid}])
+		return json.dumps(['Ls', {'guid'     :self.guid,
+		                          'recursive':self.recursive,
+		                          'seqn'     :self.seqn}])
 
 # used to list the contents of a content manager item by GUID.
 class Listing(JsonMessage):
 	guid    = None
 	listing = None
+	seqn    = 0
 
-	def __init__(self, guid, listing):
+	def __init__(self, guid, listing, seqn=0):
+		assert type(seqn) == int
 		self.guid    = guid
 		self.listing = listing
+		self.seqn    = seqn
 
 	def __str__(self):
-		return 'Listing(%s): %s' % (self.guid, self.listing)
+		return 'Listing(%s, %i): %s' % (self.guid, self.seqn, self.listing)
 	
 	def dump(self):
 		return json.dumps(['Listing', {'guid'   :self.guid,
-		                               'listing':self.listing}])
+		                               'listing':self.listing,
+		                               'seqn'   :self.seqn}])
 
 # used by content managers to send available search terms to the device
 # manager. there is no reply message class.
@@ -714,7 +725,7 @@ def parse_json(data):
 	obj  = json.loads(data)
 	head = obj[0]
 	body = obj[1]
-
+	
 	if head == 'Hail':
 		return Hail(**body)
 	

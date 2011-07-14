@@ -6,22 +6,24 @@
 
 import traceback
 import sys
+import random
 
 from threading import Thread
 from Queue     import Queue
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, Listing, Terms, Dsco, Ping,
-                      StrmStatus)
+                      StrmStatus, Ls)
 from display   import Display, TRANSITION
 from tactile   import IR
-from menu      import Menu
+from menu      import Menu, CmAudio, CmDir
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
 from volume    import Volume
 from watchdog  import Watchdog
+from cm        import ContentManager
 
 # private message classes. only used to implement public API's
 class AddCM:
@@ -40,7 +42,7 @@ class Device(Thread):
 	queue    = None  # let other threads post events here
 	alive    = True  # controls the main loop
 	sb_wire  = None  # must have a wire to send actual commands to the device
-	cm       = None  # content manager
+	cm_seqns = {}    # integer:(CM, JsonMessage, handler)
 	menu     = None  # all devices must have a menu system
 	guid     = None  # string. uniqely identifies the device. usualy MAC addr.
 	player   = None
@@ -63,8 +65,6 @@ class Device(Thread):
 	
 	def stop(self):
 		self.sb_wire.stop()
-		if self.cm:
-			self.cm.stop()
 		self.alive = False
 
 	def add_cm(self, cm):
@@ -72,6 +72,13 @@ class Device(Thread):
 	
 	def rem_cm(self, cm):
 		self.queue.put(RemCM(cm))
+
+	def make_seqn(self):
+		while True:
+			seqn = random.randint(1, 1000000)
+			if seqn not in self.cm_seqns:
+				return seqn
+			
 
 def init_acceleration_maps():
 	maps    = {}
@@ -204,16 +211,23 @@ class Classic(Device):
 					self.menu.rem_cm(msg.cm)
 
 				if isinstance(msg, Listing):
-					print 'Listing %s' % msg.guid
-					parent = self.menu.focused().parent
-					if parent.guid == msg.guid:
-						parent.add(msg.listing)
-						# redraw screen in case it was showing '<EMPTY>'
-						(guid, render) = self.menu.ticker(curry=True)
-						self.display.canvas.clear()
-						render.tick(self.display.canvas)
-						self.display.show(TRANSITION.NONE)
-						continue
+					print 'Listing %s, %i' % (msg.guid, msg.seqn)
+					if msg.seqn == 0:
+						parent = self.menu.focused().parent
+						if parent.guid == msg.guid:
+							parent.add(msg.listing)
+							# redraw screen in case it was showing '<EMPTY>'
+							(guid, render) = self.menu.ticker(curry=True)
+							self.display.canvas.clear()
+							render.tick(self.display.canvas)
+							self.display.show(TRANSITION.NONE)
+							continue
+					else:
+						if msg.seqn not in self.cm_seqns:
+							continue
+						(cm, m, f) = self.cm_seqns[msg.seqn]
+						del self.cm_seqns[msg.seqn]
+						f(self, cm, m, msg)
 
 				if isinstance(msg, Terms):
 					print('got terms')
@@ -273,8 +287,26 @@ class Classic(Device):
 							self.menu.playlist.remove(item)
 							(guid, render) = self.menu.ticker(curry=True)
 							#transition = TRANSITION.SCROLL_UP
-						else:
+						elif isinstance(item, CmAudio):
 							self.menu.playlist.add(item)
+						elif isinstance(item, CmDir):
+							# ask CM for a recursive listing of the directory
+							# and remember the sequence number of the message
+							# so that special handling can be applied to the
+							# reply from CM.
+							seqn = self.make_seqn()
+							ls = Ls(item.guid, True, seqn)
+							print unicode(ls)
+							def handle_add_r(self, cm, msg, response):
+								assert type(self)     == Classic
+								assert type(cm)       == ContentManager
+								assert type(msg)      == Ls
+								assert type(response) == Listing
+								for l in response.listing:
+									item = self.menu.make_item(cm, l)
+									self.menu.playlist.add(item)
+							self.cm_seqns[seqn] = (item.cm, ls, handle_add_r)
+							item.cm.wire.send(ls.serialize())
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()

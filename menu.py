@@ -182,7 +182,7 @@ class Playlist(Tree):
 	def add(self, item):
 		if not isinstance(item, CmAudio):
 			return
-		print('Playlist add %s' % item)
+		print('Playlist add %s' % unicode(item))
 		if isinstance(self.children[0], Empty):
 			self.children = []
 		self.children.append(Link(item, self))
@@ -521,4 +521,22 @@ class Menu:
 			# item has disappeared. e.g. when an item is removed from playlist
 			self.current = len(self.cwd.children) - 1
 		return self.cwd.children[self.current]
+
+	# create an item based on dictionary values found in 'obj'. the new item
+	# is not parented!
+	def make_item(self, cm, obj):
+		guid  = obj['guid']
+		label = obj['label']
+		kind  = obj['kind']
+
+		if kind == 'dir':
+			return CmDir(guid, label, None, cm)
+
+		if kind == 'file':
+			return CmFile(guid, label, None, cm)
+
+		if kind in ['mp3', 'flac']:
+			size     = obj['size']
+			duration = obj['duration']
+			return CmAudio(guid, label, size, duration, kind, None, cm)
 

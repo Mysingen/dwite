@@ -38,8 +38,8 @@ class FileSystem(Backend):
 
 	def handle(self, msg):
 		if isinstance(msg, protocol.Ls):
-			payload = self._get_children(msg.guid)
-			self.out_queue.put(protocol.Listing(msg.guid, payload))
+			payload = self._get_children(msg.guid, msg.recursive)
+			self.out_queue.put(protocol.Listing(msg.guid, payload, msg.seqn))
 			return
 		raise Exception('Unhandled message: %s' % str(msg))
 	
@@ -93,7 +93,7 @@ class FileSystem(Backend):
 		print('UNKNOWN MAGIC (%s): %s' % (path, m))
 		return (None, None, None)
 	
-	def _get_children(self, guid, verbose=False):
+	def _get_children(self, guid, recursive, verbose=False):
 		children = []
 		if guid == '/':
 			guid = ''
@@ -105,6 +105,8 @@ class FileSystem(Backend):
 			child_guid = os.path.join(guid, l)
 			if os.path.isdir(path):
 				children.append({'guid':child_guid, 'label':l, 'kind':'dir'})
+				if recursive:
+					children.extend(self._get_children(child_guid,True,verbose))
 			elif os.path.isfile(path):
 				(format, title, duration) = self._classify_file(path)
 				if format:

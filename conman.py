@@ -82,20 +82,19 @@ class Conman(Thread):
 				if self.watchdog.wakeup():
 					self.jsonwire.send(protocol.Bark().serialize())
 				elif self.watchdog.expired():
-					print 'expired'
+					print 'Conman expired'
 					self.stop()
+					#self.watchdog.reset()
 				continue
 			except Exception, e:
 				print 'VERY BAD!'
 				print str(e)
 
 			if isinstance(msg, protocol.Ls):
-				print 'Ls'
 				self.backend.in_queue.put(msg)
 				continue
 			
 			if isinstance(msg, protocol.Listing):
-				print 'Listing()'
 				self.jsonwire.send(msg.serialize())
 				continue
 			
