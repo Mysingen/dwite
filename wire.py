@@ -321,22 +321,5 @@ class JsonWire(Wire):
 		if not message:
 			print('WARNING: jsonwire parse_body() produced NOTHING!')
 			return
-			
-		elif isinstance(message, protocol.Hail):
-			self.out_queue.put(message)
-			
-		elif isinstance(message, protocol.Listing):
-			self.out_queue.put(message)
-			
-		elif isinstance(message, protocol.Terms):
-			self.out_queue.put(message)
-
-		elif isinstance(message, protocol.Ls):
-			self.out_queue.put(message)
-
-		elif isinstance(message, protocol.Bark):
-			self.out_queue.put(message)
-
-		else:
-			print('%s: Not handled' % message)
+		self.out_queue.put(message)
 

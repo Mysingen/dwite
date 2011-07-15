@@ -357,6 +357,8 @@ class StrmStart(Strm):
 	operation = Strm.OP_START
 
 	def __init__(self, ip, port, resource, seek=0, background=False):
+		assert type(ip)   == int
+		assert type(port) == int
 		print('%d %d %s %d' % (ip, port, resource, seek))
 		self.server_ip     = ip
 		self.server_port   = port
@@ -624,122 +626,147 @@ class Ping(Command):
 
 
 
+
 # JSON based messages. Note that there is no Command class for JSON messaging.
 # all communication is done with a common tree of message classes.
 class JsonMessage(Message):
 	head = 'JSON'
+	guid = 0 # integer to tie results to method calls
+
+	def __init__(self, guid):
+		assert type(guid) == int
+		if guid < 0:
+			guid = make_json_guid()
+			json_guids[guid] = self
+		self.guid = guid
 
 	def dump(self):
-		print('ERROR: Your JsonMessage subclass must implement dump()')
-		sys.exit(1)
+		return { 'guid': self.guid }
 
 	def serialize(self):
-		data   = self.dump()
+		data   = json.dumps(self.dump())
 		length = struct.pack('<L', socket.htonl(len(data)))
 		return self.head + length + data
 
+class JsonCall(JsonMessage):
+	method = None # unicode string
+	params = None # JSON compatible dictionary
+
+	def __init__(self, guid, method, params):
+		JsonMessage.__init__(self, guid)
+		assert type(method) == unicode
+		assert type(params) == dict
+		self.method = method
+		self.params = params
+
+	def __str__(self):
+		return unicode(self.dump())
+
+	def dump(self):
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': self.method,
+			'params': self.params
+		})
+		return r
+
+class Bark(JsonCall):
+
+	def __init__(self, guid):
+		JsonCall.__init__(self, guid, u'bark', {})
+
 # this command is used by a content manager to hail a device manager. There
 # is no reply message class.
-class Hail(JsonMessage):
-	label       = None
-	stream_ip   = None # the ip address of the device manager's streamer
-	stream_port = None # the port of the device manager's streamer
+class Hail(JsonCall):
 
-	def __init__(self, label, stream_ip, stream_port):
+	def __init__(self, guid, label, stream_ip, stream_port):
+		assert type(label)       == unicode
+		assert type(stream_ip)   == int
+		assert type(stream_port) == int
 		self.label       = label
 		self.stream_ip   = stream_ip
 		self.stream_port = stream_port
-
-	def __str__(self):
-		return 'Hail(%s %d:%d)' % (self.label, self.stream_ip, self.stream_port)
-
-	def dump(self):
-		return json.dumps(['Hail', {'label'      :self.label,
-		                            'stream_ip'  :self.stream_ip,
-		                            'stream_port':self.stream_port}])
+		params = {
+			'label'      : label,
+			'stream_ip'  : stream_ip,
+			'stream_port': stream_port
+		}
+		JsonCall.__init__(self, guid, u'hail', params)
 
 # used by device manager to ask content manager for a listing of the contents
-# of some item by GUID. use Listing to reply.
-class Ls(JsonMessage):
-	guid      = None
-	recursive = False
-	seqn      = 0
+# of some item by GUID. use JsonResult to reply.
+class Ls(JsonCall):
 
-	def __init__(self, guid, recursive=False, seqn=0):
-		assert type(seqn) == int
-		self.guid      = guid
+	def __init__(self, guid, item, recursive):
+		assert type(item)      == unicode
+		assert type(recursive) == bool
+		self.item      = item
 		self.recursive = recursive
-		self.seqn      = seqn
-
-	def __str__(self):
-		return 'Ls(%s, %s, %i)' % (self.guid,unicode(self.recursive),self.seqn)
-	
-	def dump(self):
-		return json.dumps(['Ls', {'guid'     :self.guid,
-		                          'recursive':self.recursive,
-		                          'seqn'     :self.seqn}])
-
-# used to list the contents of a content manager item by GUID.
-class Listing(JsonMessage):
-	guid    = None
-	listing = None
-	seqn    = 0
-
-	def __init__(self, guid, listing, seqn=0):
-		assert type(seqn) == int
-		self.guid    = guid
-		self.listing = listing
-		self.seqn    = seqn
-
-	def __str__(self):
-		return 'Listing(%s, %i): %s' % (self.guid, self.seqn, self.listing)
-	
-	def dump(self):
-		return json.dumps(['Listing', {'guid'   :self.guid,
-		                               'listing':self.listing,
-		                               'seqn'   :self.seqn}])
+		params = {
+			'item'     : item,
+			'recursive': recursive
+		}
+		JsonCall.__init__(self, guid, u'ls', params)
 
 # used by content managers to send available search terms to the device
 # manager. there is no reply message class.
-class Terms(JsonMessage):
-	terms = None
+class Terms(JsonCall):
 
-	def __init__(self, terms):
+	def __init__(self, guid, terms):
+		assert type(terms) == list
 		self.terms = terms
+		JsonCall.__init__(self, guid, u'terms', { 'terms': terms })
 
-	def __str__(self):
-		return 'Terms(): %s' % self.terms
+class JsonResult(JsonMessage):
+
+	def __init__(self, guid, errno, errstr, chunk, more, result):
+		JsonMessage.__init__(self, guid)
+		assert type(errno)  == int
+		assert type(errstr) == unicode
+		assert type(chunk)  == int
+		assert type(more)   == bool
+		# no type checking done on result. can be any JSON compatible object.
+		self.errno  = errno
+		self.errstr = errstr
+		self.chunk  = chunk
+		self.more   = more
+		self.result = result
 	
 	def dump(self):
-		return json.dumps(['Terms', {'terms': self.terms}])
-
-class Bark(JsonMessage):
-	
-	def __str__(self):
-		return 'Bark'
-	
-	def dump(self):
-		return json.dumps(['Bark', {}])
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': u'result',
+			'errno' : self.errno,
+			'errstr': self.errstr,
+			'chunk' : self.chunk,
+			'more'  : self.more,
+			'result': self.result
+		})
+		return r
 
 def parse_json(data):
-	obj  = json.loads(data)
-	head = obj[0]
-	body = obj[1]
-	
-	if head == 'Hail':
-		return Hail(**body)
-	
-	if head == 'Ls':
-		return Ls(**body)
-	
-	if head == 'Listing':
-		return Listing(**body)
+	body = json.loads(data)
+	method = body['method']
+	guid = body['guid']
 
-	if head == 'Terms':
-		return Terms(**body)
+	if method == u'result':
+		del body['method']
+		return JsonResult(**body)
+	
+	else:
+		params = body['params']	
 
-	if head == 'Bark':
-		return Bark()
+		if method == u'hail':
+			return Hail(guid, **params)
+	
+		if method == u'ls':
+			return Ls(guid, **params)
+	
+		if method == u'terms':
+			return Terms(guid, **params)
+
+		if method == u'bark':
+			return Bark(guid, **params)
 
 	return None
 

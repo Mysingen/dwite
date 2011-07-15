@@ -65,7 +65,7 @@ class Conman(Thread):
 
 		# ready to hail the DM with all necessary info about conman subsystems
 		print('Conman hails')
-		hail = protocol.Hail(self.backend.name, 0, streamer_port)
+		hail = protocol.Hail(0, self.backend.name, 0, streamer_port)
 		self.jsonwire.send(hail.serialize())
 
 		while self.state != STOPPED:
@@ -80,7 +80,7 @@ class Conman(Thread):
 				self.watchdog.reset()
 			except Empty:
 				if self.watchdog.wakeup():
-					self.jsonwire.send(protocol.Bark().serialize())
+					self.jsonwire.send(protocol.Bark(0).serialize())
 				elif self.watchdog.expired():
 					print 'Conman expired'
 					self.stop()
@@ -94,7 +94,7 @@ class Conman(Thread):
 				self.backend.in_queue.put(msg)
 				continue
 			
-			if isinstance(msg, protocol.Listing):
+			if isinstance(msg, protocol.JsonResult):
 				self.jsonwire.send(msg.serialize())
 				continue
 			

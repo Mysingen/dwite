@@ -40,7 +40,8 @@ def make_dm(dm_wire, queue, msg):
 
 def make_cm(cm_wire, in_queue, out_queue, msg):
 	cm = ContentManager(
-		msg.label, cm_wire, msg.stream_ip, msg.stream_port, in_queue, out_queue
+		msg.label, cm_wire, msg.stream_ip, msg.stream_port, in_queue,
+		out_queue
 	)
 	cm.start()
 	return cm

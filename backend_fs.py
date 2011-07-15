@@ -38,8 +38,10 @@ class FileSystem(Backend):
 
 	def handle(self, msg):
 		if isinstance(msg, protocol.Ls):
-			payload = self._get_children(msg.guid, msg.recursive)
-			self.out_queue.put(protocol.Listing(msg.guid, payload, msg.seqn))
+			payload = self._get_children(msg.item, msg.recursive)
+			self.out_queue.put(
+				protocol.JsonResult(msg.guid, 0, u'', 0, False, payload)
+			)
 			return
 		raise Exception('Unhandled message: %s' % str(msg))
 	

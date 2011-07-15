@@ -129,7 +129,9 @@ class CmDir(CmFile):
 
 	def ls(self):
 		self.children = [Waiting(self)]
-		self.cm.wire.send(protocol.Ls(self.guid).serialize())
+		ls = protocol.Ls(self.cm.make_msg_guid(), self.guid, False)
+		self.cm.set_msg_handler(ls, None)
+		self.cm.wire.send(ls.serialize())
 		# results will be added asynchronously
 		return self.children
 
