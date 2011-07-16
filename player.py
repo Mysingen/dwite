@@ -43,6 +43,9 @@ class Player:
 		if not isinstance(item, CmAudio):
 			return False
 
+		if seek > item.duration:
+			return False
+
 		# always send stop command before initiating a new stream.
 		self.stop()
 		if link:
@@ -136,13 +139,13 @@ class Player:
 			next = self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
 			if next:
 				self.stop()
-				print 'STMt next = %s' % str(next)
+				print 'STMt next = %s' % unicode(next)
 			return next
 		if stat.event == 'STMo':
 			# find next item to play, if any
 			try:
 				next = self.playing.item.next()
-				print 'STMo next = %s' % str(next)
+				print 'STMo next = %s' % unicode(next)
 			except:
 				next = None
 				print 'STMo next = None'

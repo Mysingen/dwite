@@ -6,16 +6,17 @@
 
 import traceback
 import sys
+import re
 
 from threading import Thread
 from Queue     import Queue
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
-                      StrmStatus, Ls)
+                      StrmStatus, Ls, Play, GetItem)
 from display   import Display, TRANSITION
 from tactile   import IR
-from menu      import Menu, CmAudio, CmDir
+from menu      import Menu, CmAudio, CmDir, make_item
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
@@ -50,7 +51,7 @@ class Device(Thread):
 	playlist = None
 	volume   = None  # Volume object
 	watchdog = None
-	cms      = []
+	cms      = {}
 
 	def __init__(self, sb_wire, queue, guid, name='Device'):
 		print 'Device __init__'
@@ -200,26 +201,20 @@ class Classic(Device):
 				continue
 
 			try:
-				if isinstance(msg, Helo):
-					# always draw on screen when a device (re)connects
-					(guid, render) = self.menu.ticker(curry=True)
-					self.display.canvas.clear()
-					render.tick(self.display.canvas)
-					self.display.show(TRANSITION.NONE)
-					continue
+				#### MESSAGES FROM PROGRAMS ####
 
 				if isinstance(msg, AddCM):
-					self.cms.append(msg.cm)
+					self.cms[msg.cm.label] = msg.cm
 					self.menu.add_cm(msg.cm)
 					continue
 
 				if isinstance(msg, RemCM):
-					self.cms.remove(msg.cm)
+					del self.cms[msg.cm.label]
 					self.menu.rem_cm(msg.cm)
 
 				if isinstance(msg, JsonResult):
 					print msg
-					for cm in self.cms:
+					for cm in self.cms.values():
 						if msg.guid in cm.msg_guids:
 							(orig_msg, handler) = cm.get_msg_handler(msg)
 							cm.rem_msg_handler(msg)
@@ -233,6 +228,85 @@ class Classic(Device):
 					print('got terms')
 					self.menu.searcher.add_dict_terms(msg.terms)
 					continue						
+
+				if isinstance(msg, Play):
+					print unicode(msg)
+					match = re.match(
+						'(?P<scheme>^.+?)://(?P<cm>.+?)/(?P<guid>.+)', msg.url
+					)
+					if not match:
+						errno  = 1
+						errstr = (u'Invalid URL. Required format: "cm://<cm '
+						       +  'label>/<guid>"')
+						result = JsonResult(
+							msg.guid, errno, errstr, 0, False, False
+						)
+						msg.wire._send(result.serialize())
+						msg.wire.stop()
+						continue
+					scheme = match.group('scheme')
+					label  = match.group('cm')
+					guid   = match.group('guid')
+					if scheme != u'cm':
+						errno  = 2
+						errstr = u'Invalid URL scheme: %s' % msg.url
+						result = JsonResult(
+							msg.guid, errno, errstr, 0, False, False
+						)
+						msg.wire._send(result.serialize())
+						msg.wire.stop()
+						continue
+					if label not in self.cms:
+						errno  = 3
+						errstr = u'No such CM: %s' % label
+						result = JsonResult(
+							msg.guid, errno, errstr, 0, False, False
+						)
+						msg.wire._send(result.serialize())
+						msg.wire.stop()
+						continue
+					cm = self.cms[label]
+					get = GetItem(cm.make_msg_guid(), guid)
+
+					def handle_get_item(self, cm, msg, orig_msg):
+						if msg.errno:
+							orig_msg.wire._send(msg.serialize())
+							orig_msg.wire.stop()
+							return
+						item = make_item(cm, msg.result)
+						if not self.player.play(item, orig_msg.seek):
+							errno  = 4
+							errstr = u'Unplayable item'
+							result = JsonResult(
+								orig_msg.guid, errno, errstr, 0, False, False
+							)
+							orig_msg.wire._send(result.serialize())
+							orig_msg.wire.stop()
+							return
+						if item == self.menu.focused():
+							(guid, render) = self.player.ticker()
+							self.display.canvas.clear()
+							render.tick(self.display.canvas)
+							self.display.show(TRANSITION.NONE)
+							render.min_timeout(325)
+						result = JsonResult(
+							orig_msg.guid, 0, u'EOK', 0, False, True
+						)
+						orig_msg.wire._send(result.serialize())
+						orig_msg.wire.stop()
+
+					cm.msg_guids[get.guid] = (msg, handle_get_item)
+					cm.wire.send(get.serialize())
+
+				#### MESSAGES FROM THE DEVICE ####
+
+				if isinstance(msg, Helo):
+					# always draw on screen when a device (re)connects
+					(guid, render) = self.menu.ticker(curry=True)
+					self.display.canvas.clear()
+					render.tick(self.display.canvas)
+					self.display.show(TRANSITION.NONE)
+					continue
 
 				if isinstance(msg, Stat):
 					next = self.player.handle_stat(msg)
@@ -295,7 +369,7 @@ class Classic(Device):
 								assert type(cm)       == ContentManager
 								assert type(response) == JsonResult
 								for r in response.result:
-									item = self.menu.make_item(cm, r)
+									item = make_item(cm, r)
 									self.menu.playlist.add(item)
 							# ask CM for a recursive listing of the directory
 							# and remember the sequence number of the message
@@ -305,6 +379,7 @@ class Classic(Device):
 							print unicode(ls)
 							item.cm.msg_guids[ls.guid] = (ls, handle_ls_r)
 							item.cm.wire.send(ls.serialize())
+
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()
@@ -405,7 +480,6 @@ class Classic(Device):
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[abs(msg.code)])
 
-					#print(msg)
 					if render:
 						self.display.canvas.clear()
 						render.tick(self.display.canvas)

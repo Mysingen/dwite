@@ -101,5 +101,8 @@ class Conman(Thread):
 			if isinstance(msg, protocol.Bark):
 				continue
 
+			if isinstance(msg, protocol.GetItem):
+				self.backend.in_queue.put(msg)
+
 		print('Conman is dead')
 

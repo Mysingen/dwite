@@ -631,7 +631,8 @@ class Ping(Command):
 # all communication is done with a common tree of message classes.
 class JsonMessage(Message):
 	head = 'JSON'
-	guid = 0 # integer to tie results to method calls
+	guid = 0    # integer to tie results to method calls
+	wire = None # back reference so that replies can easily be sent back
 
 	def __init__(self, guid):
 		assert type(guid) == int
@@ -639,6 +640,9 @@ class JsonMessage(Message):
 			guid = make_json_guid()
 			json_guids[guid] = self
 		self.guid = guid
+
+	def __str__(self):
+		return unicode(self.dump())
 
 	def dump(self):
 		return { 'guid': self.guid }
@@ -658,9 +662,6 @@ class JsonCall(JsonMessage):
 		assert type(params) == dict
 		self.method = method
 		self.params = params
-
-	def __str__(self):
-		return unicode(self.dump())
 
 	def __getattr__(self, name):
 		if name in self.params:
@@ -717,6 +718,34 @@ class Terms(JsonCall):
 		assert type(terms) == list
 		JsonCall.__init__(self, guid, u'terms', { 'terms': terms })
 
+class Play(JsonCall):
+
+	def __init__(
+		self, guid, url, seek=0, kind=None, pretty=None, size=None,
+		duration=None
+	):
+		assert type(url)      == unicode
+		assert type(seek)     == int
+		assert (not kind)     or type(kind)     == unicode
+		assert (not pretty)   or type(pretty)   == dict
+		assert (not size)     or type(size)     == int
+		assert (not duration) or type(duration) == int
+		params = {
+			'url'     : url,
+			'seek'    : seek,
+			'kind'    : kind,
+			'pretty'  : pretty,
+			'size'    : size,
+			'duration': duration
+		}
+		JsonCall.__init__(self, guid, u'play', params)
+
+class GetItem(JsonCall):
+
+	def __init__(self, guid, item):
+		assert type(item) == unicode
+		JsonCall.__init__(self, guid, u'get_item', { 'item': item })
+
 class JsonResult(JsonMessage):
 
 	def __init__(self, guid, errno, errstr, chunk, more, result):
@@ -768,6 +797,12 @@ def parse_json(data):
 		if method == u'bark':
 			return Bark(guid, **params)
 
+		if method == u'play':
+			return Play(guid, **params)
+
+		if method == u'get_item':
+			return GetItem(guid, **params)
+
 	return None
 
 
@@ -807,7 +842,7 @@ def parse_header(head):
 		kind = head[0:4]
 		if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP',
 		                'UREQ', 'JSON', 'DSCO']:
-			print('ERROR: unknown header kind %s' % kind)
+			#print('ERROR: unknown header kind %s' % kind)
 			return (None, 0)
 		size = socket.ntohl(struct.unpack('<L', head[4:8])[0])
 		return (kind, size)

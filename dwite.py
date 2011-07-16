@@ -16,7 +16,7 @@ import os
 from Queue    import Queue, Empty
 
 from device   import Classic
-from wire     import SlimWire, JsonWire
+from wire     import SlimWire, JsonWire, UiWire
 from protocol import ID, Helo, Hail
 from cm       import ContentManager
 
@@ -57,10 +57,12 @@ def main():
 	# device and content managers. the device manager is threaded.
 	dm = None
 	cm = None
-	# threaded "wire" objects handle the socket connections with devices and
-	# content managers.
+	# threaded "wire" objects handle the socket connections with devices,
+	# content managers and user interfaces.
+	ui_wire = None
 	dm_wire = None
 	cm_wire = None
+	
 	# the queue is really owned by the DM, but created here so that it can be
 	# passed to everyone else who must post messages to the DM.
 	dm_queue = Queue(100)
@@ -73,16 +75,20 @@ def main():
 		while True:
 			# the wires die when their respective device or content manager
 			# disconnect. simply create new ones if that happens.
+			if not (ui_wire and ui_wire.isAlive()):
+				ui_wire = UiWire('', 3482, dm_queue)
+				ui_wire.start()
 			if not (dm_wire and dm_wire.isAlive()):
-				dm_wire = SlimWire(None, 3483, dm_queue)
+				dm_wire = SlimWire('', 3483, dm_queue)
 				dm_wire.start()
 				wait_dm = True
 			if not (cm_wire and cm_wire.isAlive()):
 				if dm:
 					dm.rem_cm(cm)
-				cm_wire = JsonWire(None, 3484, cm_queue)
+				cm_wire = JsonWire('', 3484, cm_queue)
 				cm_wire.start()
 				wait_cm = True
+
 			# wait for a HELO or Hail message from a device or CM.
 			if wait_dm:
 				try:
@@ -121,6 +127,8 @@ def main():
 		dm.stop()
 	if cm:
 		cm.stop()
+	if ui_wire:
+		ui_wire.stop()
 	if dm_wire:
 		dm_wire.stop()
 	if cm_wire:

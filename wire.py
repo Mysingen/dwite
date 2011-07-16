@@ -47,6 +47,10 @@ class Wire(Thread):
 	                 # messages to whoever instantiated the Wire.
 
 	def __init__(self, host, port, queue, accept=True):
+		assert type(host) in [unicode, str]
+		assert type(port) == int
+		assert isinstance(queue, Queue)
+		assert type(accept) == bool
 		Thread.__init__(self, target=Wire.run, name='Wire')
 		self.label     = 'Wire'
 		self.state     = STARTING
@@ -114,7 +118,7 @@ class Wire(Thread):
 				self.out_queue.put(Connected(self.host, self.port, self))
 				break
 			except Exception, e:
-				#print e
+				print e
 				time.sleep(1) # stop pointless runaway loop
 
 	def run(self):
@@ -321,5 +325,12 @@ class JsonWire(Wire):
 		if not message:
 			print('WARNING: jsonwire parse_body() produced NOTHING!')
 			return
+		message.wire = self
 		self.out_queue.put(message)
 
+class UiWire(JsonWire):
+
+	def __init__(self, host, port, queue, accept=True):
+		JsonWire.__init__(self, host, port, queue, accept=True)
+		self.label = 'UiWire'
+			

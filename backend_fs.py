@@ -6,7 +6,7 @@ import traceback
 
 from magic import Magic
 
-import protocol
+from protocol import Ls, JsonResult, GetItem
 
 from backend import Backend
 
@@ -37,11 +37,17 @@ class FileSystem(Backend):
 		pass
 
 	def handle(self, msg):
-		if isinstance(msg, protocol.Ls):
-			payload = self._get_children(msg.item, msg.recursive)
-			self.out_queue.put(
-				protocol.JsonResult(msg.guid, 0, u'', 0, False, payload)
-			)
+		if isinstance(msg, Ls):
+			result = self._get_children(msg.item, msg.recursive)
+			self.out_queue.put(JsonResult(msg.guid, 0, u'', 0, False, result))
+			return
+		if isinstance(msg, GetItem):
+			item = self._get_item(msg.item)
+			if not item:
+				result = JsonResult(msg.guid, 1, u'No such item', 0, False,None)
+			else:
+				result = JsonResult(msg.guid, 0, u'', 0, False, item)
+			self.out_queue.put(result)
 			return
 		raise Exception('Unhandled message: %s' % str(msg))
 	
@@ -129,6 +135,33 @@ class FileSystem(Backend):
 			else:
 				print('WARNING: Unsupported VFS content: %s' % path)
 		return children
+
+	def _get_item(self, guid):
+		if guid == '/':
+			guid = ''
+		path = os.path.join(self.root_dir, guid)
+		if not os.path.exists(path):
+			return None
+		if os.path.isdir(path):
+			return {'guid': guid, 'label':os.path.basename(path), 'kind':'dir' }
+		elif os.path.isfile(path):
+			(format, title, duration) = self._classify_file(path)
+			if format:
+				return {
+					'guid'    : guid,
+					'label'   : title,
+					'kind'    : format,
+					'size'    : os.path.getsize(path),
+					'duration': duration
+				}
+			else:
+				return {
+					'guid' : guid,
+					'label': os.path.basename(path),
+					'kind' : 'file'
+				}
+		else:
+			print('WARNING: Unsupported VFS content: %s' % path)
 
 	def get_item(self, guid):
 		return Track(os.path.join(self.root_dir, guid))

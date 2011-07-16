@@ -524,21 +524,21 @@ class Menu:
 			self.current = len(self.cwd.children) - 1
 		return self.cwd.children[self.current]
 
-	# create an item based on dictionary values found in 'obj'. the new item
-	# is not parented!
-	def make_item(self, cm, obj):
-		guid  = obj['guid']
-		label = obj['label']
-		kind  = obj['kind']
+# create an item based on dictionary values found in 'obj'. the new item
+# is not parented!
+def make_item(cm, obj):
+	guid  = obj['guid']
+	label = obj['label']
+	kind  = obj['kind']
 
-		if kind == 'dir':
-			return CmDir(guid, label, None, cm)
+	if kind == 'dir':
+		return CmDir(guid, label, None, cm)
 
-		if kind == 'file':
-			return CmFile(guid, label, None, cm)
+	if kind == 'file':
+		return CmFile(guid, label, None, cm)
 
-		if kind in ['mp3', 'flac']:
-			size     = obj['size']
-			duration = obj['duration']
-			return CmAudio(guid, label, size, duration, kind, None, cm)
+	if kind in ['mp3', 'flac']:
+		size     = obj['size']
+		duration = obj['duration']
+		return CmAudio(guid, label, size, duration, kind, None, cm)
 
