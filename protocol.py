@@ -662,6 +662,12 @@ class JsonCall(JsonMessage):
 	def __str__(self):
 		return unicode(self.dump())
 
+	def __getattr__(self, name):
+		if name in self.params:
+			return self.params[name]
+		else:
+			raise AttributeError(name)
+
 	def dump(self):
 		r = JsonMessage.dump(self)
 		r.update({
@@ -683,9 +689,6 @@ class Hail(JsonCall):
 		assert type(label)       == unicode
 		assert type(stream_ip)   == int
 		assert type(stream_port) == int
-		self.label       = label
-		self.stream_ip   = stream_ip
-		self.stream_port = stream_port
 		params = {
 			'label'      : label,
 			'stream_ip'  : stream_ip,
@@ -700,8 +703,6 @@ class Ls(JsonCall):
 	def __init__(self, guid, item, recursive):
 		assert type(item)      == unicode
 		assert type(recursive) == bool
-		self.item      = item
-		self.recursive = recursive
 		params = {
 			'item'     : item,
 			'recursive': recursive
@@ -714,7 +715,6 @@ class Terms(JsonCall):
 
 	def __init__(self, guid, terms):
 		assert type(terms) == list
-		self.terms = terms
 		JsonCall.__init__(self, guid, u'terms', { 'terms': terms })
 
 class JsonResult(JsonMessage):
