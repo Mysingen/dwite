@@ -12,7 +12,7 @@ import traceback
 import time
 import errno
 
-from Queue     import Queue
+from Queue     import Queue, Empty
 from threading import Thread
 from datetime  import datetime, timedelta
 
@@ -23,6 +23,7 @@ STARTING = 1
 RUNNING  = 2
 PAUSED   = 3
 STOPPED  = 4
+STOPPING = 5
 
 class Connected(object):
 	host = None
@@ -33,6 +34,9 @@ class Connected(object):
 		self.host = host
 		self.port = port
 		self.wire = wire
+
+class Stop(object):
+	pass
 
 class Wire(Thread):
 	label     = None
@@ -71,10 +75,16 @@ class Wire(Thread):
 	def state(self, value):
 		if self._state == STOPPED:
 			return
+		if self._state == STOPPING and value != STOPPED:	
+			return
 		self._state = value
 
-	def stop(self):
-		self.state = STOPPED
+	def stop(self, hard=False):
+		if hard:
+			self._state = STOPPED
+		else:
+			self._state = STOPPING
+			self.in_queue.put(Stop())
 
 	def send(self, payload):
 		self.in_queue.put(payload)
@@ -91,15 +101,15 @@ class Wire(Thread):
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
 
-		print('%s waiting for port %d to become available'
-		      % (self.label, self.port))
-		while self.state != STOPPED: # in case someone forces a full teardown.
+		#print('%s waiting for port %d to become available'
+		#      % (self.label, self.port))
+		while self.state not in [STOPPED, STOPPING]:
 			try:
 				self.socket.bind(('', self.port))
 				break
 			except:
 				time.sleep(0.5) # avoid spending 99% CPU time
-		print('%s accepting on %d' % (self.label, self.port))
+		#print('%s accepting on %d' % (self.label, self.port))
 
 		# socket.accept() hangs and you can't abort by hitting CTRL-C on the
 		# command line (because the thread isn't the program main loop that
@@ -107,11 +117,11 @@ class Wire(Thread):
 		# socket to time out and then try again if self.state still permits it.
 		self.socket.listen(1)
 		self.socket.settimeout(0.5)
-		while self.state != STOPPED:
+		while self.state not in [STOPPED, STOPPING]:
 			try:
 				self.socket, address = self.socket.accept()
 				self.socket.setblocking(False)
-				print('%s connected to %s:%d' % (self.label, address,self.port))
+				#print('%s connected to %s:%d' % (self.label, address,self.port))
 				old_queue = self.out_queue
 				self.out_queue = Queue(100)
 				old_queue.put(Connected(address, self.port, self))
@@ -125,7 +135,7 @@ class Wire(Thread):
 			self.socket.close()
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.socket.settimeout(0.5)
-		while self.state != STOPPED:
+		while self.state not in [STOPPED, STOPPING]:
 			try:
 				self.socket.connect((self.host, self.port))
 				self.socket.setblocking(False)
@@ -150,15 +160,23 @@ class Wire(Thread):
 					self._connect()
 
 			payload = None
-			while self.state == RUNNING:
+			while self.state in [RUNNING, STOPPING]:
 				# check first if we have payloads to send on the socket. don't
 				# block on empty queue.
 				if not payload:
 					try:
 						payload = self.in_queue.get(block=False, timeout=None)
-						wlist = [self.socket]
-					except:
+						if type(payload) == Stop:
+							self.state = STOPPED
+							continue
+						else:
+							wlist = [self.socket]
+					except Empty:
 						wlist = []
+					except:
+						traceback.print_exc()
+						self.stop(hard=True)
+						continue
 
 				rlist = [self.socket]
 				xlist = [self.socket]
@@ -191,6 +209,8 @@ class Wire(Thread):
 					# all socket messages start with an 8 byte header that
 					# contains some meta data: message kind and it's size.
 					head = self._recv(8)
+					if not head:
+						continue
 					(kind, size) = protocol.parse_header(head)
 					if not kind:
 						continue
@@ -208,13 +228,17 @@ class Wire(Thread):
 		raise Exception, 'Wire subclasses must implement _handle()'
 
 	def _send(self, data, force=False):
-		if self.state != RUNNING and force == False:
+		if self.state not in [RUNNING, STOPPING] and force == False:
 			print('%s restarting. Dropped %s' % (self.label, data))
 			return
 		left = len(data)
-		while left > 0 and self.state == RUNNING:
+		while left > 0 and self.state in [RUNNING, STOPPING]:
 			try:
 				sent = self.socket.send(data[-left:])
+				if sent == 0:
+					print('Connection broken')
+					self.stop(hard=True)
+					return
 				left = left - sent
 			except socket.error, e:
 				if e[0] == errno.ECONNRESET:
@@ -234,11 +258,15 @@ class Wire(Thread):
 	def _recv(self, size):
 		body = ''
 		left = size
-		while left > 0 and self.state == RUNNING:
+		while left > 0 and self.state in [RUNNING, STOPPING]:
 			amount = min(left, 65536)
 			try:
 				r = None
 				r = self.socket.recv(amount)
+				if r == '':
+					print('Connection broken')
+					self.stop(hard=True)
+					return
 				body = body + r
 				left = left - len(r)
 			except socket.error, e:

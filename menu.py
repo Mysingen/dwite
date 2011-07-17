@@ -18,7 +18,7 @@ from render   import TextRender, SearchRender
 from display  import TRANSITION
 from tactile  import IR
 
-class Tree:
+class Tree(object):
 	guid     = None # string used when querying the CM for stats, listings, etc
 	label    = None # string: the item's pretty printed identity
 	parent   = None # another Tree node
@@ -84,6 +84,10 @@ class Waiting(Tree):
 	def __init__(self, parent):
 		Tree.__init__(self, u'<WAITING>', u'<WAITING>', parent)
 
+class Error(Tree):
+	def __init__(self, message, parent):
+		Tree.__init__(self, u'<ERROR>', message, parent)
+
 class CmFile(Tree):
 	cm = None
 
@@ -130,10 +134,6 @@ class CmDir(CmFile):
 
 	def ls(self):
 		self.children = [Waiting(self)]
-		ls = protocol.Ls(self.cm.make_msg_guid(), self.guid, False)
-		self.cm.set_msg_handler(ls, None)
-		self.cm.wire.send(ls.serialize())
-		# results will be added asynchronously
 		return self.children
 
 	def add(self, listing):
@@ -185,7 +185,7 @@ class Playlist(Tree):
 	def add(self, item):
 		if not isinstance(item, CmAudio):
 			return
-		print('Playlist add %s' % unicode(item))
+		#print('Playlist add %s' % unicode(item))
 		if isinstance(self.children[0], Empty):
 			self.children = []
 		self.children.append(Link(item, self))
@@ -408,13 +408,13 @@ class Root(Tree):
 
 	def add(self, item):
 		if isinstance(item, Tree):
-			print('Root add %s' % item)
+			#print('Root add %s' % item)
 			self.children.append(item)
 		else:
 			print('Will not add non-Tree object to Root: %s' % item)
 
 	def remove(self, item):
-		print('Root remove %s' % item)
+		#print('Root remove %s' % item)
 		try:
 			index = self.children.index(item)
 			del self.children[index]
@@ -459,7 +459,7 @@ class Menu:
 		elif self.focused().ls():
 			self.cwd     = self.focused()
 			self.current = 0
-			print 'enter %s' % str(self.cwd.guid)
+			#print 'enter %s' % str(self.cwd.guid)
 			transition = TRANSITION.SCROLL_LEFT
 
 		else:
@@ -477,7 +477,7 @@ class Menu:
 		if self.cwd.parent:
 			self.current = self.cwd.parent.children.index(self.cwd)
 			self.cwd     = self.cwd.parent
-			print 'return %s' % str(self.cwd.guid)
+			#print 'return %s' % str(self.cwd.guid)
 			transition = TRANSITION.SCROLL_RIGHT
 		else:
 			transition = TRANSITION.BOUNCE_RIGHT

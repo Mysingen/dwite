@@ -20,7 +20,7 @@ class Backend(Thread):
 		self.state = STOPPED
 
 	def run(self):
-		print('starting %s' % current_thread().name)
+		#print('starting %s' % current_thread().name)
 		self.on_start()
 		while self.state != STOPPED:
 			try:
@@ -33,7 +33,7 @@ class Backend(Thread):
 				traceback.print_exc()
 				break
 		self.on_stop()
-		print('%s is dead' % current_thread().name)
+		#print('%s is dead' % current_thread().name)
 
 	def on_start(self):
 		raise Exception('Your backend must implement on_start()')

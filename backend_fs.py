@@ -6,7 +6,7 @@ import traceback
 
 from magic import Magic
 
-from protocol import Ls, JsonResult, GetItem
+from protocol import Ls, GetItem
 
 from backend import Backend
 
@@ -39,15 +39,14 @@ class FileSystem(Backend):
 	def handle(self, msg):
 		if isinstance(msg, Ls):
 			result = self._get_children(msg.item, msg.recursive)
-			self.out_queue.put(JsonResult(msg.guid, 0, u'', 0, False, result))
+			msg.respond(0, u'', 0, False, result)
 			return
 		if isinstance(msg, GetItem):
 			item = self._get_item(msg.item)
 			if not item:
-				result = JsonResult(msg.guid, 1, u'No such item', 0, False,None)
+				msg.respond(1, u'No such item', 0, False, None)
 			else:
-				result = JsonResult(msg.guid, 0, u'', 0, False, item)
-			self.out_queue.put(result)
+				msg.respond(0, u'', 0, False, item)
 			return
 		raise Exception('Unhandled message: %s' % str(msg))
 	

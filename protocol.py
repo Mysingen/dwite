@@ -653,8 +653,9 @@ class JsonMessage(Message):
 		return self.head + length + data
 
 	def respond(self, errno, errstr, chunk, more, result):
-		msg = JsonResult(self.guid, errno, errstr, chunk, more, result)
-		self.wire.send(msg.serialize())
+		if self.wire:
+			msg = JsonResult(self.guid, errno, errstr, chunk, more, result)
+			self.wire.send(msg.serialize())
 
 class JsonCall(JsonMessage):
 	method = None # unicode string
@@ -744,6 +745,25 @@ class Play(JsonCall):
 		}
 		JsonCall.__init__(self, guid, u'play', params)
 
+class Add(JsonCall):
+	
+	def __init__(
+		self, guid, url, kind=None, pretty=None, size=None, duration=None
+	):
+		assert type(url)      == unicode
+		assert (not kind)     or type(kind)     == unicode
+		assert (not pretty)   or type(pretty)   == dict
+		assert (not size)     or type(size)     == int
+		assert (not duration) or type(duration) == int
+		params = {
+			'url'     : url,
+			'kind'    : kind,
+			'pretty'  : pretty,
+			'size'    : size,
+			'duration': duration
+		}
+		JsonCall.__init__(self, guid, u'add', params)
+
 class GetItem(JsonCall):
 
 	def __init__(self, guid, item):
@@ -803,6 +823,9 @@ def parse_json(data):
 
 		if method == u'play':
 			return Play(guid, **params)
+		
+		if method == u'add':
+			return Add(guid, **params)
 
 		if method == u'get_item':
 			return GetItem(guid, **params)

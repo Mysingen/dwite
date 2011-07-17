@@ -13,10 +13,10 @@ from Queue     import Queue, Empty
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
-                      StrmStatus, Ls, Play, GetItem, ID)
+                      StrmStatus, Ls, GetItem, ID, JsonMessage)
 from display   import Display, TRANSITION
 from tactile   import IR
-from menu      import Menu, CmAudio, CmDir, make_item
+from menu      import Menu, CmFile, CmAudio, CmDir, make_item
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
@@ -36,6 +36,41 @@ class RemCM:
 		assert type(cm) == ContentManager
 		self.cm = cm
 
+class PlayItem(JsonMessage):
+	def __init__(self, guid, wire, item, seek):
+		assert type(wire) == JsonWire
+		assert isinstance(item, CmFile)
+		assert type(seek) == int
+		self.guid = guid
+		self.item = item
+		self.seek = seek
+		self.wire = wire
+	
+	def dump(self):
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': u'play_item',
+			'item'  : self.item.guid,
+			'seek'  : self.seek
+		})
+		return r
+
+class AddItem(JsonMessage):
+	def __init__(self, guid, wire, item):
+		assert (not wire) or (type(wire) == JsonWire)
+		assert isinstance(item, CmFile)
+		self.guid = guid
+		self.wire = wire
+		self.item = item
+	
+	def dump(self):
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': u'add_item',
+			'item'  : self.item.guid
+		})
+		return r
+
 class Device(Thread):
 	in_queue  = None  # let other threads post events here
 	out_queue = None
@@ -50,7 +85,7 @@ class Device(Thread):
 	watchdog  = None
 
 	def __init__(self, wire, out_queue):
-		print 'Device __init__'
+		#print 'Device __init__'
 		Thread.__init__(self, name='Device')
 		self.wire      = wire
 		self.in_queue  = self.wire.out_queue
@@ -74,7 +109,7 @@ class Device(Thread):
 					dm.start()
 					dm.in_queue.put(msg)
 					self.alive = False
-		print 'Temporary %s is dead' % self.name
+		#print 'Temporary %s is dead' % self.name
 	
 	def stop(self):
 		self.wire.stop()
@@ -121,7 +156,7 @@ class Classic(Device):
 	                    # of stress levels. only used for tactile events.
 
 	def __init__(self, wire, out_queue):
-		print 'Classic __init__'
+		#print 'Classic __init__'
 		Device.__init__(self, wire, out_queue)
 		self.name         = 'Classic'
 		self.display      = Display((320,32), wire)
@@ -173,7 +208,7 @@ class Classic(Device):
 		if render.tick(self.display.canvas):
 			self.display.show(TRANSITION.NONE)
 
-	def default_result_handler(self, cm, msg, orig_msg):
+	def default_result_handler(self, msg, orig_msg):
 		if type(orig_msg) == Ls:
 			parent = self.menu.focused().parent
 			if parent.guid == orig_msg.item:
@@ -205,6 +240,7 @@ class Classic(Device):
 				if self.watchdog.wakeup():
 					self.wire.send(Ping().serialize())
 				elif self.watchdog.expired():
+					print '%s expired' % self.mac_addr
 					self.stop()
 					continue
 
@@ -213,7 +249,7 @@ class Classic(Device):
 				continue
 
 			try:
-				from dwite import register_dm, unregister_dm, get_cm
+				from dwite import register_dm, unregister_dm, get_cm, msg_reg
 			
 				#### MESSAGES FROM THE DWITE'S MAIN LOOP ####
 
@@ -225,73 +261,78 @@ class Classic(Device):
 					self.menu.rem_cm(msg.cm)
 					continue
 
-				#### MESSAGES FROM OTHER PROGRAMS ####
+				#### MESSAGES FROM OTHER PROGRAMS/SUBSYSTEMS ####
 
 				if isinstance(msg, JsonResult):
-					print msg
-					for cm in get_cm(None):
-						if msg.guid in cm.msg_guids:
-							(orig_msg, handler) = cm.get_msg_handler(msg)
-							cm.rem_msg_handler(msg)
-							if handler:
-								handler(self, cm, msg, orig_msg)
-							else:
-								self.default_result_handler(cm, msg, orig_msg)
+					print 'dm JsonResult %d' % msg.guid
+					try:
+						msg_reg.run_handler(msg)
+					except:
+						(orig_msg, handler, user) = msg_reg.get_handler(msg)
+						if orig_msg:
+							msg_reg.rem_handler(orig_msg)
+							self.default_result_handler(msg, orig_msg)
 							continue
+						else:
+							print 'throwing away %s' % msg
 
 				if isinstance(msg, Terms):
 					print('got terms')
 					self.menu.searcher.add_dict_terms(msg.terms)
 					continue						
 
-				if isinstance(msg, Play):
-					print unicode(msg)
-					match = re.match(
-						'(?P<scheme>^.+?)://(?P<cm>.+?)/(?P<guid>.+)', msg.url
-					)
-					if not match:
-						errstr = u'Invalid URL format: %s' % msg.url
-						msg.respond(1, errstr, 0, False, False)
+				if isinstance(msg, PlayItem):
+					print 'dm PlayItem %s' % msg
+					if not self.player.play(msg.item, msg.seek):
+						errstr = u'Unplayable item'
+						msg.respond(4, errstr, 0, False, False)
 						continue
-					scheme = match.group('scheme')
-					label  = match.group('cm')
-					guid   = match.group('guid')
-					if scheme != u'cm':
-						errstr = u'Invalid URL scheme: %s' % msg.url
-						msg.respond(2, errstr, 0, False, False)
-						continue
-					cm = get_cm(label)
-					if not cm:
-						errstr = u'No such CM: %s' % label
-						msg.respond(3, errstr, 0, False, False)
-						continue
-					get = GetItem(cm.make_msg_guid(), guid)
+					if msg.item == self.menu.focused():
+						(guid, render) = self.player.ticker()
+						self.display.canvas.clear()
+						render.tick(self.display.canvas)
+						self.display.show(TRANSITION.NONE)
+						render.min_timeout(325)
+					msg.respond(0, u'EOK', 0, False, True)
+					continue
 
-					def handle_get_item(self, cm, msg, orig_msg):
-						if msg.errno:
-							orig_msg.respond(msg.errno,msg.errstr,0,False,False)
-							return
-						item = make_item(cm, msg.result)
-						if not self.player.play(item, orig_msg.seek):
-							errstr = u'Unplayable item'
-							orig_msg.respond(4, errstr, 0, False, False)
-							return
-						if item == self.menu.focused():
-							(guid, render) = self.player.ticker()
-							self.display.canvas.clear()
-							render.tick(self.display.canvas)
-							self.display.show(TRANSITION.NONE)
-							render.min_timeout(325)
-						orig_msg.respond(0, u'EOK', 0, False, True)
+				if isinstance(msg, AddItem):
+					print 'dm AddItem %s' % msg
+					item = msg.item
+					if isinstance(item, CmAudio):
+						self.menu.playlist.add(item)
+					elif isinstance(item, CmDir):
+						# ask CM for a recursive listing of the directory
+						# and remember the sequence number of the message
+						# so that special handling can be applied to the
+						# reply from CM.
+						ls = Ls(msg_reg.make_guid(), item.guid, True)
 
-					cm.msg_guids[get.guid] = (msg, handle_get_item)
-					cm.wire.send(get.serialize())
+						# warning: handler executed by CM thread:
+						def handle_ls_r(msg_reg, response, orig_msg, user):
+							(dm, cm) = user
+							assert type(dm)       == Classic
+							assert type(cm)       == ContentManager
+							assert type(response) == JsonResult
+							for r in response.result:
+								item = make_item(cm, r)
+								if type(item) == CmAudio:
+									dm.in_queue.put(AddItem(None, None, item))
+	
+						msg_reg.set_handler(ls, handle_ls_r, (self, item.cm))
+						item.cm.wire.send(ls.serialize())
+					msg.respond(0, u'EOK', 0, False, True)
 
 				#### MESSAGES FROM THE DEVICE ####
 
 				if isinstance(msg, Helo):
 					self.mac_addr = msg.mac_addr
-					register_dm(self, msg.mac_addr)
+					try:
+						register_dm(self, msg.mac_addr)
+					except Exception, e:
+						print e
+						self.stop()
+						continue
 					# always draw on screen when a device connects
 					(guid, render) = self.menu.ticker(curry=True)
 					self.display.canvas.clear()
@@ -337,6 +378,17 @@ class Classic(Device):
 						(guid, render, transition) = self.menu.down()
 						render = self.select_render()
 					elif msg.code == IR.RIGHT:
+						focused = self.menu.focused()
+						if type(focused) == CmDir:
+							ls = Ls(msg_reg.make_guid(), focused.guid, False)
+						
+							# warning: handler executed by CM thread:
+							def handle_ls(msg_reg, response, orig_msg, self):
+								msg_reg.set_handler(orig_msg, None, None)
+								self.in_queue.put(response)
+
+							msg_reg.set_handler(ls, handle_ls, self)
+							focused.cm.wire.send(ls.serialize())
 						(guid, render, transition) = self.menu.right()
 					elif msg.code == IR.LEFT:
 						(guid, render, transition) = self.menu.left()
@@ -355,22 +407,25 @@ class Classic(Device):
 						elif isinstance(item, CmAudio):
 							self.menu.playlist.add(item)
 						elif isinstance(item, CmDir):
-							def handle_ls_r(self, cm, response, orig_msg):
-								assert type(self)     == Classic
-								assert type(cm)       == ContentManager
-								assert type(response) == JsonResult
-								for r in response.result:
-									item = make_item(cm, r)
-									self.menu.playlist.add(item)
 							# ask CM for a recursive listing of the directory
 							# and remember the sequence number of the message
 							# so that special handling can be applied to the
 							# reply from CM.
-							ls = Ls(item.cm.make_msg_guid(), item.guid, True)
-							print unicode(ls)
-							item.cm.msg_guids[ls.guid] = (ls, handle_ls_r)
-							item.cm.wire.send(ls.serialize())
+							ls = Ls(msg_reg.make_guid(), item.guid, True)
 
+							# warning: handler executed by CM thread:
+							def handle_ls_r(msg_reg, response, orig_msg, user):
+								(dm, cm) = user
+								assert type(dm)       == Classic
+								assert type(cm)       == ContentManager
+								assert type(response) == JsonResult
+								for r in response.result:
+									item = make_item(cm, r)
+									if type(item) == CmAudio:
+										dm.in_queue.put(AddItem(None,None,item))
+
+							msg_reg.set_handler(ls, handle_ls_r, (self,item.cm))
+							item.cm.wire.send(ls.serialize())
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()
@@ -481,6 +536,6 @@ class Classic(Device):
 				traceback.print_exc()
 				self.stop()
 
-		print('Classic %s is Dead' % self.mac_addr)
+		#print('Classic %s is Dead' % self.mac_addr)
 		unregister_dm(self.mac_addr)
 

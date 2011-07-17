@@ -8,11 +8,10 @@
 
 import sys
 
-import cli
+from cli import *
 
 if __name__ == '__main__':
 	cmd = unicode(sys.argv[1])
-	url = unicode(sys.argv[2])
-	seek = int(sys.argv[3])
-	cli.run(cmd, url, seek)
+	method = globals()[cmd]
+	method(sys.argv[2:])
 

@@ -72,7 +72,7 @@ class Streamer(Thread):
 			except:
 				self.port = self.port + 1
 				pass
-		print('Streamer accepting on %d' % self.port)
+		#print('Streamer accepting on %d' % self.port)
 		
 		self.state = RUNNING
 		self.queue.put(Accepting('', self.port))
@@ -87,7 +87,7 @@ class Streamer(Thread):
 			try:
 				self.socket, address = self.socket.accept()
 				self.socket.setblocking(False)
-				print('Streamer connected on %d' % self.port)
+				#print('Streamer connected on %d' % self.port)
 				break
 			except:
 				pass
@@ -117,7 +117,7 @@ class Streamer(Thread):
 						in_data = self.socket.recv(4096)
 					except socket.error, e:
 						if e[0] == errno.ECONNRESET:
-							print('Streamer connection RESET')
+							#print('Streamer connection RESET')
 							self.state = STARTING
 							continue
 					except Exception, e:
@@ -164,12 +164,12 @@ class Streamer(Thread):
 							self.stop()
 						continue
 
-		print('streamer is dead')
+		#print('streamer is dead')
 
 	def handle_http_get(self, data):
 		# check what resource is requested and whether to start playing it
 		# at some offset:
-		print data
+		print data.strip()
 		try:
 			m = re.search('GET (.+?)\?seek=(\d+) HTTP/1\.0', data, re.MULTILINE)
 			track = self.backend.get_item(m.group(1))
@@ -185,14 +185,13 @@ class Streamer(Thread):
 			if (not self.decoder) or (self.decoder.path != path):
 				self.decoder = Decoder(path)
 		except Exception, e:
-			print 'oooops %s' % str(e)
+			traceback.print_exc()
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'
 
 		try:
 			self.decoder.seek(int(seek))
 		except Exception, e:
-			print e
-			pass
+			traceback.print_exc()
 
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
@@ -268,10 +267,10 @@ class Decoder:
 				result = self.frames[index]
 			else:
 				result = self.frames[-1]
-			print(
-				'flac seek %d of %d msec = %d byte offset (of %d)'
-				% (msec, int(duration), result, os.path.getsize(self.path))
-			)
+			#print(
+			#	'flac seek %d of %d msec = %d byte offset (of %d)'
+			#	% (msec, int(duration), result, os.path.getsize(self.path))
+			#)
 			return result
 
 		raise Exception('Unhandled execution path')

@@ -12,6 +12,7 @@ import time
 import traceback
 import threading
 import os
+import random
 
 from Queue    import Queue, Empty
 
@@ -19,6 +20,45 @@ from device   import Device
 from wire     import SlimWire, JsonWire, Connected
 from cm       import ContentManager
 from ui       import UserInterface
+from protocol import JsonMessage
+
+class MessageRegister(object):
+	handlers = {}
+	
+	def make_guid(self):
+		while True:
+			guid = random.randint(1, 1000000)
+			if guid not in self.handlers:
+				return guid
+
+	def set_handler(self, msg, handler, user, override_orig_msg=None):
+		assert isinstance(msg, JsonMessage)
+		assert (msg.guid > 0) and (msg.guid not in self.handlers)
+		if override_orig_msg:
+			self.handlers[msg.guid] = (override_orig_msg, handler, user)
+		else:
+			self.handlers[msg.guid] = (msg, handler, user)
+
+	def get_handler(self, msg):
+		assert isinstance(msg, JsonMessage)
+		if msg.guid in self.handlers:
+			return self.handlers[msg.guid]
+		return (None, None, None)
+
+	def rem_handler(self, msg):
+		assert isinstance(msg, JsonMessage)
+		assert msg.guid in self.handlers
+		del self.handlers[msg.guid]
+
+	def run_handler(self, msg):
+		(orig_msg, handler, user) = self.get_handler(msg)
+		if not handler:
+			raise Exception('No handler for %d' % msg.guid)
+		self.rem_handler(msg)
+		handler(self, msg, orig_msg, user)
+
+# global registry of message handlers
+msg_reg = MessageRegister()
 
 # device, content and ui managers. everything is threaded.
 dms = {}
@@ -26,12 +66,16 @@ cms = {}
 uis = {}
 
 def register_cm(cm, label):
+	if label in cms:
+		raise Exception('A CM with label "%s" is already registered' % label)
+	print 'register CM %s' % label
 	assert type(label) == unicode
 	cms[label] = cm
 	for dm in dms.values():
 		dm.add_cm(cm)
 
 def unregister_cm(label):
+	print 'unregister CM %s' % label
 	assert type(label) == unicode
 	for dm in dms.values():
 		dm.rem_cm(cms[label])
@@ -46,20 +90,28 @@ def get_cm(label):
 	return None
 
 def register_ui(ui, label):
+	if label in uis:
+		raise Exception('A UI with label "%s" is already registered' % label)
+	print 'register UI %s' % label
 	assert type(label) == unicode
 	uis[label] = ui
 
 def unregister_ui(label):
+	print 'unregister UI %s' % label
 	assert type(label) == unicode
 	del uis[label]
 
 def register_dm(dm, label):
+	if label in dms:
+		raise Exception('A DM with label "%s" is already registered' % label)
+	print 'register DM %s' % label
 	assert type(label) == unicode
 	dms[label] = dm
 	for cm in cms.values():
 		dm.add_cm(cm)
 
 def unregister_dm(label):
+	print 'unregister DM %s' % label
 	assert type(label) == unicode
 	del dms[label]
 
@@ -132,9 +184,9 @@ def main():
 		traceback.print_exc()
 
 	# stop all threaded objects and quit
-	ui_wire.stop()
-	dm_wire.stop()
-	cm_wire.stop()
+	ui_wire.stop(hard=True)
+	dm_wire.stop(hard=True)
+	cm_wire.stop(hard=True)
 	for dm in dms.values():
 		dm.stop()
 	for cm in cms.values():

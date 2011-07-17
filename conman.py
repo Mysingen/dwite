@@ -9,6 +9,7 @@ import os
 import os.path
 import time
 import traceback
+import random
 
 from Queue     import Queue, Empty
 from threading import Thread
@@ -33,6 +34,7 @@ class Conman(Thread):
 	jsonwire  = None
 	queue     = None
 	watchdog  = None
+	handlers  = {}
 
 	def __init__(self):
 		Thread.__init__(self, target=Conman.run, name='Conman')
@@ -45,9 +47,14 @@ class Conman(Thread):
 		self.jsonwire.start()
 		self.state    = RUNNING
 
+	def get_handler(self, msg):
+		if msg.guid in self.handlers:
+			return self.handlers[msg.guid]
+		return None
+
 	def stop(self):
 		self.streamer.stop()
-		self.jsonwire.stop()
+		self.jsonwire.stop(hard=True)
 		self.backend.stop()
 		self.state = STOPPED
 
@@ -64,8 +71,14 @@ class Conman(Thread):
 		self.watchdog = Watchdog(5000)
 
 		# ready to hail the DM with all necessary info about conman subsystems
-		print('Conman hails')
-		hail = protocol.Hail(0, self.backend.name, 0, streamer_port)
+		def handle_hail(self, msg, orig_msg, user):
+			assert type(msg) == protocol.JsonResult
+			if msg.errno:
+				print msg.errstr
+				self.stop()
+		guid = random.randint(1, 1000000)
+		hail = protocol.Hail(guid, self.backend.name, 0, streamer_port)
+		self.handlers[guid] = (hail, handle_hail, None)
 		self.jsonwire.send(hail.serialize())
 
 		while self.state != STOPPED:
@@ -88,14 +101,18 @@ class Conman(Thread):
 				continue
 			except Exception, e:
 				print 'VERY BAD!'
-				print str(e)
+				traceback.print_exc()
 
 			if isinstance(msg, protocol.Ls):
 				self.backend.in_queue.put(msg)
 				continue
 			
 			if isinstance(msg, protocol.JsonResult):
-				self.jsonwire.send(msg.serialize())
+				if msg.guid in self.handlers:
+					(orig_msg, handler, user) = self.get_handler(msg)
+					handler(self, msg, orig_msg, user)
+				else:
+					print msg
 				continue
 			
 			if isinstance(msg, protocol.Bark):
@@ -104,5 +121,5 @@ class Conman(Thread):
 			if isinstance(msg, protocol.GetItem):
 				self.backend.in_queue.put(msg)
 
-		print('Conman is dead')
+		#print('Conman is dead')
 
