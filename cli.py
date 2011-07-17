@@ -52,7 +52,10 @@ def play(argv):
 		print('Syntax: cli play --url cm://<cm label>/<guid> [--seek <msec>]')
 		sys.exit(1)
 
-	(opts, args) = getopt.gnu_getopt(argv, '', ['url=', 'seek='])
+	try:
+		(opts, args) = getopt.gnu_getopt(argv, '', ['url=', 'seek='])
+	except:
+		syntax()
 
 	url  = None
 	seek = None
@@ -80,7 +83,10 @@ def add(argv):
 		print('Syntax: cli add --url cm://<cm label>/<guid>')
 		sys.exit(1)
 	
-	(opts, args) = getopt.gnu_getopt(argv, '', ['url='])
+	try:
+		(opts, args) = getopt.gnu_getopt(argv, '', ['url='])
+	except:
+		syntax()
 	
 	url = None
 	
