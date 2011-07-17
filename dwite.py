@@ -15,36 +15,61 @@ import os
 
 from Queue    import Queue, Empty
 
-from device   import Classic
-from wire     import SlimWire, JsonWire, UiWire
-from protocol import ID, Helo, Hail
+from device   import Device
+from wire     import SlimWire, JsonWire, Connected
 from cm       import ContentManager
+from ui       import UserInterface
 
-def make_dm(dm_wire, queue, msg):
-	# in the following, if a device class instance is created, the queue
-	# for events is given over to that instance. from then on the main 	loop
-	# must not try to see what is going on on the protocol wire.
-	if isinstance(msg, Helo):
-		if (msg.id == ID.SQUEEZEBOX3
-		or  msg.id == ID.SOFTSQUEEZE):
-			device = Classic(dm_wire, queue, msg.mac_addr)
-			queue.put(msg) # let device class handle Helo as well
-			device.start()
-			return device
-	print(
-		'The core loop only handles HELO messages from devices and Hail '
-		'messages from content managers'
-	)
-	print(msg)
+# device, content and ui managers. everything is threaded.
+dms = {}
+cms = {}
+uis = {}
+
+def register_cm(cm, label):
+	assert type(label) == unicode
+	cms[label] = cm
+	for dm in dms.values():
+		dm.add_cm(cm)
+
+def unregister_cm(label):
+	assert type(label) == unicode
+	for dm in dms.values():
+		dm.rem_cm(cms[label])
+	del cms[label]
+
+def get_cm(label):
+	if not label:
+		return cms.values()
+	assert type(label) == unicode
+	if label in cms:
+		return cms[label]
 	return None
 
-def make_cm(cm_wire, in_queue, out_queue, msg):
-	cm = ContentManager(
-		msg.label, cm_wire, msg.stream_ip, msg.stream_port, in_queue,
-		out_queue
-	)
-	cm.start()
-	return cm
+def register_ui(ui, label):
+	assert type(label) == unicode
+	uis[label] = ui
+
+def unregister_ui(label):
+	assert type(label) == unicode
+	del uis[label]
+
+def register_dm(dm, label):
+	assert type(label) == unicode
+	dms[label] = dm
+	for cm in cms.values():
+		dm.add_cm(cm)
+
+def unregister_dm(label):
+	assert type(label) == unicode
+	del dms[label]
+
+def get_dm(label):
+	if not label:
+		return dms.values()
+	assert type(label) == unicode
+	if label in dms:
+		return dms[label]
+	return None
 
 def main():
 	# check for directory of configuration files
@@ -54,83 +79,70 @@ def main():
 	if not os.path.isdir(path):
 		raise Exception('No configuration directory "%s"' % path)
 
-	# device and content managers. the device manager is threaded.
-	dm = None
-	cm = None
-	# threaded "wire" objects handle the socket connections with devices,
-	# content managers and user interfaces.
-	ui_wire = None
-	dm_wire = None
-	cm_wire = None
-	
-	# the queue is really owned by the DM, but created here so that it can be
-	# passed to everyone else who must post messages to the DM.
-	dm_queue = Queue(100)
-	cm_queue = Queue(100)
-	# can only wait on dm's and cm's queues when expecting HELO or Hail:
-	wait_dm = False
-	wait_cm = False
+	# a queue to be used by all newly created wires to drop messages here.
+	queue = Queue(100)
 
 	try:
-		while True:
-			# the wires die when their respective device or content manager
-			# disconnect. simply create new ones if that happens.
-			if not (ui_wire and ui_wire.isAlive()):
-				ui_wire = UiWire('', 3482, dm_queue)
-				ui_wire.start()
-			if not (dm_wire and dm_wire.isAlive()):
-				dm_wire = SlimWire('', 3483, dm_queue)
-				dm_wire.start()
-				wait_dm = True
-			if not (cm_wire and cm_wire.isAlive()):
-				if dm:
-					dm.rem_cm(cm)
-				cm_wire = JsonWire('', 3484, cm_queue)
-				cm_wire.start()
-				wait_cm = True
+		# threaded "wire" objects handle the socket connections with devices,
+		# content managers and user interfaces.
+		ui_wire = JsonWire('', 3482, queue, accept=True)
+		dm_wire = SlimWire('', 3483, queue, accept=True)
+		cm_wire = JsonWire('', 3484, queue, accept=True)
+		ui_wire.start()
+		dm_wire.start()
+		cm_wire.start()
 
-			# wait for a HELO or Hail message from a device or CM.
-			if wait_dm:
-				try:
-					msg = dm_queue.get(block=False)
-					if isinstance(msg, Helo):
-						print 'HELO'
-						dm = make_dm(dm_wire, dm_queue, msg)
-						wait_dm = False # stop listening on this queue
-						if cm:
-							dm.add_cm(cm)
-				except Empty:
-					pass
-			if wait_cm:
-				try:
-					msg = cm_queue.get(block=False)
-					if isinstance(msg, Hail):
-						print 'Hail'
-						cm = make_cm(cm_wire, cm_queue, dm_queue, msg)
-						if dm:
-							dm.add_cm(cm)
-						wait_cm = False # stop listening on this queue
-				except Empty:
-					pass
-			time.sleep(0.1)
+		# wait for Connected messages from the wires. whenever one gets
+		# connected create a new one so that more devices, etc, can connect
+		# to dwite.
+		while True:
+			msg = None
+			try:
+				msg = queue.get(block=True, timeout=0.1)
+			except Empty:
+				continue
+
+			if type(msg) == Connected:
+				if msg.wire == ui_wire:
+					UserInterface(ui_wire, queue).start()
+					ui_wire = JsonWire('', 3482, queue, accept=True)
+					ui_wire.start()
+				elif msg.wire == dm_wire:
+					# we need more information about the remote end before a
+					# fully proper DM representation can be created. in the
+					# meanwhile we still have to do *something*, so we use
+					# the base class Device as a placeholder. it will make the
+					# necessary corrections itself when more about the remote
+					# end becomes known.
+					Device(dm_wire, queue).start()
+					dm_wire = SlimWire('', 3483, queue, accept=True)
+					dm_wire.start()
+				elif msg.wire == cm_wire:
+					ContentManager(cm_wire, queue).start()
+					cm_wire = JsonWire('', 3484, queue, accept=True)
+					cm_wire.start()
+				continue
+
+			raise Exception('INTERNAL ERROR: Garbage message: %s' % msg)
+
 	except KeyboardInterrupt:
 		# the user pressed CTRL-C
 		pass
 	except:
-		# unknown exception. print stack trace.
-		info = sys.exc_info()
-		traceback.print_tb(info[2])
-		print info[1]
+		traceback.print_exc()
 
 	# stop all threaded objects and quit
-	if dm:
+	ui_wire.stop()
+	dm_wire.stop()
+	cm_wire.stop()
+	for dm in dms.values():
 		dm.stop()
-	if cm:
+	for cm in cms.values():
 		cm.stop()
-	if ui_wire:
-		ui_wire.stop()
-	if dm_wire:
-		dm_wire.stop()
-	if cm_wire:
-		cm_wire.stop()
+	for ui in uis.values():
+		ui.stop()
+
+	while threading.active_count() > 1:
+		print [t.name for t in threading.enumerate()]
+		time.sleep(1)
 

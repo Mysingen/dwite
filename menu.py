@@ -26,6 +26,7 @@ class Tree:
 	render   = None # Render object that knows how to draw this Tree node
 
 	def __init__(self, guid, label, parent):
+		assert type(label) == unicode
 		self.guid   = guid
 		self.label  = label
 		self.parent = parent

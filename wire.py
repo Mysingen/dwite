@@ -24,7 +24,7 @@ RUNNING  = 2
 PAUSED   = 3
 STOPPED  = 4
 
-class Connected:
+class Connected(object):
 	host = None
 	port = 0
 	wire = None
@@ -36,7 +36,7 @@ class Connected:
 
 class Wire(Thread):
 	label     = None
-	state     = PAUSED
+	_state    = PAUSED
 	socket    = None
 	host      = None
 	port      = 0
@@ -52,13 +52,26 @@ class Wire(Thread):
 		assert isinstance(queue, Queue)
 		assert type(accept) == bool
 		Thread.__init__(self, target=Wire.run, name='Wire')
-		self.label     = 'Wire'
 		self.state     = STARTING
 		self.host      = host
 		self.port      = port
 		self.accept    = accept
 		self.in_queue  = Queue(100)
 		self.out_queue = queue
+
+	@property
+	def label(self):
+		return unicode(self.name)
+
+	@property
+	def state(self):
+		return self._state
+
+	@state.setter
+	def state(self, value):
+		if self._state == STOPPED:
+			return
+		self._state = value
 
 	def stop(self):
 		self.state = STOPPED
@@ -99,7 +112,9 @@ class Wire(Thread):
 				self.socket, address = self.socket.accept()
 				self.socket.setblocking(False)
 				print('%s connected to %s:%d' % (self.label, address,self.port))
-				self.out_queue.put(Connected(address, self.port, self))
+				old_queue = self.out_queue
+				self.out_queue = Queue(100)
+				old_queue.put(Connected(address, self.port, self))
 				self.state = RUNNING
 				break
 			except:
@@ -133,9 +148,6 @@ class Wire(Thread):
 					self._accept()
 				else:
 					self._connect()
-
-			if self.state == RUNNING:
-				print('%s is listening' % self.label)
 
 			payload = None
 			while self.state == RUNNING:
@@ -252,7 +264,7 @@ class SlimWire(Wire):
 
 	def __init__(self, host, port, queue, accept=True):
 		Wire.__init__(self, host, port, queue, accept)
-		self.label = 'SlimWire'
+		self.name = 'SlimWire'
 
 	def _handle(self, kind, size, body):
 		if not (kind or size or body):
@@ -315,7 +327,7 @@ class SlimWire(Wire):
 class JsonWire(Wire):
 	def __init__(self, host, port, queue, accept=True):
 		Wire.__init__(self, host, port, queue, accept)
-		self.label = 'JsonWire'
+		self.name = 'JsonWire'
 
 	def _handle(self, kind, size, body):
 		if not (kind or size or body):
@@ -328,9 +340,3 @@ class JsonWire(Wire):
 		message.wire = self
 		self.out_queue.put(message)
 
-class UiWire(JsonWire):
-
-	def __init__(self, host, port, queue, accept=True):
-		JsonWire.__init__(self, host, port, queue, accept=True)
-		self.label = 'UiWire'
-			

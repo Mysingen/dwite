@@ -18,7 +18,6 @@ from menu     import CmAudio, Link
 class Player:
 	guid        = None # used when telling the device how to present itself
 	wire        = None
-	cm          = None
 	playing     = None # NowPlaying instance
 
 	def __init__(self, wire, guid):

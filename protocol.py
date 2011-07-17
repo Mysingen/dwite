@@ -61,9 +61,9 @@ class Helo(Message):
 	def __init__(self, id, revision, mac_addr, uuid, language):
 		self.id       = id       # integer
 		self.revision = revision # integer
-		self.mac_addr = mac_addr # string
-		self.uuid     = uuid     # string
-		self.language = language # string
+		self.mac_addr = unicode(mac_addr) # string
+		self.uuid     = unicode(uuid)     # string
+		self.language = unicode(language) # string
 
 	def __str__(self):
 		return 'HELO: %s %d %s %s %s' % (ID.debug[self.id], self.revision,
@@ -651,6 +651,10 @@ class JsonMessage(Message):
 		data   = json.dumps(self.dump())
 		length = struct.pack('<L', socket.htonl(len(data)))
 		return self.head + length + data
+
+	def respond(self, errno, errstr, chunk, more, result):
+		msg = JsonResult(self.guid, errno, errstr, chunk, more, result)
+		self.wire.send(msg.serialize())
 
 class JsonCall(JsonMessage):
 	method = None # unicode string

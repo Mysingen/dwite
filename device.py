@@ -9,11 +9,11 @@ import sys
 import re
 
 from threading import Thread
-from Queue     import Queue
+from Queue     import Queue, Empty
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
-                      StrmStatus, Ls, Play, GetItem)
+                      StrmStatus, Ls, Play, GetItem, ID)
 from display   import Display, TRANSITION
 from tactile   import IR
 from menu      import Menu, CmAudio, CmDir, make_item
@@ -27,53 +27,64 @@ from cm        import ContentManager
 
 # private message classes. only used to implement public API's
 class AddCM:
-	cm = None
-	
 	def __init__(self, cm):
 		assert type(cm) == ContentManager
 		self.cm = cm
 
 class RemCM:
-	cm = None
-	
 	def __init__(self, cm):
 		assert type(cm) == ContentManager
 		self.cm = cm
 
 class Device(Thread):
-	queue    = None  # let other threads post events here
-	alive    = True  # controls the main loop
-	sb_wire  = None  # must have a wire to send actual commands to the device
-	menu     = None  # all devices must have a menu system
-	guid     = None  # string. uniqely identifies the device. usualy MAC addr.
-	player   = None
-	seeker   = None
-	playlist = None
-	volume   = None  # Volume object
-	watchdog = None
-	cms      = {}
+	in_queue  = None  # let other threads post events here
+	out_queue = None
+	alive     = True  # controls the main loop
+	wire      = None  # must have a wire to send actual commands to the device
+	menu      = None  # all devices must have a menu system
+	mac_addr  = None  # string. uniqely identifies the device
+	player    = None
+	seeker    = None
+	playlist  = None
+	volume    = None  # Volume object
+	watchdog  = None
 
-	def __init__(self, sb_wire, queue, guid, name='Device'):
+	def __init__(self, wire, out_queue):
 		print 'Device __init__'
-		Thread.__init__(self, name=name)
-		self.sb_wire = sb_wire
-		self.queue   = queue
-		self.guid    = guid
-		self.menu    = Menu()
-		self.watchdog = Watchdog(1000)
+		Thread.__init__(self, name='Device')
+		self.wire      = wire
+		self.in_queue  = self.wire.out_queue
+		self.out_queue = out_queue
+		self.menu      = Menu()
+		self.watchdog  = Watchdog(1000)
 
 	def run(self):
-		raise Exception('Device subclasses must implement run()')
+		while self.alive:
+			msg = None
+			try:
+				msg = self.in_queue.get(block=True, timeout=0.1)
+			except Empty:
+				continue
+			if type(msg) == Helo:
+				# now we get to know what kind of device class we *really*
+				# should have used. create it and pass the Helo message to it.
+				if (msg.id == ID.SQUEEZEBOX3
+				or  msg.id == ID.SOFTSQUEEZE):
+					dm = Classic(self.wire, self.out_queue)
+					dm.start()
+					dm.in_queue.put(msg)
+					self.alive = False
+		print 'Temporary %s is dead' % self.name
 	
 	def stop(self):
-		self.sb_wire.stop()
+		self.wire.stop()
 		self.alive = False
 
 	def add_cm(self, cm):
-		self.queue.put(AddCM(cm))
-	
+		self.in_queue.put(AddCM(cm))
+
 	def rem_cm(self, cm):
-		self.queue.put(RemCM(cm))
+		self.in_queue.put(RemCM(cm))
 
 def init_acceleration_maps():
 	maps    = {}
@@ -109,12 +120,13 @@ class Classic(Device):
 	                    # maps so keep a mapping from message codes to arrays
 	                    # of stress levels. only used for tactile events.
 
-	def __init__(self, sb_wire, queue, guid):
+	def __init__(self, wire, out_queue):
 		print 'Classic __init__'
-		Device.__init__(self, sb_wire, queue, guid, 'Classic')
-		self.display      = Display((320,32), sb_wire)
+		Device.__init__(self, wire, out_queue)
+		self.name         = 'Classic'
+		self.display      = Display((320,32), wire)
 		self.acceleration = init_acceleration_maps()
-		self.volume       = Volume(sb_wire, 255, 70, 70, True)
+		self.volume       = Volume(wire, 255, 70, 70, True)
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -177,7 +189,7 @@ class Classic(Device):
 		# the threading would goes bananas. player contains more threads and
 		# threads cannot be created "inside" the creation procedures of other
 		# threads.
-		self.player = Player(self.sb_wire, self.guid)
+		self.player = Player(self.wire, self.mac_addr)
 
 		while self.alive:
 			msg = None
@@ -186,12 +198,12 @@ class Classic(Device):
 				# waking up 50 times per second costs less than 1% CPU of a
 				# single core in an Intel Core2 Duo system, so lets do that
 				# to get good resolution in all ticking activities.
-				msg = self.queue.get(block=True, timeout=0.02)
+				msg = self.in_queue.get(block=True, timeout=0.02)
 				self.watchdog.reset()
 			except Exception, e:
 				# most likely, it's just the timeout that triggered.
 				if self.watchdog.wakeup():
-					self.sb_wire.send(Ping().serialize())
+					self.wire.send(Ping().serialize())
 				elif self.watchdog.expired():
 					self.stop()
 					continue
@@ -201,20 +213,23 @@ class Classic(Device):
 				continue
 
 			try:
-				#### MESSAGES FROM PROGRAMS ####
+				from dwite import register_dm, unregister_dm, get_cm
+			
+				#### MESSAGES FROM THE DWITE'S MAIN LOOP ####
 
 				if isinstance(msg, AddCM):
-					self.cms[msg.cm.label] = msg.cm
 					self.menu.add_cm(msg.cm)
 					continue
 
 				if isinstance(msg, RemCM):
-					del self.cms[msg.cm.label]
 					self.menu.rem_cm(msg.cm)
+					continue
+
+				#### MESSAGES FROM OTHER PROGRAMS ####
 
 				if isinstance(msg, JsonResult):
 					print msg
-					for cm in self.cms.values():
+					for cm in get_cm(None):
 						if msg.guid in cm.msg_guids:
 							(orig_msg, handler) = cm.get_msg_handler(msg)
 							cm.rem_msg_handler(msg)
@@ -235,53 +250,31 @@ class Classic(Device):
 						'(?P<scheme>^.+?)://(?P<cm>.+?)/(?P<guid>.+)', msg.url
 					)
 					if not match:
-						errno  = 1
-						errstr = (u'Invalid URL. Required format: "cm://<cm '
-						       +  'label>/<guid>"')
-						result = JsonResult(
-							msg.guid, errno, errstr, 0, False, False
-						)
-						msg.wire._send(result.serialize())
-						msg.wire.stop()
+						errstr = u'Invalid URL format: %s' % msg.url
+						msg.respond(1, errstr, 0, False, False)
 						continue
 					scheme = match.group('scheme')
 					label  = match.group('cm')
 					guid   = match.group('guid')
 					if scheme != u'cm':
-						errno  = 2
 						errstr = u'Invalid URL scheme: %s' % msg.url
-						result = JsonResult(
-							msg.guid, errno, errstr, 0, False, False
-						)
-						msg.wire._send(result.serialize())
-						msg.wire.stop()
+						msg.respond(2, errstr, 0, False, False)
 						continue
-					if label not in self.cms:
-						errno  = 3
+					cm = get_cm(label)
+					if not cm:
 						errstr = u'No such CM: %s' % label
-						result = JsonResult(
-							msg.guid, errno, errstr, 0, False, False
-						)
-						msg.wire._send(result.serialize())
-						msg.wire.stop()
+						msg.respond(3, errstr, 0, False, False)
 						continue
-					cm = self.cms[label]
 					get = GetItem(cm.make_msg_guid(), guid)
 
 					def handle_get_item(self, cm, msg, orig_msg):
 						if msg.errno:
-							orig_msg.wire._send(msg.serialize())
-							orig_msg.wire.stop()
+							orig_msg.respond(msg.errno,msg.errstr,0,False,False)
 							return
 						item = make_item(cm, msg.result)
 						if not self.player.play(item, orig_msg.seek):
-							errno  = 4
 							errstr = u'Unplayable item'
-							result = JsonResult(
-								orig_msg.guid, errno, errstr, 0, False, False
-							)
-							orig_msg.wire._send(result.serialize())
-							orig_msg.wire.stop()
+							orig_msg.respond(4, errstr, 0, False, False)
 							return
 						if item == self.menu.focused():
 							(guid, render) = self.player.ticker()
@@ -289,11 +282,7 @@ class Classic(Device):
 							render.tick(self.display.canvas)
 							self.display.show(TRANSITION.NONE)
 							render.min_timeout(325)
-						result = JsonResult(
-							orig_msg.guid, 0, u'EOK', 0, False, True
-						)
-						orig_msg.wire._send(result.serialize())
-						orig_msg.wire.stop()
+						orig_msg.respond(0, u'EOK', 0, False, True)
 
 					cm.msg_guids[get.guid] = (msg, handle_get_item)
 					cm.wire.send(get.serialize())
@@ -301,7 +290,9 @@ class Classic(Device):
 				#### MESSAGES FROM THE DEVICE ####
 
 				if isinstance(msg, Helo):
-					# always draw on screen when a device (re)connects
+					self.mac_addr = msg.mac_addr
+					register_dm(self, msg.mac_addr)
+					# always draw on screen when a device connects
 					(guid, render) = self.menu.ticker(curry=True)
 					self.display.canvas.clear()
 					render.tick(self.display.canvas)
@@ -468,7 +459,7 @@ class Classic(Device):
 					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,
 					                  IR.NUM_7, IR.NUM_8, IR.NUM_9]:
 						(guid, render, transition) = self.menu.number(msg.code)
-						self.sb_wire.send(StrmStatus().serialize())
+						self.wire.send(StrmStatus().serialize())
 
 					elif msg.code == IR.NOW_PLAYING:
 						self.display.next_visualizer()
@@ -487,11 +478,9 @@ class Classic(Device):
 						render.min_timeout(325)
 
 			except:
-				info = sys.exc_info()
-				traceback.print_tb(info[2])
-				print info[1]
+				traceback.print_exc()
 				self.stop()
 
-		print('device is Dead')
-
+		print('Classic %s is Dead' % self.mac_addr)
+		unregister_dm(self.mac_addr)
 

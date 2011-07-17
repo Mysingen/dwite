@@ -6,17 +6,16 @@
 
 import sys
 import traceback
-import Queue
 import random
 
+from Queue     import Queue, Empty
 from threading import Thread
 
-from protocol import Bark, JsonMessage
+from protocol import Hail, Bark, JsonMessage
 from watchdog import Watchdog
 
 class ContentManager(Thread):
 	alive       = True
-	label       = None
 	wire        = None
 	stream_ip   = 0
 	stream_port = 0
@@ -26,23 +25,17 @@ class ContentManager(Thread):
 	
 	msg_guids   = {}
 	
-	def __init__(self, label, wire, stream_ip, stream_port, in_queue,out_queue):
-		assert type(stream_ip)   == int
-		assert type(stream_port) == int
-		print('%s __init__' % label)
-		Thread.__init__(self, name=label)
-		self.label       = label
+	def __init__(self, wire, out_queue):
+		Thread.__init__(self, name='ContentManager')
 		self.wire        = wire
-		self.stream_ip   = stream_ip
-		self.stream_port = stream_port
-		self.in_queue    = in_queue
+		self.in_queue    = wire.out_queue
 		self.out_queue   = out_queue
 		self.watchdog    = Watchdog(5000)
 
 	def __eq__(self, other):
 		if type(other) != ContentManager:
 			return False
-		return self.label == other.label
+		return self.name == other.name
 
 	def __ne__(self, other):
 		return not self.__eq__(other)		
@@ -51,31 +44,46 @@ class ContentManager(Thread):
 		self.wire.stop()
 		self.alive = False
 
+	@property
+	def label(self):
+		return unicode(self.name)
+
 	def run(self):
+		from dwite import register_cm, unregister_cm, get_dm
+
 		while self.alive:
 			try:
 				msg = self.in_queue.get(block=True, timeout=0.5)
 				self.watchdog.reset()
-			except Queue.Empty:
+			except Empty:
 				if self.watchdog.wakeup():
 					self.wire.send(Bark(0).serialize())
 				elif self.watchdog.expired():
-					print '%s expired' % self.label
+					print '%s expired' % self.name
 					self.stop()
-					#self.watchdog.reset()
 				continue
 			except:
-				# unknown exception. print stack trace.
-				info = sys.exc_info()
-				traceback.print_tb(info[2])
-				print info[1]
+				traceback.print_exc()
 
-			if isinstance(msg, Bark):
+			if type(msg) == Hail:
+				print msg
+				assert type(msg.label)   == unicode
+				assert type(msg.stream_ip)   == int
+				assert type(msg.stream_port) == int
+				self.name        = msg.label
+				self.stream_ip   = msg.stream_ip
+				self.stream_port = msg.stream_port
+				register_cm(self, self.label)
 				continue
 
-			self.out_queue.put(msg)
+			if type(msg) == Bark:
+				continue
+
+			for dm in get_dm(None):
+				dm.in_queue.put(msg)
 				
 		print('%s is dead' % self.label)
+		unregister_cm(self.label)
 	
 	def make_msg_guid(self):
 		while True:
