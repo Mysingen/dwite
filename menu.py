@@ -89,11 +89,17 @@ class Error(Tree):
 		Tree.__init__(self, u'<ERROR>', message, parent)
 
 class CmFile(Tree):
-	cm = None
+	cm_label = None
 
 	def __init__(self, guid, label, parent, cm):
+		assert type(cm) == unicode
 		Tree.__init__(self, guid, label, parent)
-		self.cm = cm
+		self.cm_label = cm
+
+	@property
+	def cm(self):
+		from dwite import get_cm
+		return get_cm(self.cm_label)
 
 class CmAudio(CmFile):
 	size     = 0 # bytes
@@ -145,18 +151,18 @@ class CmDir(CmFile):
 			kind  = l['kind']
 
 			if kind == 'dir':
-				self.children.append(CmDir(guid, label, self, self.cm))
+				self.children.append(CmDir(guid, label, self, self.cm_label))
 				continue
 
 			if kind == 'file':
-				self.children.append(CmFile(guid, label, self, self.cm))
+				self.children.append(CmFile(guid, label, self, self.cm_label))
 				continue
 			
 			if kind in ['mp3', 'flac']:
 				size     = l['size']
 				duration = l['duration']
 				self.children.append(
-					CmAudio(guid, label, size, duration, kind, self, self.cm)
+					CmAudio(guid, label, size,duration,kind, self,self.cm_label)
 				)
 				continue
 			
@@ -439,11 +445,11 @@ class Menu:
 		self.root.add(self.searcher)
 
 	def add_cm(self, cm):
-		self.root.add(CmDir(u'/', cm.label, self.root, cm))
+		self.root.add(CmDir(u'/', cm.label, self.root, cm.label))
 
 	def rem_cm(self, cm):
 		focused = self.focused()
-		removed = CmDir(u'/', cm.label, self.root, cm)
+		removed = CmDir(u'/', cm.label, self.root, cm.label)
 		self.root.remove(removed)
 		if removed.is_parent_of(focused):
 			self.cwd     = self.root
@@ -533,13 +539,13 @@ def make_item(cm, obj):
 	kind  = obj['kind']
 
 	if kind == 'dir':
-		return CmDir(guid, label, None, cm)
+		return CmDir(guid, label, None, cm.label)
 
 	if kind == 'file':
-		return CmFile(guid, label, None, cm)
+		return CmFile(guid, label, None, cm.label)
 
 	if kind in ['mp3', 'flac']:
 		size     = obj['size']
 		duration = obj['duration']
-		return CmAudio(guid, label, size, duration, kind, None, cm)
+		return CmAudio(guid, label, size, duration, kind, None, cm.label)
 

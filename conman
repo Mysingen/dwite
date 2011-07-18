@@ -28,9 +28,12 @@ try:
 			time.sleep(0.5)
 		else:
 			break
+except KeyboardInterrupt:
+	pass
 except:
 	traceback.print_exc()
-	cm.stop(hard=True)
+
+cm.stop(hard=True)
 
 while threading.active_count() > 1:
 	print [t.name for t in threading.enumerate()]

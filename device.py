@@ -350,8 +350,8 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, Dsco):
-					print(str(msg))
-					self.player.finish()
+					print msg
+					self.player.stop()
 					continue
 
 				if isinstance(msg, Tactile):
@@ -462,6 +462,8 @@ class Classic(Device):
 							# is correctly redrawn without a progres bar:
 							self.menu.ticker(curry=True)
 						else:
+							if not self.player.playing:
+								continue
 							next = self.player.playing.item.next()
 							while next and not self.player.play(next):
 								next = next.next()
@@ -483,6 +485,8 @@ class Classic(Device):
 							# is correctly redrawn without a progres bar:
 							self.menu.ticker(curry=True)
 						else:
+							if not self.player.playing:
+								continue
 							prev = self.player.playing.item.prev()
 							while prev and not self.player.play(prev):
 								prev = prev.prev()

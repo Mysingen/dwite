@@ -27,7 +27,7 @@ STOPPED  = 4
 
 class Conman(Thread):
 	label     = None
-	state     = PAUSED
+	state     = STARTING
 	backend   = None
 	streamer  = None
 	jsonwire  = None
@@ -69,8 +69,6 @@ class Conman(Thread):
 		self.jsonwire.send(hail.serialize())
 
 	def run(self):
-		self.state = RUNNING
-
 		while self.state != STOPPED:
 
 			if self.state == PAUSED:
@@ -82,6 +80,7 @@ class Conman(Thread):
 				msg = self.queue.get(block=True, timeout=0.5)
 			except Empty:
 				if (not self.jsonwire.is_alive()) and self.state == RUNNING:
+					self.state = STARTING
 					self.connected = False
 					self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
 					self.jsonwire.start()
@@ -93,10 +92,11 @@ class Conman(Thread):
 			if type(msg) in [Accepting, Connected]:
 				self.connected |= (type(msg) == Connected)
 				self.accepting |= (type(msg) == Accepting)
-				if self.connected and self.accepting:
+				if self.connected and self.accepting and self.state == STARTING:
 					# ready to hail the DM with all necessary info about conman
 					# subsystems
 					self.send_hail()
+					self.state = RUNNING
 				continue
 
 			if isinstance(msg, protocol.Ls):

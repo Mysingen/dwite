@@ -41,7 +41,8 @@ class Player:
 			item = item.linkee
 		if not isinstance(item, CmAudio):
 			return False
-
+		if not item.cm:
+			return False
 		if seek > item.duration:
 			return False
 
@@ -117,9 +118,6 @@ class Player:
 	def get_progress(self):
 		return self.playing.position()
 
-	def finish(self):
-		self.playing = None
-	
 	def ticker(self):
 		if self.playing:
 			return self.playing.curry()
@@ -150,7 +148,7 @@ class Player:
 				print 'STMo next = None'
 			# finish the currently playing track
 			self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
-			self.finish()
+			self.stop()
 			return next
 		if stat.event == '\0\0\0\0':
 			# undocumented but always received right after the device connects
