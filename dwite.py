@@ -18,8 +18,8 @@ from Queue    import Queue, Empty
 
 from device   import Device
 from wire     import SlimWire, JsonWire, Connected
-from cm       import ContentManager
-from ui       import UserInterface
+from cm       import CmConnection
+from ui       import UiConnection
 from protocol import JsonMessage
 
 class MessageRegister(object):
@@ -156,7 +156,7 @@ def main():
 
 			if type(msg) == Connected:
 				if msg.wire == ui_wire:
-					UserInterface(ui_wire, queue).start()
+					UiConnection(ui_wire, queue).start()
 					ui_wire = JsonWire('', 3482, queue, accept=True)
 					ui_wire.start()
 				elif msg.wire == dm_wire:
@@ -170,7 +170,7 @@ def main():
 					dm_wire = SlimWire('', 3483, queue, accept=True)
 					dm_wire.start()
 				elif msg.wire == cm_wire:
-					ContentManager(cm_wire, queue).start()
+					CmConnection(cm_wire, queue).start()
 					cm_wire = JsonWire('', 3484, queue, accept=True)
 					cm_wire.start()
 				continue

@@ -682,11 +682,6 @@ class JsonCall(JsonMessage):
 		})
 		return r
 
-class Bark(JsonCall):
-
-	def __init__(self, guid):
-		JsonCall.__init__(self, guid, u'bark', {})
-
 # this command is used by a content manager to hail a device manager. There
 # is no reply message class.
 class Hail(JsonCall):
@@ -817,9 +812,6 @@ def parse_json(data):
 	
 		if method == u'terms':
 			return Terms(guid, **params)
-
-		if method == u'bark':
-			return Bark(guid, **params)
 
 		if method == u'play':
 			return Play(guid, **params)

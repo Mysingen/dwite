@@ -17,7 +17,6 @@ from threading import Thread
 from wire       import JsonWire, Connected
 from backend_fs import FileSystem
 from streamer   import Streamer, Accepting
-from watchdog   import Watchdog
 
 import protocol
 
@@ -33,7 +32,6 @@ class Conman(Thread):
 	streamer  = None
 	jsonwire  = None
 	queue     = None
-	watchdog  = None
 	handlers  = {}
 
 	def __init__(self):
@@ -52,9 +50,9 @@ class Conman(Thread):
 			return self.handlers[msg.guid]
 		return None
 
-	def stop(self):
+	def stop(self, hard=False):
 		self.streamer.stop()
-		self.jsonwire.stop(hard=True)
+		self.jsonwire.stop(hard)
 		self.backend.stop()
 		self.state = STOPPED
 
@@ -68,7 +66,6 @@ class Conman(Thread):
 			if isinstance(msg, Accepting):
 				streamer_port = msg.port
 				todo -= 1
-		self.watchdog = Watchdog(5000)
 
 		# ready to hail the DM with all necessary info about conman subsystems
 		def handle_hail(self, msg, orig_msg, user):
@@ -90,14 +87,9 @@ class Conman(Thread):
 			msg = None
 			try:
 				msg = self.queue.get(block=True, timeout=0.5)
-				self.watchdog.reset()
 			except Empty:
-				if self.watchdog.wakeup():
-					self.jsonwire.send(protocol.Bark(0).serialize())
-				elif self.watchdog.expired():
-					print 'Conman expired'
-					self.stop()
-					#self.watchdog.reset()
+				if not self.jsonwire.is_alive():
+					self.stop(hard=True)
 				continue
 			except Exception, e:
 				print 'VERY BAD!'
@@ -113,9 +105,6 @@ class Conman(Thread):
 					handler(self, msg, orig_msg, user)
 				else:
 					print msg
-				continue
-			
-			if isinstance(msg, protocol.Bark):
 				continue
 
 			if isinstance(msg, protocol.GetItem):

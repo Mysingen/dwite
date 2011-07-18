@@ -22,18 +22,17 @@ from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
 from volume    import Volume
-from watchdog  import Watchdog
-from cm        import ContentManager
+from cm        import CmConnection
 
 # private message classes. only used to implement public API's
 class AddCM:
 	def __init__(self, cm):
-		assert type(cm) == ContentManager
+		assert type(cm) == CmConnection
 		self.cm = cm
 
 class RemCM:
 	def __init__(self, cm):
-		assert type(cm) == ContentManager
+		assert type(cm) == CmConnection
 		self.cm = cm
 
 class PlayItem(JsonMessage):
@@ -91,7 +90,6 @@ class Device(Thread):
 		self.in_queue  = self.wire.out_queue
 		self.out_queue = out_queue
 		self.menu      = Menu()
-		self.watchdog  = Watchdog(1000)
 
 	def run(self):
 		while self.alive:
@@ -111,8 +109,8 @@ class Device(Thread):
 					self.alive = False
 		#print 'Temporary %s is dead' % self.name
 	
-	def stop(self):
-		self.wire.stop()
+	def stop(self, hard=False):
+		self.wire.stop(hard)
 		self.alive = False
 
 	def add_cm(self, cm):
@@ -234,18 +232,15 @@ class Classic(Device):
 				# single core in an Intel Core2 Duo system, so lets do that
 				# to get good resolution in all ticking activities.
 				msg = self.in_queue.get(block=True, timeout=0.02)
-				self.watchdog.reset()
-			except Exception, e:
-				# most likely, it's just the timeout that triggered.
-				if self.watchdog.wakeup():
-					self.wire.send(Ping().serialize())
-				elif self.watchdog.expired():
-					print '%s expired' % self.mac_addr
-					self.stop()
-					continue
-
-			if not msg:
-				self.default_ticking()
+			except Empty:
+				if not self.wire.is_alive():
+					self.stop(hard=True)
+				else:
+					self.default_ticking()
+				continue
+			except:
+				traceback.print_exc()
+				self.stop(hard=True)
 				continue
 
 			try:
@@ -312,7 +307,7 @@ class Classic(Device):
 						def handle_ls_r(msg_reg, response, orig_msg, user):
 							(dm, cm) = user
 							assert type(dm)       == Classic
-							assert type(cm)       == ContentManager
+							assert type(cm)       == CmConnection
 							assert type(response) == JsonResult
 							for r in response.result:
 								item = make_item(cm, r)
@@ -417,7 +412,7 @@ class Classic(Device):
 							def handle_ls_r(msg_reg, response, orig_msg, user):
 								(dm, cm) = user
 								assert type(dm)       == Classic
-								assert type(cm)       == ContentManager
+								assert type(cm)       == CmConnection
 								assert type(response) == JsonResult
 								for r in response.result:
 									item = make_item(cm, r)
