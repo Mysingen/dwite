@@ -33,6 +33,8 @@ class Conman(Thread):
 	jsonwire  = None
 	queue     = None
 	handlers  = {}
+	connected = False
+	accepting = False
 
 	def __init__(self):
 		Thread.__init__(self, target=Conman.run, name='Conman')
@@ -43,7 +45,6 @@ class Conman(Thread):
 		self.backend.start()
 		self.streamer.start()
 		self.jsonwire.start()
-		self.state    = RUNNING
 
 	def get_handler(self, msg):
 		if msg.guid in self.handlers:
@@ -56,27 +57,19 @@ class Conman(Thread):
 		self.backend.stop()
 		self.state = STOPPED
 
-	def run(self):
-		# wait for other subsystems to come up before going on
-		todo = 2
-		while todo > 0:
-			msg = self.queue.get(block=True)
-			if isinstance(msg, Connected):
-				todo -= 1
-			if isinstance(msg, Accepting):
-				streamer_port = msg.port
-				todo -= 1
-
-		# ready to hail the DM with all necessary info about conman subsystems
+	def send_hail(self):
 		def handle_hail(self, msg, orig_msg, user):
 			assert type(msg) == protocol.JsonResult
 			if msg.errno:
 				print msg.errstr
 				self.stop()
 		guid = random.randint(1, 1000000)
-		hail = protocol.Hail(guid, self.backend.name, 0, streamer_port)
+		hail = protocol.Hail(guid, self.backend.name, 0, self.streamer.port)
 		self.handlers[guid] = (hail, handle_hail, None)
 		self.jsonwire.send(hail.serialize())
+
+	def run(self):
+		self.state = RUNNING
 
 		while self.state != STOPPED:
 
@@ -88,12 +81,23 @@ class Conman(Thread):
 			try:
 				msg = self.queue.get(block=True, timeout=0.5)
 			except Empty:
-				if not self.jsonwire.is_alive():
-					self.stop(hard=True)
+				if (not self.jsonwire.is_alive()) and self.state == RUNNING:
+					self.connected = False
+					self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
+					self.jsonwire.start()
 				continue
 			except Exception, e:
 				print 'VERY BAD!'
 				traceback.print_exc()
+
+			if type(msg) in [Accepting, Connected]:
+				self.connected |= (type(msg) == Connected)
+				self.accepting |= (type(msg) == Accepting)
+				if self.connected and self.accepting:
+					# ready to hail the DM with all necessary info about conman
+					# subsystems
+					self.send_hail()
+				continue
 
 			if isinstance(msg, protocol.Ls):
 				self.backend.in_queue.put(msg)

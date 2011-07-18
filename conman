@@ -24,18 +24,17 @@ try:
 	cm = Conman()
 	cm.start()
 	while True:
-		if cm.isAlive():
+		if cm.is_alive():
 			time.sleep(0.5)
 		else:
 			break
-			#cm = Conman()
-			#cm.start()
 except:
-	info = sys.exc_info()
-	traceback.print_tb(info[2])
-	print info[1]
+	traceback.print_exc()
+	cm.stop(hard=True)
 
-cm.stop()
+while threading.active_count() > 1:
+	print [t.name for t in threading.enumerate()]
+	time.sleep(1)
 
 print('Goodbye')
 

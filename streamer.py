@@ -22,7 +22,7 @@ STOPPED  = 0
 STARTING = 1
 RUNNING  = 2
 
-class Accepting:
+class Accepting(object):
 	host = None
 	port = 0
 

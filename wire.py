@@ -143,7 +143,6 @@ class Wire(Thread):
 				self.out_queue.put(Connected(self.host, self.port, self))
 				break
 			except Exception, e:
-				print e
 				time.sleep(1) # stop pointless runaway loop
 
 	def run(self):
