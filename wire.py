@@ -235,22 +235,24 @@ class Wire(Thread):
 			try:
 				sent = self.socket.send(data[-left:])
 				if sent == 0:
-					print('Connection broken')
+					#print('send() Connection broken')
 					self.stop(hard=True)
 					return
 				left = left - sent
 			except socket.error, e:
 				if e[0] == errno.ECONNRESET:
-					self.state = STARTING
+					#print('send() Connection reset')
+					self.stop(hard=True)
 					return
 				elif e[0] == errno.EAGAIN: # temporarily unavailable. try again
+					#print('send() Connection unavailable')
 					continue
 				elif e[0] == errno.EPIPE: # broken pipe. disconnect
-					print('Broken pipe')
+					#print('send() Broken pipe')
 					self.stop(hard=True)
 					return
 				else:
-					print('Unhandled socket error %d' % e[0])
+					print('send() Unhandled socket error %d' % e[0])
 					self.stop(hard=True)
 			except Exception, e:
 				print('%s: Unhandled exception %s' % (self.label, str(e)))
@@ -265,18 +267,21 @@ class Wire(Thread):
 				r = None
 				r = self.socket.recv(amount)
 				if r == '':
-					print('Connection broken')
+					#print('recv() Connection broken')
 					self.stop(hard=True)
 					return
 				body = body + r
 				left = left - len(r)
 			except socket.error, e:
 				if e[0] == errno.ECONNRESET:
-					self.state = STARTING
+					#print('recv() Connection reset')
+					self.stop(hard=True)
 					return None
 				elif e[0] == errno.EAGAIN: # temporarily unavailable. try again
+					#print('recv() Conection unavailable')
 					continue
 				elif e[0] == errno.EPIPE: # broken pipe. disconnect
+					#print('recv() Broken pipe')
 					self.stop(hard=True)
 					return None
 				else:

@@ -108,6 +108,7 @@ class Device(Thread):
 		raise Exception('Device classes must implement save_playlist()')
 
 	def run(self):
+		from dwite import register_dm
 		while self.alive:
 			msg = None
 			try:
@@ -120,6 +121,11 @@ class Device(Thread):
 				if (msg.id == ID.SQUEEZEBOX3
 				or  msg.id == ID.SOFTSQUEEZE):
 					dm = Classic(self.wire, self.out_queue, msg.mac_addr)
+					try:
+						register_dm(dm, msg.mac_addr)
+					except:
+						dm.stop(hard=True)
+						return
 					dm.start()
 					dm.in_queue.put(msg)
 					self.alive = False
@@ -299,7 +305,7 @@ class Classic(Device):
 				self.display.show(TRANSITION.NONE)
 
 	def run(self):
-		from dwite import register_dm, unregister_dm, get_cm, msg_reg
+		from dwite import unregister_dm, get_cm, msg_reg
 
 		# Python limit: the player cannot be created in __init__() because
 		# the threading would goes bananas. player contains more threads and
@@ -402,12 +408,6 @@ class Classic(Device):
 				#### MESSAGES FROM THE DEVICE ####
 
 				if isinstance(msg, Helo):
-					try:
-						register_dm(self, self.mac_addr)
-					except Exception, e:
-						print e
-						self.stop()
-						continue
 					# always draw on screen when a device connects
 					(guid, render) = self.menu.ticker(curry=True)
 					self.display.canvas.clear()
