@@ -1,10 +1,13 @@
 Dwite is a server that takes care of interaction with a SqueezeBox of the
 "classic" generation (i.e. SqueezeBox2 is supported, but not SqueezeBox1).
-Note that Dwite does not know how to stream content to a device. It must get
-help from a separate content manager that takes care of such things. It also
-does not manage the end user's media library and it doesn't provide a host-side
-UI for the user. See the bits about Cleo towards the end of this file for an
-example of such functionality.
+
+Conman is a content manager that knows how to stream tracks to the device and
+performs directory functions on a media library (currently only simple file
+system browsing). Dwite and the Conman together form a fully usable system
+that can be used to play MP3 and FLAC files (OGG support is coming).
+
+Finally a CLI tool is included to demonstrate the RPC wrappers around core
+Dwite functionality.
 
 Dwite is written in Python simply because it is such a lovely language. The
 intention is to keep it small enough that it can serve as a reference when
@@ -15,11 +18,13 @@ the point...
 
 Dependencies
 ============
-PIL - To render bitmaps from TTF fonts and things like that.
-Mutagen - To extract media file meta data.
+ * PIL - To render bitmaps from TTF fonts and things like that.
+ * Mutagen - To extract media file meta data.
+ * libmagic + magic Python wrappers.
+ * libflac + pyflac Python wrappers (https://github.com/dsully/pyflac).
 
-The code is not validated against Python 3.0, but I have avoided things that
-I know would break.
+The code is not terribly hard to port to Python 3, but several dependencies
+do not support Python 3, so it would still be a lot of work to make it happen.
 
 Class & module hierarchies
 ==========================
@@ -124,7 +129,7 @@ The Player and NowPlaying classes implement handlers for the playback related
 buttons on the remote and keep track of the playback status messages that come
 in from a device. They also handle volume control (which is definitely buggy).
 
-cleo / cleo.py
+conman / conman.py
 --------------
 Liveness control of a minimalistic content manager that runs as a separate
 program. It communicates with Dwite by sending JSON formatted messages over
@@ -132,17 +137,10 @@ a TCP socket (using the JsonWire class, discussed earlier). If you want to
 build a content manager (such as a SqueezeBox plugin for your favourite media
 player), start by looking at the RPC API that Cleo implements.
 
-Cleo doesn't really know anything about storage backends and must import a
-Backend class that understands such things. Currently it imports a horrid hack
-that tries to interact with a Banshee database. Patches to turn Cleo into a
-clean and useful foundation for further work would be greatly appreciated. I
-focus on the device management and I'm not too bothered by the fact that Cleo
-doesn't really work.
-
 streamer.py
 -----------
 Used by the content manager to respond to HTTP GET requests from the device.
-Also contains a super simple MP3 "decoder" class. The decoder doesn't unpack
+Also contains MP3 and FLAC "decoder" classes. The decoder doesn't unpack
 the MP3 contents into PCM frames or anything like that; It merely maps time
 seeks to file offsets. I.e. if the device asks for a particular track and a
 time offset, the streamer will dig up the corresponding file and decode the
