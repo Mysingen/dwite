@@ -7,6 +7,8 @@
 import traceback
 import sys
 import re
+import os
+import json
 
 from threading import Thread
 from Queue     import Queue, Empty
@@ -75,7 +77,7 @@ class Device(Thread):
 	out_queue = None
 	alive     = True  # controls the main loop
 	wire      = None  # must have a wire to send actual commands to the device
-	menu      = None  # all devices must have a menu system
+	menu      = None  # all devices must have a menu system. TODO: really?
 	mac_addr  = None  # string. uniqely identifies the device
 	player    = None
 	seeker    = None
@@ -91,6 +93,14 @@ class Device(Thread):
 		self.out_queue = out_queue
 		self.menu      = Menu()
 
+	def load_settings(self):
+		# Devics is a virtual class and does not load or save settings.
+		# concrete classes must do it though
+		raise Exception('Device classes must implement load_settings()')
+
+	def save_settings(self):
+		raise Exception('Device classes must implement load_settings()')
+
 	def run(self):
 		while self.alive:
 			msg = None
@@ -103,7 +113,7 @@ class Device(Thread):
 				# should have used. create it and pass the Helo message to it.
 				if (msg.id == ID.SQUEEZEBOX3
 				or  msg.id == ID.SOFTSQUEEZE):
-					dm = Classic(self.wire, self.out_queue)
+					dm = Classic(self.wire, self.out_queue, msg.mac_addr)
 					dm.start()
 					dm.in_queue.put(msg)
 					self.alive = False
@@ -112,6 +122,7 @@ class Device(Thread):
 	def stop(self, hard=False):
 		self.wire.stop(hard)
 		self.alive = False
+		self.save_settings()
 
 	def add_cm(self, cm):
 		self.in_queue.put(AddCM(cm))
@@ -153,13 +164,50 @@ class Classic(Device):
 	                    # maps so keep a mapping from message codes to arrays
 	                    # of stress levels. only used for tactile events.
 
-	def __init__(self, wire, out_queue):
+	def __init__(self, wire, out_queue, mac_addr):
 		#print 'Classic __init__'
+		assert type(mac_addr) == unicode
 		Device.__init__(self, wire, out_queue)
-		self.name         = 'Classic'
-		self.display      = Display((320,32), wire)
+		self.name         = 'Classic' # Thread member
+		self.mac_addr     = mac_addr
+		settings          = self.load_settings()
+		self.display      = Display((320,32), wire, **settings['display'])
 		self.acceleration = init_acceleration_maps()
-		self.volume       = Volume(wire, 255, 70, 70, True)
+		self.volume       = Volume(wire, **settings['volume'])
+
+	def load_settings(self):
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'dwite.json')
+		settings = {}
+		if os.path.exists(path):
+			f = open(path)
+			try:
+				settings = json.load(f)['devices'][self.mac_addr]
+			except:
+				print('ERROR: Could not load settings for %s' % self.mac_addr)
+				settings = {}
+			f.close()
+		# fill in default settings
+		if 'display' not in settings:
+			settings['display'] = Display.dump_defaults()
+		if 'volume' not in settings:
+			settings['volume'] = Volume.dump_defaults()
+		return settings
+
+	def save_settings(self):
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'dwite.json')
+		try:
+			f = open(path)
+			storage = json.load(f)
+			f.close()
+		except:
+			storage = {'devices':{}}
+		settings = {}
+		settings['volume']  = self.volume.dump_settings()
+		settings['display'] = self.display.dump_settings()
+		storage['devices'][self.mac_addr] = settings
+		f = open(path, 'w')
+		json.dump(storage, f, indent=4)
+		f.close()
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -218,6 +266,8 @@ class Classic(Device):
 				self.display.show(TRANSITION.NONE)
 
 	def run(self):
+		from dwite import register_dm, unregister_dm, get_cm, msg_reg
+
 		# Python limit: the player cannot be created in __init__() because
 		# the threading would goes bananas. player contains more threads and
 		# threads cannot be created "inside" the creation procedures of other
@@ -244,8 +294,6 @@ class Classic(Device):
 				continue
 
 			try:
-				from dwite import register_dm, unregister_dm, get_cm, msg_reg
-			
 				#### MESSAGES FROM THE DWITE'S MAIN LOOP ####
 
 				if isinstance(msg, AddCM):
@@ -321,9 +369,8 @@ class Classic(Device):
 				#### MESSAGES FROM THE DEVICE ####
 
 				if isinstance(msg, Helo):
-					self.mac_addr = msg.mac_addr
 					try:
-						register_dm(self, msg.mac_addr)
+						register_dm(self, self.mac_addr)
 					except Exception, e:
 						print e
 						self.stop()

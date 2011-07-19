@@ -6,13 +6,14 @@ from render   import VolumeMeter
 
 class Volume:
 	wire    = None
+	mute    = False
 	preamp  = 0    # int 0-255
 	left    = 0    # int 0-100
 	right   = 0    # int 0-100
 	meter   = None # VolumeMeter renderer
 	timeout = None # indicates how long the meter should be kept visible
 	
-	def __init__(self, wire, preamp, left, right, visual):
+	def __init__(self, wire, mute, preamp, left, right, visual):
 		if not type(wire) == SlimWire:
 			raise Exception('Invalid Volume.wire object: %s' % str(wire))
 		if not type(preamp) == int or preamp < 0 or preamp > 255:
@@ -22,14 +23,34 @@ class Volume:
 		if not type(right) == int or right < 0 or right > 100:
 			raise Exception('Invalid Volume.right value: %s' % str(right))
 		self.wire   = wire
+		self._mute  = mute
 		self.preamp = preamp
 		self.left   = left
 		self.right  = right
 		if visual:
 			self.meter = VolumeMeter()
-		self.mute(False, False)
+		self.mute(mute, mute)
 		self.set_volume(left, right)
 		self.timeout = datetime.now()
+
+	@classmethod
+	def dump_defaults(cls):
+		return {
+			'mute'  : False,
+			'preamp': 255,
+			'left'  : 70,
+			'right' : 70,
+			'visual': True
+		}
+
+	def dump_settings(self):
+		return {
+			'mute'  : self._mute,
+			'preamp': self.preamp,
+			'left'  : self.left,
+			'right' : self.right,
+			'visual': self.meter != None
+		}
 
 	def mute(self, analog, digital):
 		aude         = Aude()

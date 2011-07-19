@@ -46,9 +46,24 @@ class Display:
 	canvas      = None
 	visualizers = iter(all_visualizers)
 	
-	def __init__(self, size, wire):
+	def __init__(self, size, wire, brightness):
+		assert brightness in [
+			BRIGHTNESS.OFF,
+			BRIGHTNESS.ONE,
+			BRIGHTNESS.TWO,
+			BRIGHTNESS.THREE,
+			BRIGHTNESS.FULL
+		]
 		self.wire   = wire
 		self.canvas = Canvas(size)
+		self.set_brightness(brightness)
+
+	@classmethod
+	def dump_defaults(cls):
+		return { 'brightness': BRIGHTNESS.FULL }
+
+	def dump_settings(self):
+		return { 'brightness': self.brightness }
 
 	def set_brightness(self, brightness):
 		if brightness < BRIGHTNESS.OFF or brightness > BRIGHTNESS.FULL:
