@@ -101,6 +101,12 @@ class Device(Thread):
 	def save_settings(self):
 		raise Exception('Device classes must implement load_settings()')
 
+	def load_playlist(self):
+		raise Exception('Device classes must implement load_playlist()')
+	
+	def save_playlist(self):
+		raise Exception('Device classes must implement save_playlist()')
+
 	def run(self):
 		while self.alive:
 			msg = None
@@ -123,6 +129,7 @@ class Device(Thread):
 		self.wire.stop(hard)
 		self.alive = False
 		self.save_settings()
+		self.save_playlist()
 
 	def add_cm(self, cm):
 		self.in_queue.put(AddCM(cm))
@@ -174,8 +181,17 @@ class Classic(Device):
 		self.display      = Display((320,32), wire, **settings['display'])
 		self.acceleration = init_acceleration_maps()
 		self.volume       = Volume(wire, **settings['volume'])
+		playlist          = self.load_playlist()
+		for obj in playlist:
+			try:
+				item = make_item(**obj)
+				self.menu.playlist.add(item)
+			except Exception, e:
+				print e
+				print('Malformed playlist item: %s' % obj)
 
 	def load_settings(self):
+		# device settings indexed by MAC address
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'dwite.json')
 		settings = {}
 		if os.path.exists(path):
@@ -194,6 +210,7 @@ class Classic(Device):
 		return settings
 
 	def save_settings(self):
+		# device settings indexed by MAC address
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'dwite.json')
 		try:
 			f = open(path)
@@ -208,6 +225,22 @@ class Classic(Device):
 		f = open(path, 'w')
 		json.dump(storage, f, indent=4)
 		f.close()
+
+	def save_playlist(self):		
+		# the global playlist
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'playlist.json')
+		f = open(path, 'w')
+		json.dump(self.menu.playlist.dump(), f, indent=4)
+		f.close()
+
+	def load_playlist(self):
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'playlist.json')
+		if not os.path.exists(path):
+			return []
+		f = open(path)
+		playlist = json.load(f)
+		f.close()
+		return playlist
 
 	def enough_stress(self, code, stress):
 		if stress == 0:
@@ -307,7 +340,7 @@ class Classic(Device):
 				#### MESSAGES FROM OTHER PROGRAMS/SUBSYSTEMS ####
 
 				if isinstance(msg, JsonResult):
-					print 'dm JsonResult %d' % msg.guid
+					#print 'dm JsonResult %d' % msg.guid
 					try:
 						msg_reg.run_handler(msg)
 					except:
@@ -325,7 +358,7 @@ class Classic(Device):
 					continue						
 
 				if isinstance(msg, PlayItem):
-					print 'dm PlayItem %s' % msg
+					#print 'dm PlayItem %s' % msg
 					if not self.player.play(msg.item, msg.seek):
 						errstr = u'Unplayable item'
 						msg.respond(4, errstr, 0, False, False)
@@ -340,7 +373,7 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, AddItem):
-					print 'dm AddItem %s' % msg
+					#print 'dm AddItem %s' % msg
 					item = msg.item
 					if isinstance(item, CmAudio):
 						self.menu.playlist.add(item)
@@ -358,7 +391,7 @@ class Classic(Device):
 							assert type(cm)       == CmConnection
 							assert type(response) == JsonResult
 							for r in response.result:
-								item = make_item(cm, r)
+								item = make_item(cm.label, **r)
 								if type(item) == CmAudio:
 									dm.in_queue.put(AddItem(None, None, item))
 	
@@ -462,7 +495,7 @@ class Classic(Device):
 								assert type(cm)       == CmConnection
 								assert type(response) == JsonResult
 								for r in response.result:
-									item = make_item(cm, r)
+									item = make_item(cm.label, **r)
 									if type(item) == CmAudio:
 										dm.in_queue.put(AddItem(None,None,item))
 

@@ -42,7 +42,7 @@ class UiConnection(Connection):
 		from dwite import get_dm, get_cm, msg_reg
 
 		if type(msg) == JsonResult:
-			print 'ui JsonResult %d' % msg.guid
+			#print 'ui JsonResult %d' % msg.guid
 			try:
 				msg_reg.run_handler(msg)
 			except:
@@ -50,7 +50,7 @@ class UiConnection(Connection):
 			return
 
 		if type(msg) in [Play, Add]:
-			print 'ui Play/Add %s' % msg
+			#print 'ui Play/Add %s' % msg
 			match = re.match(
 				'(?P<scheme>^.+?)://(?P<cm>.+?)/(?P<guid>.+)', msg.url
 			)
@@ -77,7 +77,7 @@ class UiConnection(Connection):
 				if msg.errno:
 					orig_msg.respond(msg.errno, msg.errstr, 0, False, False)
 					return
-				item = make_item(cm, msg.result)
+				item = make_item(cm.label, **msg.result)
 				for dm in get_dm(None):
 					if type(orig_msg) == Play:
 						cmd = PlayItem(

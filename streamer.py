@@ -183,7 +183,11 @@ class Streamer(Thread):
 			# seeking in the file and we can keep the old decoder. otherwise
 			# create a new one:
 			if (not self.decoder) or (self.decoder.path != path):
-				self.decoder = Decoder(path)
+				try:
+					self.decoder = Decoder(path)
+				except:
+					return 'HTTP/1.0 404 Not Found\r\n\r\n'
+					
 		except Exception, e:
 			traceback.print_exc()
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'

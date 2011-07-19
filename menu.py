@@ -147,7 +147,7 @@ class CmDir(CmFile):
 			self.children = []
 		for l in listing:
 			guid  = l['guid']
-			label = l['label']
+			label = l['pretty']['label']
 			kind  = l['kind']
 
 			if kind == 'dir':
@@ -175,13 +175,13 @@ class Empty(Tree):
 		Tree.__init__(self, u'<EMPTY>', u'<EMPTY>', parent)
 
 class Link(Tree):
-	linkee = None # Tree object
+	target = None # Tree object
 
-	def __init__(self, linkee, parent):
-		assert isinstance(linkee, Tree)
+	def __init__(self, target, parent):
+		assert isinstance(target, Tree)
 		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
-		Tree.__init__(self, guid, linkee.label, parent)
-		self.linkee = linkee
+		Tree.__init__(self, guid, target.label, parent)
+		self.target = target
 
 class Playlist(Tree):
 	def __init__(self, parent):
@@ -191,13 +191,16 @@ class Playlist(Tree):
 	def add(self, item):
 		if not isinstance(item, CmAudio):
 			return
-		#print('Playlist add %s' % unicode(item))
+		print('Playlist add %s/%s' % (item.cm_label, item.guid))
 		if isinstance(self.children[0], Empty):
 			self.children = []
 		self.children.append(Link(item, self))
 
 	def remove(self, item):
-		print('Playlist remove %s' % item)
+		if type(item) == Empty:
+			return
+		assert type(item) == Link
+		print('Playlist remove %s/%s' % (item.target.cm_label,item.target.guid))
 		try:
 			index = self.children.index(item)
 			del self.children[index]
@@ -206,6 +209,23 @@ class Playlist(Tree):
 		except:
 			print('Could not remove %s' % item)
 			pass
+
+	def dump(self):
+		result = []
+		if type(self.children[0]) == Empty:
+			return result
+		for link in self.children:
+			item = link.target
+			obj = {}
+			obj['cm']     = item.cm_label
+			obj['guid']   = item.guid
+			obj['pretty'] = { 'label': item.label }
+			obj['kind']   = item.format
+			if item.format in ['mp3', 'flac']:
+				obj['size'] = item.size
+				obj['duration'] = item.duration
+			result.append(obj)
+		return result
 
 class CandidateTree(Tree):
 	query = None
@@ -531,21 +551,21 @@ class Menu:
 			self.current = len(self.cwd.children) - 1
 		return self.cwd.children[self.current]
 
-# create an item based on dictionary values found in 'obj'. the new item
-# is not parented!
-def make_item(cm, obj):
-	guid  = obj['guid']
-	label = obj['label']
-	kind  = obj['kind']
+# create an item. the new item is not parented!
+def make_item(cm, guid, pretty, kind, size=0, duration=0):
+	assert type(cm)       == unicode
+	assert type(guid)     == unicode
+	assert type(size)     == int
+	assert type(duration) == int
+	assert 'label' in pretty and type(pretty['label']) == unicode
+	assert kind in ['dir', 'file', 'mp3', 'flac']
 
 	if kind == 'dir':
-		return CmDir(guid, label, None, cm.label)
+		return CmDir(guid, pretty['label'], None, cm)
 
 	if kind == 'file':
-		return CmFile(guid, label, None, cm.label)
+		return CmFile(guid, pretty['label'], None, cm)
 
 	if kind in ['mp3', 'flac']:
-		size     = obj['size']
-		duration = obj['duration']
-		return CmAudio(guid, label, size, duration, kind, None, cm.label)
+		return CmAudio(guid, pretty['label'], size, duration, kind, None, cm)
 

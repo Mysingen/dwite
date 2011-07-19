@@ -750,6 +750,8 @@ class Add(JsonCall):
 		assert (not pretty)   or type(pretty)   == dict
 		assert (not size)     or type(size)     == int
 		assert (not duration) or type(duration) == int
+		if pretty and 'label' in pretty:
+			assert type(pretty['label']) == unicode
 		params = {
 			'url'     : url,
 			'kind'    : kind,

@@ -38,7 +38,7 @@ class Player:
 		link = None
 		if isinstance(item, Link):
 			link = item
-			item = item.linkee
+			item = item.target
 		if not isinstance(item, CmAudio):
 			return False
 		if not item.cm:

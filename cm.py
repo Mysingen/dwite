@@ -47,7 +47,7 @@ class CmConnection(Connection):
 			return
 
 		if type(msg) == JsonResult:
-			print 'cm JsonResult %d' % msg.guid
+			#print 'cm JsonResult %d' % msg.guid
 			try:
 				msg_reg.run_handler(msg)
 			except:

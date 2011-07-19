@@ -111,7 +111,11 @@ class FileSystem(Backend):
 			path = os.path.join(self.root_dir, guid, l)
 			child_guid = os.path.join(guid, l)
 			if os.path.isdir(path):
-				children.append({'guid':child_guid, 'label':l, 'kind':'dir'})
+				children.append({
+					'guid'  : child_guid,
+					'pretty': { 'label': l },
+					'kind'  :'dir'
+				})
 				if recursive:
 					children.extend(self._get_children(child_guid,True,verbose))
 			elif os.path.isfile(path):
@@ -120,16 +124,16 @@ class FileSystem(Backend):
 					size = os.path.getsize(path)
 					children.append({
 						'guid'    : child_guid,
-						'label'   : title,
+						'pretty'  : { 'label': title },
 						'kind'    : format,
 						'size'    : size,
 						'duration': duration
 					})
 				else:
 					children.append({
-						'guid' : child_guid,
-						'label': l,
-						'kind' : 'file'
+						'guid'  : child_guid,
+						'pretty': { 'label': l },
+						'kind'  : 'file'
 					})
 			else:
 				print('WARNING: Unsupported VFS content: %s' % path)
@@ -142,22 +146,26 @@ class FileSystem(Backend):
 		if not os.path.exists(path):
 			return None
 		if os.path.isdir(path):
-			return {'guid': guid, 'label':os.path.basename(path), 'kind':'dir' }
+			return {
+				'guid'  : guid,
+				'pretty': { 'label':os.path.basename(path) },
+				'kind'  :'dir'
+			}
 		elif os.path.isfile(path):
 			(format, title, duration) = self._classify_file(path)
 			if format:
 				return {
 					'guid'    : guid,
-					'label'   : title,
+					'pretty'  : { 'label': title },
 					'kind'    : format,
 					'size'    : os.path.getsize(path),
 					'duration': duration
 				}
 			else:
 				return {
-					'guid' : guid,
-					'label': os.path.basename(path),
-					'kind' : 'file'
+					'guid'  : guid,
+					'pretty': { 'label': os.path.basename(path) },
+					'kind'  : 'file'
 				}
 		else:
 			print('WARNING: Unsupported VFS content: %s' % path)
