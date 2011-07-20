@@ -595,7 +595,10 @@ class Classic(Device):
 						self.wire.send(StrmStatus().serialize())
 
 					elif msg.code == IR.NOW_PLAYING:
-						self.display.next_visualizer()
+						if not self.player.playing:
+							continue
+						self.menu.set_focus(self.player.playing.item)
+						continue
 
 					elif msg.code < 0:
 						pass

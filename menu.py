@@ -551,6 +551,15 @@ class Menu:
 			self.current = len(self.cwd.children) - 1
 		return self.cwd.children[self.current]
 
+	def set_focus(self, item):
+		# set cwd to the parent of the item. unparented items raise exception.
+		# set the current index by looking for the item in cwd.
+		# TODO: always refresh the parent content listing if the parent is a
+		# CmDir container.
+		if item.parent:
+			self.cwd = item.parent
+			self.current = self.cwd.children.index(item)
+
 # create an item. the new item is not parented!
 def make_item(cm, guid, pretty, kind, size=0, duration=0):
 	assert type(cm)       == unicode
