@@ -166,32 +166,32 @@ class Player:
 			# received whether the device was previously connected to a streamer
 			# or not. it's also not about flushed buffers as those are typically
 			# reported as unaffected.
-			print('Device closed the stream connection')
+			#print('Device closed the stream connection')
 			return None
 		if stat.event == 'STMc':
 			# SBS sources say this means "connected", but to what? probably the
 			# streamer even though it is received before ACK of strm command.
-			print('Device connected to streamer')
+			#print('Device connected to streamer')
 			return None
 		if stat.event == 'STMe':
 			# connection established with streamer. i.e. more than just an open
 			# socket.
-			print('Device established connection to streamer')
+			#print('Device established connection to streamer')
 			return None
 		if stat.event == 'STMh':
 			# "end of headers", but which ones? probably the header sent by the
 			# streamer in response to HTTP GET.
-			print('Device finished reading headers')
+			#print('Device finished reading headers')
 			return None
 		if stat.event == 'STMs':
-			print('Device started playing')
+			#print('Device started playing')
 			self.playing.enter_state(NowPlaying.PLAYING)
 			return None
 		if stat.event == 'STMp':
-			print('Device paused playback')
+			#print('Device paused playback')
 			return None
 		if stat.event == 'STMr':
-			print('Device resumed playback')
+			#print('Device resumed playback')
 			return None
 
 		# simple ACKs of commands sent to the device. ignore:

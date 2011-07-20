@@ -512,7 +512,7 @@ class Classic(Device):
 						self.player.pause()
 					elif msg.code == IR.FORWARD:
 						if not self.player.playing:
-							print('Nothing playing, nothing to seek in')
+							#print('Nothing playing, nothing to seek in')
 							continue
 						if not self.seeker:
 							self.seeker = Seeker(self.player.playing.item,
@@ -522,7 +522,7 @@ class Classic(Device):
 						render = self.select_render()
 					elif msg.code == IR.REWIND:
 						if not self.player.playing:
-							print('Nothing playing, nothing to seek in')
+							#print('Nothing playing, nothing to seek in')
 							continue
 						if not self.seeker:
 							self.seeker = Seeker(self.player.playing.item,
@@ -531,10 +531,9 @@ class Classic(Device):
 						self.seeker.seek(-5000)
 						render = self.select_render()
 					elif msg.code == -IR.FORWARD:
-						print('-IR.FORWARD')
 						if msg.stress >= 5:
 							if not self.player.playing:
-								print('Nothing playing, nothing to seek in')
+								#print('Nothing playing, nothing to seek in')
 								continue
 							self.player.jump(self.seeker.position)
 							self.seeker = None
@@ -557,7 +556,7 @@ class Classic(Device):
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
 							if not self.player.playing:
-								print('Nothing playing, nothing to seek in')
+								#print('Nothing playing, nothing to seek in')
 								continue
 							self.player.jump(self.seeker.position)
 							self.seeker = None

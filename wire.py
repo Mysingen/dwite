@@ -221,7 +221,7 @@ class Wire(Thread):
 					self._handle(kind, size, body)
 
 		self.socket.close()
-		print '%s is dead' % self.label
+		#print '%s is dead' % self.label
 
 	def _handle(self, kind, size, body):
 		raise Exception, 'Wire subclasses must implement _handle()'
