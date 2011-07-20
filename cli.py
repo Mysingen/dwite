@@ -62,7 +62,7 @@ def play(argv):
 
 	for (opt, arg) in opts:
 		if opt == '--url':
-			url = unicode(arg)
+			url = arg.decode('utf-8')
 		if opt == '--seek':
 			seek = arg
 	
@@ -92,7 +92,7 @@ def add(argv):
 	
 	for (opt, arg) in opts:
 		if opt == '--url':
-			url = unicode(arg)
+			url = arg.decode('utf-8')
 	
 	if not url:
 		syntax()

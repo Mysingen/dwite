@@ -255,7 +255,9 @@ class Decoder:
 				self.frames = []
 				dec = flac.decoder.StreamDecoder()
 				# path parameter must not be unicode:
-				dec.init(str(self.path), write_cb, metadata_cb, error_cb)
+				dec.init(
+					self.path.encode('utf-8'), write_cb, metadata_cb, error_cb
+				)
 				dec.process_until_end_of_metadata()
 				while dec.get_state() != 4:
 					self.frames.append(dec.get_decode_position())
