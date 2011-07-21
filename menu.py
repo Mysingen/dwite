@@ -44,6 +44,16 @@ class Tree(object):
 			return -1
 		return 1
 
+	def __eq__(self, other):
+		if not other:
+			return False
+		if type(self) != type(other):
+			return False
+		return self.guid == other.guid
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
 	def curry(self):
 		self.render.curry(self.label)
 		return (self.guid, self.render)
@@ -138,12 +148,17 @@ class CmDir(CmFile):
 	def __iter__(self):
 		return self.children.__iter__()
 
+	def dump(self):
+		if self.parent:
+			return {'guid':self.guid, 'label':self.label, 'parent':self.parent.dump()}
+		return {'guid':self.guid, 'label':self.label, 'parent':None}
+
 	def ls(self):
 		self.children = [Waiting(self)]
 		return self.children
 
 	def add(self, listing):
-		if isinstance(self.children[0], Waiting):
+		if (not self.children) or (isinstance(self.children[0], Waiting)):
 			self.children = []
 		for l in listing:
 			guid  = l['guid']
@@ -432,6 +447,16 @@ class Root(Tree):
 		Tree.__init__(self, u'/', u'/', None)
 		self.children = []
 
+	def __eq__(self, other):
+		if not other:
+			return False
+		# use object id's for important singleton items instead of string
+		# comparison on guid's which could give false positives:
+		return id(self) == id(other)
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
 	def add(self, item):
 		if isinstance(item, Tree):
 			#print('Root add %s' % item)
@@ -554,11 +579,17 @@ class Menu:
 	def set_focus(self, item):
 		# set cwd to the parent of the item. unparented items raise exception.
 		# set the current index by looking for the item in cwd.
-		# TODO: always refresh the parent content listing if the parent is a
-		# CmDir container.
 		if item.parent:
 			self.cwd = item.parent
 			self.current = self.cwd.children.index(item)
+		else:
+			raise Exception('Can only focus items with parents')
+
+	def get_item(self, label):
+		for c in self.root.children:
+			if c.label == label:
+				return c
+		return None
 
 # create an item. the new item is not parented!
 def make_item(cm, guid, pretty, kind, size=0, duration=0):

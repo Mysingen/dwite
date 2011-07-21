@@ -701,12 +701,14 @@ class Hail(JsonCall):
 # of some item by GUID. use JsonResult to reply.
 class Ls(JsonCall):
 
-	def __init__(self, guid, item, recursive):
+	def __init__(self, guid, item, recursive=False, parent=False):
 		assert type(item)      == unicode
 		assert type(recursive) == bool
+		assert type(parent)    == bool
 		params = {
 			'item'     : item,
-			'recursive': recursive
+			'recursive': recursive,
+			'parent'   : parent
 		}
 		JsonCall.__init__(self, guid, u'ls', params)
 

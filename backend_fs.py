@@ -38,8 +38,13 @@ class FileSystem(Backend):
 
 	def handle(self, msg):
 		if isinstance(msg, Ls):
-			result = self._get_children(msg.item, msg.recursive)
-			msg.respond(0, u'', 0, False, result)
+			if msg.parent:
+				item_guid = os.path.dirname(msg.item)
+			else:
+				item_guid = msg.item
+			item = self._get_item(item_guid)
+			result = self._get_children(item_guid, msg.recursive)
+			msg.respond(0, u'', 0, False, { 'item':item, 'contents':result })
 			return
 		if isinstance(msg, GetItem):
 			item = self._get_item(msg.item)

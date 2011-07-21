@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # PIL dependencies
 import Image, ImageDraw, ImageFont
 
-class Render:
+class Render(object):
 	canvas  = None
 	timeout = datetime.now()
 
@@ -34,7 +34,7 @@ class Render:
 		if self.timeout < test:
 			self.timeout = test
 
-class Window:
+class Window(object):
 	size    = 0
 	slack   = 0 # the space to keep unpainted when the window contents wrap
 	start   = 0
@@ -151,9 +151,9 @@ class VolumeMeter(Render):
 		if cls in singleton:
 			obj = singleton[cls]
 		else:
-			object = Render.__new__(cls)
+			obj = Render.__new__(cls)
 			singleton[cls] = obj
-		VolumeMeter.__init__(obj, level)
+		VolumeMeter.__init__(obj)
 		return obj
 	
 	def __init__(self):
