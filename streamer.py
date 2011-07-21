@@ -219,7 +219,18 @@ class Decoder:
 	mimetype = None
 
 	def __init__(self, path):
-		self.path  = path
+		self.path = path
+		if not os.path.exists(path):
+			# filenames with characters of unknown encoding can still be found
+			# this way because the CM is supposed to handle non-UTF8 filenames
+			# by replacing the weird characters with escape representations.
+			# try to un-escape such characters and check for the file again.
+			# if it still can't be found, then it really doesn't exist. note
+			# that we still set Decoder.path to the path that couldn't be found
+			# as it should be the path passed from the DM.
+			path = path.decode('string_escape')
+		if not os.path.exists(path):
+			raise Exception('No such file')
 		self.audio = mutagen.File(path, easy=True)
 		self.file = open(path, 'rb')
 		if type(self.audio) == mutagen.mp3.EasyMP3:

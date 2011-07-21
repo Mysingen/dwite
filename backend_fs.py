@@ -16,6 +16,16 @@ class Track:
 	def __init__(self, uri):
 		self.uri = uri
 
+def safe_unicode(string):
+	assert type(string) in [str, unicode]
+	if type(string) == unicode:
+		return string
+	if type(string) == str:
+		try:
+			return string.decode('utf-8')
+		except:
+			return unicode(string.encode('string_escape'))
+
 class FileSystem(Backend):
 	root_dir = u'/'
 	name     = u'File system'
@@ -56,13 +66,16 @@ class FileSystem(Backend):
 		raise Exception('Unhandled message: %s' % str(msg))
 	
 	def _classify_file(self, path, verbose=False):
-		assert type(path) == unicode
+		assert type(path) in [str, unicode]
 		supported = ['MPEG ADTS', 'FLAC', 'MPEG Layer 3', 'Audio', '^data$']
-		ignored = ['ASCII', 'JPEG', 'PNG', 'text', '^data$', ]
+		ignored = ['ASCII', 'JPEG', 'PNG', 'text', '^data$', 'AppleDouble']
 		magic = Magic()
 
 		try:
-			m = magic.from_file(path.encode('utf-8'))
+			if type(path) == unicode:
+				m = magic.from_file(path.encode('utf-8'))
+			else:
+				m = magic.from_file(path)
 		except Exception as e:
 			print 'INTERNAL ERROR: %s: %s' % (path, str(e))
 			return (None, None, None)
@@ -93,6 +106,9 @@ class FileSystem(Backend):
 				except AttributeError, e:
 					print('Unknown file type: %s' % path)
 					break
+				except mutagen.mp3.HeaderNotFoundError, e:
+					print('Header not found: %s' % path)
+					break
 				except Exception, e:
 					print('INTERNAL ERROR: FileSystem._get_children()')
 					traceback.print_exc()
@@ -106,14 +122,24 @@ class FileSystem(Backend):
 		return (None, None, None)
 	
 	def _get_children(self, guid, recursive, verbose=False):
+		assert type(guid) == unicode
 		children = []
 		if guid == '/':
 			guid = ''
 		path = os.path.join(self.root_dir, guid)
 		listing = os.listdir(path)
+		listing = [safe_unicode(l) for l in listing]
 		listing.sort()
 		for l in listing:
 			path = os.path.join(self.root_dir, guid, l)
+			if not os.path.exists(path):
+				if os.path.exists(path.decode('string_escape')):
+					# the filename contains characters with unknown encoding
+					# and the call to safe_unicode() earlier has converted it
+					# to something that can be handled without raising encoding
+					# exceptions all the time.
+					path = path.decode('string_escape')
+					
 			child_guid = os.path.join(guid, l)
 			if os.path.isdir(path):
 				children.append({
