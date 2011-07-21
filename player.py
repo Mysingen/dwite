@@ -24,7 +24,7 @@ class Player:
 		self.guid = guid
 		self.wire = wire
 		self.stop()
-	
+
 	# playback manipulations
 
 	def get_in_threshold(self, size):
@@ -117,6 +117,11 @@ class Player:
 
 	def get_progress(self):
 		return self.playing.position()
+
+	def get_playing(self):
+		if not self.playing:
+			return None
+		return self.playing.item
 
 	def ticker(self):
 		if self.playing:

@@ -45,6 +45,7 @@ class Display:
 	brightness  = BRIGHTNESS.FULL
 	canvas      = None
 	visualizers = iter(all_visualizers)
+	cur_visual  = VisuNone()
 	
 	def __init__(self, size, wire, brightness):
 		assert brightness in [
@@ -83,9 +84,16 @@ class Display:
 		try:
 			visu = self.visualizers.next()
 			self.wire.send(visu.serialize())
+			self.cur_visual = visu
 		except:
 			self.visualizers = iter(all_visualizers)
 			self.next_visualizer()
+
+	def visualizer_on(self):
+		self.wire.send(self.cur_visual.serialize())
+
+	def visualizer_off(self):
+		self.wire.send(VisuNone().serialize())
 
 	def show(self, transition):
 		self.canvas.prepare_transmission()

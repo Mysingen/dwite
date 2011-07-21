@@ -186,7 +186,6 @@ class Streamer(Thread):
 				self.decoder = Decoder(path)
 		except Exception, e:
 			self.decoder = None
-			traceback.print_exc()
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'
 
 		try:

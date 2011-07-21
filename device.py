@@ -176,7 +176,7 @@ class Classic(Device):
 	acceleration = None # dict: different messages need different acceleration
 	                    # maps so keep a mapping from message codes to arrays
 	                    # of stress levels. only used for tactile events.
-	now_playing_mode = False
+	_now_playing_mode = False
 
 	def __init__(self, wire, out_queue, mac_addr):
 		#print 'Classic __init__'
@@ -196,6 +196,33 @@ class Classic(Device):
 			except Exception, e:
 				print e
 				print('Malformed playlist item: %s' % obj)
+
+	@property
+	def now_playing_mode(self):
+		return self._now_playing_mode
+
+	@now_playing_mode.setter
+	def now_playing_mode(self, value):
+		assert type(value) == bool
+		if value:
+			if self._now_playing_mode:
+				# cycle through visualization modes
+				self.display.next_visualizer()
+			else:
+				self.display.visualizer_on()
+		else:
+			self.display.visualizer_off()
+		self._now_playing_mode = value
+
+	def select_now_playing_mode(self):
+		if not self.player.playing:
+			self.now_playing_mode = False
+			return
+		if self.player.playing.item == self.menu.focused():
+			if not self.now_playing_mode:
+				self.now_playing_mode = True
+			return
+		self.now_playing_mode = False
 
 	def load_settings(self):
 		# device settings indexed by MAC address
@@ -479,17 +506,16 @@ class Classic(Device):
 						continue
 
 					if   msg.code == IR.UP:
-						self.now_playing_mode = False
 						(guid, render, transition) = self.menu.up()
 						render = self.select_render()
+						self.select_now_playing_mode()
 
 					elif msg.code == IR.DOWN:
-						self.now_playing_mode = False
 						(guid, render, transition) = self.menu.down()
 						render = self.select_render()
+						self.select_now_playing_mode()
 
 					elif msg.code == IR.RIGHT:
-						self.now_playing_mode = False
 						focused = self.menu.focused()
 						if type(focused) == CmDir:
 							ls = Ls(msg_reg.make_guid(), focused.guid)
@@ -502,10 +528,11 @@ class Classic(Device):
 							msg_reg.set_handler(ls, handle_ls, self)
 							focused.cm.wire.send(ls.serialize())
 						(guid, render, transition) = self.menu.right()
+						self.select_now_playing_mode()
 
 					elif msg.code == IR.LEFT:
-						self.now_playing_mode = False
 						focused = self.menu.focused()
+
 						if (self.menu.cwd != self.menu.root
 						and type(focused.parent) == CmDir
 						and focused.parent.parent == None):
@@ -533,6 +560,7 @@ class Classic(Device):
 							msg_reg.set_handler(ls, handle_ls, self)
 							focused.cm.wire.send(ls.serialize())
 						(guid, render, transition) = self.menu.left()
+						self.select_now_playing_mode()
 
 					elif msg.code == IR.BRIGHTNESS:
 						self.display.next_brightness()
@@ -678,6 +706,7 @@ class Classic(Device):
 					elif msg.code == IR.NOW_PLAYING:
 						if not self.player.playing:
 							continue
+
 						item = self.player.playing.item
 						if item.parent:
 							self.menu.set_focus(item)
