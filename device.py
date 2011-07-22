@@ -524,6 +524,8 @@ class Classic(Device):
 							self.menu.set_focus(next)
 							transition = TRANSITION.SCROLL_UP
 							(guid, render) = self.player.ticker()
+						else:
+							self.select_now_playing_mode()
 
 				if isinstance(msg, Dsco):
 					print msg
@@ -690,6 +692,7 @@ class Classic(Device):
 								# ensure that it is correctly redrawn after
 								# the track stops playing
 								self.menu.ticker(curry=True)
+							self.select_now_playing_mode()
 
 					elif msg.code == -IR.REWIND:
 						if msg.stress >= 5:
@@ -717,6 +720,7 @@ class Classic(Device):
 								# ensure that it is correctly redrawn after
 								# the track stops playing
 								self.menu.ticker(curry=True)
+							self.select_now_playing_mode()
 
 					elif msg.code == IR.VOLUME_UP:
 						self.volume.up()
