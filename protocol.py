@@ -497,6 +497,14 @@ class Visu(Command):
 	STEREO   = 0
 	MONO     = 1
 
+	def __eq__(self, other):
+		if not other:
+			return False
+		return type(self) == type(other)
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
 	def serialize(self):
 		raise Exception, 'Visu must be subclassed'
 

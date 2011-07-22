@@ -34,10 +34,10 @@ class TRANSITION:
 	BOUNCE_RIGHT = 'L'
 
 all_visualizers = [
+	VisuNone(),
 	VisuMeter(),
 	VisuMeter(0,159, 161,159),
-	VisuSpectrum(),
-	VisuNone()
+	VisuSpectrum()
 ]
 
 class Display:
@@ -45,9 +45,9 @@ class Display:
 	brightness  = BRIGHTNESS.FULL
 	canvas      = None
 	visualizers = iter(all_visualizers)
-	cur_visual  = VisuNone()
+	cur_visual  = None
 	
-	def __init__(self, size, wire, brightness):
+	def __init__(self, size, wire, brightness, visualizer):
 		assert brightness in [
 			BRIGHTNESS.OFF,
 			BRIGHTNESS.ONE,
@@ -58,13 +58,28 @@ class Display:
 		self.wire   = wire
 		self.canvas = Canvas(size)
 		self.set_brightness(brightness)
+		self.cur_visual = all_visualizers[visualizer]
+		# set the iterator to the value that matches the visualizer parameter
+ 		while True:
+ 			try:
+ 				if self.cur_visual == self.visualizers.next():
+ 					break
+ 			except:
+ 				self.visualizers = iter(all_visualizers)
+			pass
 
 	@classmethod
 	def dump_defaults(cls):
-		return { 'brightness': BRIGHTNESS.FULL }
+		return {
+			'brightness': BRIGHTNESS.FULL,
+			'visualizer': 0
+		}
 
 	def dump_settings(self):
-		return { 'brightness': self.brightness }
+		return {
+			'brightness': self.brightness,
+			'visualizer': all_visualizers.index(self.cur_visual)
+		}
 
 	def set_brightness(self, brightness):
 		if brightness < BRIGHTNESS.OFF or brightness > BRIGHTNESS.FULL:
