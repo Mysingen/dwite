@@ -194,15 +194,11 @@ class ProgressRender(Render):
 	position = (200, 0)
 	image    = None
 
-	def __new__(cls, progress=0):
-		global singleton
-		if cls in singleton:
-			obj = singleton[cls]
-		else:
-			obj = Render.__new__(cls)
-			singleton[cls] = obj
-		ProgressRender.__init__(obj, progress)
-		return obj
+	# __new__() should not be implemented to use singletons. If there is only
+	# one, then there is a race condition between seeking and playback. Regular
+	# playback progress updates will overwrite the progress indicated by the
+	# seeker. The visible effect is that the progress bar is not updated
+	# correctly while the user is pressing REW or FWD.
 
 	def __init__(self, progress=0.0):
 		self.progress = progress
