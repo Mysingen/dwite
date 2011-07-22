@@ -147,11 +147,6 @@ class CmDir(CmFile):
 	def __iter__(self):
 		return self.children.__iter__()
 
-	def dump(self):
-		if self.parent:
-			return {'guid':self.guid, 'label':self.label, 'parent':self.parent.dump()}
-		return {'guid':self.guid, 'label':self.label, 'parent':None}
-
 	def ls(self):
 		self.children = [Waiting(self)]
 		return self.children
