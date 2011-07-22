@@ -5,6 +5,7 @@
 # by the Free Software Foundation.
 
 import os
+
 from datetime import datetime, timedelta
 
 # PIL dependencies
@@ -75,12 +76,12 @@ class TextRender(Render):
 		global singleton
 		key = (font_path, size, position)
 		if key in singleton:
-			object = singleton[key]
+			obj = singleton[key]
 		else:
-			object = Render.__new__(cls)
-			TextRender.__init__(object, font_path, size, position)
-			singleton[key] = object
-		return object
+			obj = Render.__new__(cls)
+			TextRender.__init__(obj, font_path, size, position)
+			singleton[key] = obj
+		return obj
 
 	def __init__(self, font_path, size, position):
 		self.font     = ImageFont.truetype(font_path, size)

@@ -524,11 +524,6 @@ class Classic(Device):
 							self.menu.set_focus(next)
 							transition = TRANSITION.SCROLL_UP
 							(guid, render) = self.player.ticker()
-					else:
-						# curry the currently focused menu item to ensure
-						# that it is correctly redrawn after the track
-						# stops playing
-						self.menu.ticker(curry=True)
 
 				if isinstance(msg, Dsco):
 					print msg

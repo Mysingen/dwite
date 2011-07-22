@@ -32,7 +32,6 @@ class Tree(object):
 		self.parent = parent
 		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
 		                         % os.getenv('DWITE_HOME'), 27, (2, 0))
-		self.render.curry(self.label)
 
 	def __str__(self):
 		return 'Tree %s %s' % (self.guid, self.label)
