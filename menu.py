@@ -63,22 +63,24 @@ class Tree(object):
 	def ls(self):
 		return self.children
 	
-	def next(self):
+	def next(self, wrap=True):
 		if not self.parent:
 			return None
 		try:
 			index = self.parent.children.index(self) + 1
-			index %= len(self.parent.children)
+			if wrap:
+				index %= len(self.parent.children)
 			return self.parent.children[index]
 		except:
 			return None
 
-	def prev(self):
+	def prev(self, wrap=True):
 		if not self.parent:
 			return None
 		try:
 			index = self.parent.children.index(self) - 1
-			index %= len(self.parent.children)
+			if wrap:
+				index %= len(self.parent.children)
 			return self.parent.children[index]
 		except:
 			return None

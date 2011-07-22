@@ -604,9 +604,26 @@ class Classic(Device):
 						item = self.menu.focused()
 						if self.menu.cwd == self.menu.playlist:
 							# if the user is browsing the playlist, then ADD
-							# removes the focused item.
+							# removes the focused item. check for next item to
+							# play before removing it. otherwise the next item
+							# can't be found.
+							next = None
+							if self.player.get_playing() == item:
+								self.player.stop()
+								next = item.next(wrap=False)
+								while next and not self.player.play(next):
+									next = next.next()
 							self.menu.playlist.remove(item)
-							(guid, render) = self.menu.ticker(curry=True)
+							if next:
+								self.menu.set_focus(next)
+								transition = TRANSITION.SCROLL_UP
+								(guid, render) = self.player.ticker()
+							else:
+								# curry the currently focused menu item to
+								# ensure that it is correctly redrawn after
+								# the track stops playing
+								(guid, render) = self.menu.ticker(curry=True)
+							self.select_now_playing_mode()
 							#transition = TRANSITION.SCROLL_UP
 						elif isinstance(item, CmAudio):
 							self.menu.playlist.add(item)
