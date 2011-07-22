@@ -327,28 +327,38 @@ class Classic(Device):
 			return
 		if type(orig_msg) == Ls:
 			if orig_msg.parent:
+				stay_focused = False
 				# the result is a listing of the contents of the *parent* of
 				# the item mentioned in the original message. reparent that
 				# item in a new CmDir populated with the results.
-				focused = self.menu.focused()
-				if focused.guid != orig_msg.item:
-					# user navigated away. throw away result.
-					return
+				# if the item is neither focused nor currently playing, then
+				# there is nothing to do. the user navigated away and we can
+				# simply throw away the result.
+				item = self.menu.focused()
+				if item.guid == orig_msg.item:
+					stay_focused = True
+				else:
+					item = self.player.get_playing()
+				if item.guid != orig_msg.item:
+					return # give up
 				if not msg.result['item']['guid']:
 					# parent is the menu root's CM widget
-					parent = self.menu.get_item(focused.cm.label)
+					parent = self.menu.get_item(item.cm.label)
 					if not parent:
-						# CM no longer registered
-						self.menu.set_focus(self.menu.root.children[0])
-						return
+						return # CM no longer registered. give up.
 				else:
-					parent = make_item(focused.cm.label, **msg.result['item'])
+					parent = make_item(item.cm.label, **msg.result['item'])
 				parent.children = []
 				parent.add(msg.result['contents'])
-				focused.parent = parent
-				self.menu.set_focus(focused)
-				if self.player.playing.item == focused:
-					self.player.playing.item = focused
+				item.parent = parent
+				if stay_focused:
+					self.menu.set_focus(item)
+				# the following is necessary if the item is both focused and
+				# playing. then only the focused item has been reparented but
+				# the playing item needs reparenting too. otherwise the next
+				# track to play will not be found when it plays to finish.
+				if self.player.get_playing().guid == item.guid:
+					self.player.playing.item = item
 				return
 
 			parent = self.menu.focused().parent
@@ -437,6 +447,34 @@ class Classic(Device):
 						self.display.show(TRANSITION.NONE)
 						render.min_timeout(325)
 					msg.respond(0, u'EOK', 0, False, True)
+
+					if msg.item.parent:
+						continue
+					# items played through RPC have no parent set and we
+					# have to rebuild the parent chain. otherwise browsing
+					# won't work afterwards. this is tricky. we don't even
+					# know the guid of the parent. start by making a dummy
+					# parent so that we can at least refocus the menu while
+					# sorting out the real parent details in the background.
+					msg.item.parent = CmDir(
+						u'<DUMMY>', u'<WAITING>', None, msg.item.cm_label
+					)
+					msg.item.parent.children = [msg.item]
+
+					# now fix the problem for real. ask the CM to list the
+					# parent of the item. it is done asynchronously so it
+					# will not affect the responsiveness of pressing NOW
+					# PLAYING, but browsing immediately afterwards will lag
+					# if it takes a long time to complete the Ls request.
+					ls = Ls(msg_reg.make_guid(), msg.item.guid, parent=True)
+
+					# warning: handler executed by CM thread:
+					def handle_ls(msg_reg, response, orig_msg, self):
+						msg_reg.set_handler(orig_msg, None, None)
+						self.in_queue.put(response)
+
+					msg_reg.set_handler(ls, handle_ls, self)
+					msg.item.cm.wire.send(ls.serialize())
 					continue
 
 				if isinstance(msg, AddItem):
@@ -708,38 +746,17 @@ class Classic(Device):
 							continue
 
 						item = self.player.playing.item
-						if item.parent:
-							self.menu.set_focus(item)
-							self.now_playing_mode = True
+						if not item.parent:
+							# in principle, it is not possible for an item to
+							# not have a parent even if it is played through
+							# RPC. *however*, because the item is reparented
+							# asynchronously in the RPC case, the user could
+							# possibly manage to hit NOW PLAYING before the
+							# item has been reparented.
 							continue
-
-						# items played through RPC have no parent set and we
-						# have to rebuild the parent chain. otherwise browsing
-						# won't work afterwards. this is tricky. we don't even
-						# know the guid of the parent. start by making a dummy
-						# parent so that we can at least refocus the menu while
-						# sorting out the real parent details in the background.
-						item.parent = CmDir(
-							u'<DUMMY>', u'<WAITING>', None, item.cm_label
-						)
-						item.parent.children = [item]
 						self.menu.set_focus(item)
 						self.now_playing_mode = True
-
-						# now fix the problem for real. ask the CM to list the
-						# parent of the item. it is done asynchronously so it
-						# will not affect the responsiveness of pressing NOW
-						# PLAYING, but browsing immediately afterwards will lag
-						# if it takes a long time to complete the Ls request.
-						ls = Ls(msg_reg.make_guid(), item.guid, parent=True)
-
-						# warning: handler executed by CM thread:
-						def handle_ls(msg_reg, response, orig_msg, self):
-							msg_reg.set_handler(orig_msg, None, None)
-							self.in_queue.put(response)
-
-						msg_reg.set_handler(ls, handle_ls, self)
-						item.cm.wire.send(ls.serialize())
+						continue
 
 					elif msg.code < 0:
 						pass
