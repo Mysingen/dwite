@@ -556,7 +556,7 @@ class Classic(Device):
 					next = self.player.handle_stat(msg)
 					# play next item, if any. otherwise clean the display
 					while next and not self.player.play(next):
-						next = next.next(wrap=self.player.repeat)
+						next = next.next(self.player.repeat,self.player.shuffle)
 					if next:
 						if self.now_playing_mode:
 							self.menu.set_focus(next)
@@ -659,10 +659,11 @@ class Classic(Device):
 							next = None
 							if self.player.get_playing() == item:
 								self.player.stop()
-								wrap = self.player.repeat
-								next = item.next(wrap=wrap)
+								wrap   = self.player.repeat
+								random = self.player.shuffle
+								next = item.next(wrap, random)
 								while next and not self.player.play(next):
-									next = next.next(wrap=wrap)
+									next = next.next(wrap, random)
 							self.menu.playlist.remove(item)
 							if next:
 								self.menu.set_focus(next)
@@ -746,10 +747,11 @@ class Classic(Device):
 						else:
 							if not self.player.playing:
 								continue
-							wrap = self.player.repeat
-							next = self.player.get_playing().next(wrap=wrap)
+							wrap   = self.player.repeat
+							random = self.player.shuffle
+							next   = self.player.get_playing().next(wrap,random)
 							while next and not self.player.play(next):
-								next = next.next(wrap=wrap)
+								next = next.next(wrap, random)
 							if next:
 								if self.now_playing_mode:
 									self.menu.set_focus(next)
@@ -775,10 +777,11 @@ class Classic(Device):
 						else:
 							if not self.player.playing:
 								continue
-							wrap = self.player.repeat
-							prev = self.player.get_playing().prev(wrap=wrap)
+							wrap   = self.player.repeat
+							random = self.player.shuffle
+							prev   = self.player.get_playing().prev(wrap,random)
 							while prev and not self.player.play(prev):
-								prev = prev.prev(wrap=wrap)
+								prev = prev.prev(wrap, random)
 							if prev:
 								if self.now_playing_mode:
 									self.menu.set_focus(prev)
@@ -854,6 +857,9 @@ class Classic(Device):
 
 					elif msg.code == IR.REPEAT:
 						self.player.toggle_repeat()
+
+					elif msg.code == IR.SHUFFLE:
+						self.player.toggle_shuffle()
 
 					elif msg.code < 0:
 						pass

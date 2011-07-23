@@ -16,27 +16,33 @@ from render   import NowPlayingRender
 from menu     import CmAudio, Link
 
 class Player(object):
-	guid        = None # used when telling the device how to present itself
-	wire        = None
-	playing     = None # NowPlaying instance
-	repeat      = False 
+	guid    = None # used when telling the device how to present itself
+	wire    = None
+	playing = None # NowPlaying instance
+	repeat  = False
+	shuffle = False
 
-	def __init__(self, wire, guid, repeat):
+	def __init__(self, wire, guid, repeat=False, shuffle=False):
 		assert type(repeat) == bool
-		self.guid   = guid
-		self.wire   = wire
-		self.repeat = repeat
+		assert type(shuffle) == bool
+		self.guid    = guid
+		self.wire    = wire
+		self.repeat  = repeat
+		self.shuffle = shuffle
 		self.stop()
 
 	def dump_settings(self):
-		return { 'repeat': self.repeat }
+		return { 'repeat': self.repeat, 'shuffle': self.shuffle }
 
 	@classmethod
 	def dump_defaults(cls):
-		return { 'repeat': False }
+		return { 'repeat': False, 'shuffle': False }
 
 	def toggle_repeat(self):
 		self.repeat = not self.repeat
+
+	def toggle_shuffle(self):
+		self.shuffle = not self.shuffle
 
 	def get_in_threshold(self, size):
 		if size < 10*1024:
@@ -122,7 +128,7 @@ class Player(object):
 			return None
 		else:
 			try:
-				return self.playing.item.next(wrap=self.repeat)
+				return self.playing.item.next(self.repeat, self.shuffle)
 			except:
 				return None
 
@@ -157,7 +163,7 @@ class Player(object):
 		if stat.event == 'STMo':
 			# find next item to play, if any
 			try:
-				next = self.playing.item.next(wrap=self.repeat)
+				next = self.playing.item.next(self.repeat, self.shuffle)
 				print 'STMo next = %s' % unicode(next)
 			except:
 				next = None
