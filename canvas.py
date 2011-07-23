@@ -31,6 +31,7 @@ class Canvas:
 		self.image = Image.new('1', self.size, 0)
 	
 	def paste(self, image):
+		assert image != None
 		self.image = Image.composite(self.image, image, self.image)
 	
 	def prepare_transmission(self):

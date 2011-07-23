@@ -184,6 +184,8 @@ class Streamer(Thread):
 			# create a new one:
 			if (not self.decoder) or (self.decoder.path != path):
 				self.decoder = Decoder(path)
+			else:
+				self.decoder.__init__(path)
 		except Exception, e:
 			self.decoder = None
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'

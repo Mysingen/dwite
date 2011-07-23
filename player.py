@@ -146,6 +146,14 @@ class Player(object):
 		else:
 			return (None, None)
 
+	def handle_resp(self, resp):
+		if resp.http_header.startswith('HTTP/1.0 200 OK'):
+			return
+		if resp.http_header.startswith('HTTP/1.0 404 Not Found'):
+			self.stop()
+			return
+		print('INTERNAL ERROR: Unknown HTTP response: %s' % resp.http_header)
+
 	def handle_stat(self, stat):
 		if not isinstance(stat, Stat):
 			raise Exception('Invalid Player.handle_stat(stat): %s' % str(stat))

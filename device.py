@@ -578,7 +578,8 @@ class Classic(Device):
 					continue # don't care
 
 				elif isinstance(msg, Resp):
-					continue # don't care
+					self.player.handle_resp(msg)
+					continue
 
 				elif isinstance(msg, Tactile):
 					# is the device powered up? if not, discard all messages
@@ -669,7 +670,7 @@ class Classic(Device):
 								while next and not self.player.play(next):
 									next = next.next(wrap, random)
 							self.menu.playlist.remove(item)
-							if next:
+							if next and next != item:
 								self.menu.set_focus(next)
 								transition = TRANSITION.SCROLL_UP
 								(guid, render) = self.player.ticker()
