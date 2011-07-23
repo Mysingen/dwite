@@ -540,6 +540,10 @@ class Classic(Device):
 	
 						msg_reg.set_handler(ls, handle_ls_r, (self, item.cm))
 						item.cm.wire.send(ls.serialize())
+					if self.menu.focused() == self.menu.playlist.children[0]:
+						# render the screen just in case the added items
+						# replaced a focused <EMPTY> object.
+						(guid, render) = self.menu.ticker(curry=True)
 					msg.respond(0, u'EOK', 0, False, True)
 
 				#### MESSAGES FROM THE DEVICE ####
