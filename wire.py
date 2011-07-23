@@ -15,9 +15,9 @@ import errno
 from Queue     import Queue, Empty
 from threading import Thread
 from datetime  import datetime, timedelta
+from tactile   import IR
 
 import protocol
-import tactile
 
 STARTING = 1
 RUNNING  = 2
@@ -241,7 +241,7 @@ class Wire(Thread):
 				left = left - sent
 			except socket.error, e:
 				if e[0] == errno.ECONNRESET:
-					#print('send() Connection reset')
+					#print(send() Connection reset')
 					self.stop(hard=True)
 					return
 				elif e[0] == errno.EAGAIN: # temporarily unavailable. try again
@@ -322,20 +322,15 @@ class SlimWire(Wire):
 			print('WARNING: slimwire parse_body() produced NOTHING!')
 			return
 
-		elif isinstance(message, protocol.Bye):
-			self.state = STARTING
-
-		elif isinstance(message, protocol.Ureq):
+		if isinstance(message, protocol.Ureq):
+			print 'Ureq'
 			self.state = STARTING # must set this before sending UPDN to the
 			# device or race conditions come crashing in.
 			time.sleep(1.0)
 			self._send(Updn().serialize(), force=True)
 		
-		elif isinstance(message, protocol.Helo):
-			self.out_queue.put(message)
-
 		elif isinstance(message, protocol.Tactile):
-			if message.code in [tactile.IR.FORWARD, tactile.IR.REWIND]:
+			if message.code in [IR.FORWARD, IR.REWIND, IR.POWER]:
 				timeout = datetime.now() + timedelta(milliseconds=300)
 				self.escrow = (message, timeout)
 				if message.stress < 5:
@@ -344,20 +339,8 @@ class SlimWire(Wire):
 					return
 			self.out_queue.put(message)
 
-		elif isinstance(message, protocol.Stat):
-			self.out_queue.put(message)
-
-		elif isinstance(message, protocol.Resp):
-			pass
-
-		elif isinstance(message, protocol.Anic):
-			pass
-
-		elif isinstance(message, protocol.Dsco):
-			self.out_queue.put(message)
-
 		else:
-			print('%s: No particular handling' % message)
+			self.out_queue.put(message)
 
 class JsonWire(Wire):
 	def __init__(self, host, port, queue, accept=True):

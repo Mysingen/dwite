@@ -103,7 +103,11 @@ def unregister_ui(label):
 
 def register_dm(dm, label):
 	if label in dms:
-		raise Exception('A DM with label "%s" is already registered' % label)
+		if dms[label].rebooting:
+			print 'rebooted %s' % label
+			dms[label].stop(hard=True)
+		else:
+			raise Exception('A DM with label "%s" is already registered' %label)
 	print 'register DM %s' % label
 	assert type(label) == unicode
 	dms[label] = dm

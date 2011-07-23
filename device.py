@@ -9,13 +9,14 @@ import sys
 import re
 import os
 import json
+import time
 
 from threading import Thread
 from Queue     import Queue, Empty
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
-                      StrmStatus, Ls, GetItem, ID, JsonMessage)
+                      StrmStatus, Ls, GetItem, ID, JsonMessage, Resp, Anic)
 from display   import Display, TRANSITION, BRIGHTNESS
 from tactile   import IR
 from menu      import Menu, CmFile, CmAudio, CmDir, make_item
@@ -89,6 +90,7 @@ class Device(Thread):
 	volume    = None  # Volume object
 	watchdog  = None
 	power     = POWER.ON
+	rebooting = False
 
 	def __init__(self, wire, out_queue):
 		#print 'Device __init__'
@@ -119,6 +121,8 @@ class Device(Thread):
 			try:
 				msg = self.in_queue.get(block=True, timeout=0.1)
 			except Empty:
+				if not self.wire.is_alive():
+					self.stop(hard=True)
 				continue
 			if type(msg) == Helo:
 				# now we get to know what kind of device class we *really*
@@ -134,6 +138,8 @@ class Device(Thread):
 					dm.start()
 					dm.in_queue.put(msg)
 					self.alive = False
+			else:
+				print 'UNHANDLED MESSAGE: %s' % msg
 		#print 'Temporary %s is dead' % self.name
 	
 	def stop(self, hard=False):
@@ -152,6 +158,8 @@ def init_acceleration_maps():
 	maps    = {}
 	default = [0,3,6,9,12,15,18,21,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52]
 
+	maps[IR.POWER]       = [0]
+	maps[-IR.POWER]      = [0]
 	maps[IR.UP]          = default
 	maps[IR.DOWN]        = default
 	maps[IR.LEFT]        = default
@@ -193,14 +201,6 @@ class Classic(Device):
 		self.display      = Display((320,32), wire, **settings['display'])
 		self.acceleration = init_acceleration_maps()
 		self.volume       = Volume(wire, **settings['volume'])
-		playlist          = self.load_playlist()
-		for obj in playlist:
-			try:
-				item = make_item(**obj)
-				self.menu.playlist.add(item)
-			except Exception, e:
-				print e
-				print('Malformed playlist item: %s' % obj)
 
 	@property
 	def now_playing_mode(self):
@@ -321,6 +321,8 @@ class Classic(Device):
 		return render1
 
 	def default_ticking(self):
+		if self.power == POWER.OFF:
+			return
 		self.display.canvas.clear()
 		render = self.select_render()
 		if render.tick(self.display.canvas):
@@ -385,6 +387,19 @@ class Classic(Device):
 		# threads.
 		self.player = Player(self.wire, self.mac_addr)
 
+		# don't load the playlist in __init__() which is used on speculation
+		# that the resulting DM will be usable. this will happen a lot while
+		# rebooting, so do it here instead to avoid useless work (loading the
+		# playlist can be expensive if it is really long).
+		playlist = self.load_playlist()
+		for obj in playlist:
+			try:
+				item = make_item(**obj)
+				self.menu.playlist.add(item)
+			except Exception, e:
+				print e
+				print('Malformed playlist item: %s' % obj)
+
 		while self.alive:
 			msg = None
 
@@ -415,13 +430,13 @@ class Classic(Device):
 					self.menu.add_cm(msg.cm)
 					continue
 
-				if isinstance(msg, RemCM):
+				elif isinstance(msg, RemCM):
 					self.menu.rem_cm(msg.cm)
 					continue
 
 				#### MESSAGES FROM OTHER PROGRAMS/SUBSYSTEMS ####
 
-				if isinstance(msg, JsonResult):
+				elif isinstance(msg, JsonResult):
 					#print 'dm JsonResult %d' % msg.guid
 					try:
 						msg_reg.run_handler(msg)
@@ -434,12 +449,12 @@ class Classic(Device):
 						else:
 							print 'throwing away %s' % msg
 
-				if isinstance(msg, Terms):
+				elif isinstance(msg, Terms):
 					print('got terms')
 					self.menu.searcher.add_dict_terms(msg.terms)
 					continue						
 
-				if isinstance(msg, PlayItem):
+				elif isinstance(msg, PlayItem):
 					if self.power == POWER.OFF:
 						msg.respond(4, u'Device is powered off', 0,False,False)
 						continue
@@ -484,7 +499,7 @@ class Classic(Device):
 					msg.item.cm.wire.send(ls.serialize())
 					continue
 
-				if isinstance(msg, AddItem):
+				elif isinstance(msg, AddItem):
 					#print 'dm AddItem %s' % msg
 					item = msg.item
 					if isinstance(item, CmAudio):
@@ -513,7 +528,7 @@ class Classic(Device):
 
 				#### MESSAGES FROM THE DEVICE ####
 
-				if isinstance(msg, Helo):
+				elif isinstance(msg, Helo):
 					# always draw on screen when a device connects
 					(guid, render) = self.menu.ticker(curry=True)
 					self.display.canvas.clear()
@@ -521,7 +536,7 @@ class Classic(Device):
 					self.display.show(TRANSITION.NONE)
 					continue
 
-				if isinstance(msg, Stat):
+				elif isinstance(msg, Stat):
 					next = self.player.handle_stat(msg)
 					# play next item, if any. otherwise clean the display
 					while next and not self.player.play(next):
@@ -534,15 +549,21 @@ class Classic(Device):
 						else:
 							self.select_now_playing_mode()
 
-				if isinstance(msg, Dsco):
+				elif isinstance(msg, Dsco):
 					print msg
 					self.player.stop()
 					continue
 
-				if isinstance(msg, Tactile):
+				elif isinstance(msg, Anic):
+					continue # don't care
+
+				elif isinstance(msg, Resp):
+					continue # don't care
+
+				elif isinstance(msg, Tactile):
 					# is the device powered up? if not, discard all messages
 					# except POWER ON.
-					if self.power == POWER.OFF and msg.code != IR.POWER:
+					if self.power == POWER.OFF and abs(msg.code) != IR.POWER:
 						continue
 
 					# abort handling if the stress level isn't high enough.
@@ -759,8 +780,11 @@ class Classic(Device):
 						self.volume.down()
 						render = self.volume.meter
 
-					elif msg.code == IR.POWER:
+					elif msg.code == -IR.POWER:
+						self.rebooting = False
+						# short button press
 						if self.power == POWER.ON:
+							self.wire.log = True
 							self.player.stop()
 							self.volume.mute(True)
 							self.display.set_brightness(BRIGHTNESS.OFF, False)
@@ -768,16 +792,20 @@ class Classic(Device):
 							self.save_playlist()
 							self.power = POWER.OFF
 						else:
+							self.wire.log = False
 							self.power = POWER.ON
 							self.volume.mute(False)
 							self.display.clear()
+							time.sleep(0.1) # TODO: wait for ANIC instead
 							self.display.set_brightness(self.display.brightness)
 							self.menu.set_focus(self.menu.get_item('Playlist'))
 							(guid, render) = self.menu.ticker(curry=True)
 							transition = TRANSITION.SCROLL_UP
 
-					elif msg.code == IR.HARD_POWER:
-						print 'hard power'
+					elif msg.code == IR.POWER:
+						# long button press. stop DM if stress is high enough
+						if msg.stress > 20:
+							self.rebooting = True
 
 					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
 					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,
@@ -808,6 +836,9 @@ class Classic(Device):
 					else:
 						raise Exception, ('Unhandled code %s'
 						                  % IR.codes_debug[abs(msg.code)])
+
+				else:
+					print('Unhandled message: %s' % msg)
 
 				if render:
 					self.display.canvas.clear()
