@@ -432,6 +432,11 @@ class Aude(Command):
 	analog  = True
 	digital = True
 	
+	def __init__(self, analog, digital):
+		assert type(analog) == type(digital) == bool
+		self.analog  = analog
+		self.digital = digital
+
 	def serialize(self):
 		cmd    = 'aude'
 		params = ( struct.pack('<B', self.analog)

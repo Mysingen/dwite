@@ -16,7 +16,7 @@ from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
                       StrmStatus, Ls, GetItem, ID, JsonMessage)
-from display   import Display, TRANSITION
+from display   import Display, TRANSITION, BRIGHTNESS
 from tactile   import IR
 from menu      import Menu, CmFile, CmAudio, CmDir, make_item
 from player    import Player
@@ -25,6 +25,10 @@ from render    import ProgressRender, OverlayRender
 from wire      import JsonWire
 from volume    import Volume
 from cm        import CmConnection
+
+class POWER:
+	ON  = True
+	OFF = False
 
 # private message classes. only used to implement public API's
 class AddCM:
@@ -84,6 +88,7 @@ class Device(Thread):
 	playlist  = None
 	volume    = None  # Volume object
 	watchdog  = None
+	power     = POWER.ON
 
 	def __init__(self, wire, out_queue):
 		#print 'Device __init__'
@@ -435,10 +440,12 @@ class Classic(Device):
 					continue						
 
 				if isinstance(msg, PlayItem):
+					if self.power == POWER.OFF:
+						msg.respond(4, u'Device is powered off', 0,False,False)
+						continue
 					#print 'dm PlayItem %s' % msg
 					if not self.player.play(msg.item, msg.seek):
-						errstr = u'Unplayable item'
-						msg.respond(4, errstr, 0, False, False)
+						msg.respond(4, u'Unplayable item', 0, False, False)
 						continue
 					if msg.item == self.menu.focused():
 						(guid, render) = self.player.ticker()
@@ -533,6 +540,11 @@ class Classic(Device):
 					continue
 
 				if isinstance(msg, Tactile):
+					# is the device powered up? if not, discard all messages
+					# except POWER ON.
+					if self.power == POWER.OFF and msg.code != IR.POWER:
+						continue
+
 					# abort handling if the stress level isn't high enough.
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.
@@ -747,9 +759,25 @@ class Classic(Device):
 						self.volume.down()
 						render = self.volume.meter
 
-					elif msg.code == IR.POWER or msg.code == IR.HARD_POWER:
-						self.stop()
-						pass
+					elif msg.code == IR.POWER:
+						if self.power == POWER.ON:
+							self.player.stop()
+							self.volume.mute(True)
+							self.display.set_brightness(BRIGHTNESS.OFF, False)
+							self.save_settings()
+							self.save_playlist()
+							self.power = POWER.OFF
+						else:
+							self.power = POWER.ON
+							self.volume.mute(False)
+							self.display.clear()
+							self.display.set_brightness(self.display.brightness)
+							self.menu.set_focus(self.menu.get_item('Playlist'))
+							(guid, render) = self.menu.ticker(curry=True)
+							transition = TRANSITION.SCROLL_UP
+
+					elif msg.code == IR.HARD_POWER:
+						print 'hard power'
 
 					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
 					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,

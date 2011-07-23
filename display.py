@@ -81,12 +81,13 @@ class Display:
 			'visualizer': all_visualizers.index(self.cur_visual)
 		}
 
-	def set_brightness(self, brightness):
+	def set_brightness(self, brightness, remember=True):
 		if brightness < BRIGHTNESS.OFF or brightness > BRIGHTNESS.FULL:
 			raise Exception, 'Unknown brightness code %d' % brightness
-		self.brightness = brightness
+		if remember:
+			self.brightness = brightness
 		grfb = Grfb()
-		grfb.brightness = BRIGHTNESS.map[self.brightness]
+		grfb.brightness = BRIGHTNESS.map[brightness]
 		self.wire.send(grfb.serialize())
 	
 	def next_brightness(self):
@@ -116,3 +117,8 @@ class Display:
 		grfe.transition = transition
 		grfe.bitmap     = self.canvas.bitmap
 		self.wire.send(grfe.serialize())
+
+	def clear(self):
+		self.canvas.clear()
+		self.show(TRANSITION.NONE)
+
