@@ -201,6 +201,7 @@ class Classic(Device):
 		self.display      = Display((320,32), wire, **settings['display'])
 		self.acceleration = init_acceleration_maps()
 		self.volume       = Volume(wire, **settings['volume'])
+		self.player     = Player(self.wire, self.mac_addr, **settings['player'])
 
 	@property
 	def now_playing_mode(self):
@@ -230,23 +231,43 @@ class Classic(Device):
 		self.now_playing_mode = False
 
 	def load_settings(self):
-		# device settings indexed by MAC address
+		result = {}
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'dwite.json')
 		settings = {}
 		if os.path.exists(path):
 			f = open(path)
 			try:
-				settings = json.load(f)['devices'][self.mac_addr]
+				settings = json.load(f)
 			except:
-				print('ERROR: Could not load settings for %s' % self.mac_addr)
+				print('ERROR: Could not load settings file %s' % path)
 				settings = {}
 			f.close()
-		# fill in default settings
-		if 'display' not in settings:
-			settings['display'] = Display.dump_defaults()
-		if 'volume' not in settings:
-			settings['volume'] = Volume.dump_defaults()
-		return settings
+
+		# some settings are common to all players. fill in default settings
+		# if necessary:
+		if 'player' in settings:
+			result['player'] = settings['player']
+		else:
+			result['player'] = Player.dump_defaults()
+
+		try:
+			settings = settings['devices'][self.mac_addr]
+		except:
+			print('ERROR: Could not load settings for %s' % self.mac_addr)
+
+		# per-device settings are indexed by MAC address. fill in default
+		# settings if necessary:
+		if 'display' in settings:
+			result['display'] = settings['display']
+		else:
+			result['display'] = Display.dump_defaults()
+
+		if 'volume' in settings:
+			result['volume'] = settings['volume']
+		else:
+			result['volume'] = Volume.dump_defaults()
+
+		return result
 
 	def save_settings(self):
 		# device settings indexed by MAC address
@@ -261,6 +282,7 @@ class Classic(Device):
 		settings['volume']  = self.volume.dump_settings()
 		settings['display'] = self.display.dump_settings()
 		storage['devices'][self.mac_addr] = settings
+		storage['player'] = self.player.dump_settings()
 		f = open(path, 'w')
 		json.dump(storage, f, indent=4)
 		f.close()
@@ -380,12 +402,6 @@ class Classic(Device):
 
 	def run(self):
 		from dwite import unregister_dm, get_cm, msg_reg
-
-		# Python limit: the player cannot be created in __init__() because
-		# the threading would goes bananas. player contains more threads and
-		# threads cannot be created "inside" the creation procedures of other
-		# threads.
-		self.player = Player(self.wire, self.mac_addr)
 
 		# don't load the playlist in __init__() which is used on speculation
 		# that the resulting DM will be usable. this will happen a lot while
@@ -540,7 +556,7 @@ class Classic(Device):
 					next = self.player.handle_stat(msg)
 					# play next item, if any. otherwise clean the display
 					while next and not self.player.play(next):
-						next = next.next()
+						next = next.next(wrap=self.player.repeat)
 					if next:
 						if self.now_playing_mode:
 							self.menu.set_focus(next)
@@ -643,9 +659,10 @@ class Classic(Device):
 							next = None
 							if self.player.get_playing() == item:
 								self.player.stop()
-								next = item.next(wrap=False)
+								wrap = self.player.repeat
+								next = item.next(wrap=wrap)
 								while next and not self.player.play(next):
-									next = next.next()
+									next = next.next(wrap=wrap)
 							self.menu.playlist.remove(item)
 							if next:
 								self.menu.set_focus(next)
@@ -729,9 +746,10 @@ class Classic(Device):
 						else:
 							if not self.player.playing:
 								continue
-							next = self.player.playing.item.next()
+							wrap = self.player.repeat
+							next = self.player.get_playing().next(wrap=wrap)
 							while next and not self.player.play(next):
-								next = next.next()
+								next = next.next(wrap=wrap)
 							if next:
 								if self.now_playing_mode:
 									self.menu.set_focus(next)
@@ -757,9 +775,10 @@ class Classic(Device):
 						else:
 							if not self.player.playing:
 								continue
-							prev = self.player.playing.item.prev()
+							wrap = self.player.repeat
+							prev = self.player.get_playing().prev(wrap=wrap)
 							while prev and not self.player.play(prev):
-								prev = prev.prev()
+								prev = prev.prev(wrap=wrap)
 							if prev:
 								if self.now_playing_mode:
 									self.menu.set_focus(prev)
@@ -829,6 +848,12 @@ class Classic(Device):
 						self.menu.set_focus(item)
 						self.now_playing_mode = True
 						continue
+
+					elif msg.code == IR.SEARCH:
+						self.menu.set_focus(self.menu.searcher.children[0])
+
+					elif msg.code == IR.REPEAT:
+						self.player.toggle_repeat()
 
 					elif msg.code < 0:
 						pass
