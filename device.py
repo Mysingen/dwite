@@ -661,7 +661,7 @@ class Classic(Device):
 								self.player.stop()
 								wrap   = self.player.repeat
 								random = self.player.shuffle
-								next = item.next(wrap, random)
+								next   = item.next(wrap, random)
 								while next and not self.player.play(next):
 									next = next.next(wrap, random)
 							self.menu.playlist.remove(item)
@@ -854,12 +854,17 @@ class Classic(Device):
 
 					elif msg.code == IR.SEARCH:
 						self.menu.set_focus(self.menu.searcher.children[0])
+						(guid, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.REPEAT:
 						self.player.toggle_repeat()
 
 					elif msg.code == IR.SHUFFLE:
 						self.player.toggle_shuffle()
+
+					elif msg.code == IR.BROWSE:
+						self.menu.set_focus(self.menu.root.children[0])
+						(guid, render) = self.menu.ticker(curry=True)
 
 					elif msg.code < 0:
 						pass
