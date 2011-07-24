@@ -899,6 +899,9 @@ class Classic(Device):
 							self.menu.next_render_mode()
 							(guid, render) = self.menu.ticker(curry=True)
 
+					elif msg.code == IR.FAVORITES:
+						print('FAVORITES not handled')
+
 					elif msg.code < 0:
 						pass
 
