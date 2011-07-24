@@ -112,6 +112,7 @@ class Player(object):
 				self.wire.send(StrmUnpause().serialize())
 		except Exception, e:
 			print e
+			traceback.print_stack()
 
 #	def skip(self, msecs):
 #		if self.playing.state != NowPlaying.PLAYING:

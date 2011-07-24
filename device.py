@@ -28,8 +28,9 @@ from volume    import Volume
 from cm        import CmConnection
 
 class POWER:
-	ON  = True
-	OFF = False
+	ON    = 1
+	OFF   = 2
+	SLEEP = 3
 
 # private message classes. only used to implement public API's
 class AddCM:
@@ -343,7 +344,7 @@ class Classic(Device):
 		return render1
 
 	def default_ticking(self):
-		if self.power == POWER.OFF:
+		if self.power in [POWER.OFF, POWER.SLEEP]:
 			return
 		self.display.canvas.clear()
 		render = self.select_render()
@@ -474,6 +475,9 @@ class Classic(Device):
 					if self.power == POWER.OFF:
 						msg.respond(4, u'Device is powered off', 0,False,False)
 						continue
+					if self.power == POWER.SLEEP:
+						self.display.set_brightness(self.display.brightness)
+
 					#print 'dm PlayItem %s' % msg
 					if not self.player.play(msg.item, msg.seek):
 						msg.respond(4, u'Unplayable item', 0, False, False)
@@ -591,6 +595,13 @@ class Classic(Device):
 					# note that the stress is always "enough" if stress is
 					# zero or the event doesn't have a stress map at all.
 					if not self.enough_stress(msg.code, msg.stress):
+						self.default_ticking()
+						continue
+
+					if self.power == POWER.SLEEP:
+						self.power = POWER.ON
+						self.player.pause()
+						self.display.set_brightness(self.display.brightness)
 						self.default_ticking()
 						continue
 
@@ -871,6 +882,12 @@ class Classic(Device):
 					elif msg.code == IR.BROWSE:
 						self.menu.set_focus(self.menu.root.children[0])
 						(guid, render) = self.menu.ticker(curry=True)
+
+					elif msg.code == IR.SLEEP:
+						if self.power == POWER.ON:
+							self.power = POWER.SLEEP
+							self.player.pause()
+							self.display.set_brightness(BRIGHTNESS.OFF, False)
 
 					elif msg.code < 0:
 						pass
