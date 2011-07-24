@@ -37,8 +37,8 @@ class Render(object):
 			self.timeout = test
 
 	# subclasses that have different display should look at self.mode
-	def set_mode(self, value):
-		self.mode = value
+	def	next_mode(self):
+		pass
 
 class Window(object):
 	size    = 0
@@ -145,6 +145,26 @@ class TextRender(Render):
 		canvas.paste(self.image)
 		self.timeout = now + timedelta(milliseconds=100)
 		return True
+
+class RENDER_MODE:
+	LABEL  = 1
+	PRETTY = 2
+
+class ItemRender(TextRender):
+
+	mode = RENDER_MODE.LABEL
+
+	def curry(self, item):
+		if self.mode == RENDER_MODE.LABEL:
+			TextRender.curry(self, item.label)
+		if self.mode == RENDER_MODE.PRETTY:
+			TextRender.curry(self, item.get_pretty())
+
+	def next_mode(self):
+		if self.mode == RENDER_MODE.LABEL:
+			self.mode = RENDER_MODE.PRETTY
+		else:
+			self.mode = RENDER_MODE.LABEL
 
 class VolumeMeter(Render):
 	level    = 0 # integer 0-100
@@ -259,23 +279,19 @@ class OverlayRender(Render):
 		return (t1 or t2)
 
 class NowPlayingRender(OverlayRender):
-	def __init__(self, item):
-		home = os.getenv('DWITE_HOME')
-		self.base = TextRender(
-			'%s/fonts/LiberationMono-Bold.ttf' % home, 35, (2, 0)
+	def __init__(self):
+		self.base = ItemRender(
+			'%s/fonts/LiberationMono-Bold.ttf' % os.getenv('DWITE_HOME'),
+			35,(2,0)
 		)
-		label = item.label # a safe default, but try to improve it:
-		if item.title:
-			label = item.title
-			if item.album:
-				label += ' / ' + item.album
-			if item.artist:
-				label += ' / ' + item.artist
-		self.base.curry(label)
 		self.overlay = ProgressRender()
 
-	def curry(self, progress):
+	def curry(self, progress, item):
+		self.base.curry(item)
 		self.overlay.curry(progress)
+
+	def next_mode(self):
+		self.base.next_mode()
 
 class SearchRender(Render):
 	query = None

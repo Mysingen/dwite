@@ -892,7 +892,12 @@ class Classic(Device):
 							self.display.set_brightness(BRIGHTNESS.OFF, False)
 
 					elif msg.code == IR.SIZE:
-						print msg
+						if self.menu.focused() == self.player.get_playing():
+							self.player.next_render_mode()
+							(guid, render) = self.player.ticker()
+						else:
+							self.menu.next_render_mode()
+							(guid, render) = self.menu.ticker(curry=True)
 
 					elif msg.code < 0:
 						pass

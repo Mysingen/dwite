@@ -14,25 +14,9 @@ import random
 
 import protocol
 
-from render   import TextRender, SearchRender
+from render   import SearchRender, ItemRender
 from display  import TRANSITION
 from tactile  import IR
-
-class ItemRender(TextRender):
-	LABEL  = 1
-	PRETTY = 2
-
-	mode = LABEL
-
-	def curry(self, item):
-		if self.mode == self.LABEL:
-			TextRender.curry(self, item.label)
-		if self.mode == self.PRETTY:
-			TextRender.curry(self, item.get_pretty())
-
-	def set_mode(self, mode):
-		assert mode in [self.LABEL, self.PRETTY]
-		TextRender.set_mode(self, mode)
 
 class Tree(object):
 	guid     = None # string used when querying the CM for stats, listings, etc
@@ -252,6 +236,9 @@ class Link(Tree):
 		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
 		Tree.__init__(self, guid, target.label, parent)
 		self.target = target
+
+	def get_pretty(self):
+		return self.target.get_pretty()
 
 class Playlist(Tree):
 	def __init__(self, parent):
@@ -623,6 +610,10 @@ class Menu:
 			(guid, render) = self.focused().curry()
 			return (guid, render, transition)
 		return (0, None, TRANSITION.NONE)
+
+	def next_render_mode(self):
+		(guid, render) = self.focused().ticker()
+		render.next_mode()
 
 	def ticker(self, curry=False):
 		if curry:

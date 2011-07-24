@@ -147,6 +147,11 @@ class Player(object):
 		else:
 			return (None, None)
 
+	def next_render_mode(self):
+		if not self.playing:
+			return
+		self.playing.render.next_mode()
+
 	def handle_resp(self, resp):
 		if resp.http_header.startswith('HTTP/1.0 200 OK'):
 			return
@@ -251,10 +256,7 @@ class NowPlaying(object):
 		self.item     = item
 		self.duration = duration
 		self.start    = start
-		if type(item) == Link:
-			self.render = NowPlayingRender(item.target)
-		else:
-			self.render = NowPlayingRender(item)
+		self.render = NowPlayingRender()
 
 	def	enter_state(self, state):
 		if state == self.state:
@@ -287,6 +289,10 @@ class NowPlaying(object):
 		return self.start + self.progress
 
 	def curry(self):
-		self.render.curry(self.position() / float(self.duration))
+		if type(self.item) == Link:
+			item = self.item.target
+		else:
+			item = self.item
+		self.render.curry(self.position() / float(self.duration), item)
 		return (self.item.guid, self.render)
 
