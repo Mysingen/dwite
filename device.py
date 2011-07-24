@@ -894,7 +894,7 @@ class Classic(Device):
 					elif msg.code == IR.SIZE:
 						if self.menu.focused() == self.player.get_playing():
 							self.player.next_render_mode()
-							(guid, render) = self.player.ticker()
+							(guid, render) = self.player.ticker(curry=True)
 						else:
 							self.menu.next_render_mode()
 							(guid, render) = self.menu.ticker(curry=True)

@@ -151,7 +151,6 @@ class RENDER_MODE:
 	PRETTY = 2
 
 class ItemRender(TextRender):
-
 	mode = RENDER_MODE.LABEL
 
 	def curry(self, item):
@@ -284,10 +283,12 @@ class NowPlayingRender(OverlayRender):
 			'%s/fonts/LiberationMono-Bold.ttf' % os.getenv('DWITE_HOME'),
 			35,(2,0)
 		)
+		self.base.mode = RENDER_MODE.PRETTY
 		self.overlay = ProgressRender()
 
 	def curry(self, progress, item):
-		self.base.curry(item)
+		if item:
+			self.base.curry(item)
 		self.overlay.curry(progress)
 
 	def next_mode(self):

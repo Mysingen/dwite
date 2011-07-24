@@ -141,9 +141,9 @@ class Player(object):
 			return None
 		return self.playing.item
 
-	def ticker(self):
+	def ticker(self, curry=False):
 		if self.playing:
-			return self.playing.curry()
+			return self.playing.curry(curry)
 		else:
 			return (None, None)
 
@@ -257,6 +257,7 @@ class NowPlaying(object):
 		self.duration = duration
 		self.start    = start
 		self.render = NowPlayingRender()
+		self.curry(True)
 
 	def	enter_state(self, state):
 		if state == self.state:
@@ -288,11 +289,15 @@ class NowPlaying(object):
 	def position(self):
 		return self.start + self.progress
 
-	def curry(self):
+	def curry(self, curry):
 		if type(self.item) == Link:
 			item = self.item.target
 		else:
 			item = self.item
-		self.render.curry(self.position() / float(self.duration), item)
+		if curry:
+			self.render.curry(self.position() / float(self.duration), item)
+		else:
+			# always curry the progress bar even if it hasn't been asked for.
+			self.render.curry(self.position() / float(self.duration), None)
 		return (self.item.guid, self.render)
 
