@@ -4,7 +4,7 @@
 # under the terms of the GNU General Public License version 3, as published
 # by the Free Software Foundation.
 
-class IR:
+class IR(object):
 	SLEEP       = 1988737095
 	POWER       = 1988706495
 	HARD_POWER  = 63232

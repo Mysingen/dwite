@@ -18,6 +18,22 @@ from render   import TextRender, SearchRender
 from display  import TRANSITION
 from tactile  import IR
 
+class ItemRender(TextRender):
+	LABEL  = 1
+	PRETTY = 2
+
+	mode = LABEL
+
+	def curry(self, item):
+		if self.mode == self.LABEL:
+			TextRender.curry(self, item.label)
+		if self.mode == self.PRETTY:
+			TextRender.curry(self, item.get_pretty())
+
+	def set_mode(self, mode):
+		assert mode in [self.LABEL, self.PRETTY]
+		TextRender.set_mode(self, mode)
+
 class Tree(object):
 	guid     = None # string used when querying the CM for stats, listings, etc
 	label    = None # string: the item's pretty printed identity
@@ -30,7 +46,7 @@ class Tree(object):
 		self.guid   = guid
 		self.label  = label
 		self.parent = parent
-		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
+		self.render = ItemRender('%s/fonts/LiberationSerif-Regular.ttf'
 		                         % os.getenv('DWITE_HOME'), 27, (2, 0))
 
 	def __str__(self):
@@ -53,8 +69,11 @@ class Tree(object):
 	def __ne__(self, other):
 		return not self.__eq__(other)
 
+	def get_pretty(self):
+		return self.label
+
 	def curry(self):
-		self.render.curry(self.label)
+		self.render.curry(self)
 		return (self.guid, self.render)
 
 	def ticker(self):
@@ -124,8 +143,15 @@ class CmAudio(CmFile):
 	size     = 0 # bytes
 	duration = 0 # milliseconds
 	format   = None # 'mp3' or 'flac'
+	artist   = None
+	album    = None
+	title    = None
+	n        = None
 
-	def __init__(self, guid, label, size, duration, format, parent, cm):
+	def __init__(
+		self, guid, label, artist, album, title, n, size, duration, format,
+		parent, cm
+	):
 		if type(size) != int:
 			raise Exception(
 				'CmAudio.size != int: %s (guid:%s)' % (str(size), guid)
@@ -138,20 +164,40 @@ class CmAudio(CmFile):
 			raise Exception(
 				'Invald CmAudio.format: %s (guid:%s)' % (str(format), guid)
 			)
+		assert artist == None or type(artist) == unicode
+		assert album  == None or type(album)  == unicode
+		assert title  == None or type(title)  == unicode
+		assert n      == None or type(n)      == unicode
 		CmFile.__init__(self, guid, label, parent, cm)
 		self.size     = size
 		self.duration = duration
 		self.format   = format
+		self.artist   = artist
+		self.album    = album
+		self.title    = title
+		self.n        = n
 
 	def __str__(self):
-		return 'CmAudio %s %s' % (self.guid, self.label)
+		return 'CmAudio %s %s %s %s %s %s' % (
+			self.guid, self.label, self.artist, self.album, self.title, self.n
+		)
+	
+	def get_pretty(self):
+		pretty = self.label # a safe default, but try to improve it:
+		if self.title:
+			pretty = self.title
+			if self.album:
+				pretty += ' / ' + self.album
+			if self.artist:
+				pretty += ' / ' + self.artist
+		return pretty
 
 class CmDir(CmFile):
 	children = None
 
 	def __init__(self, guid, label, parent, cm):
 		CmFile.__init__(self, guid, label, parent, cm)
-		self.render = TextRender('%s/fonts/LiberationSerif-Regular.ttf'
+		self.render = ItemRender('%s/fonts/LiberationSerif-Regular.ttf'
 		                         % os.getenv('DWITE_HOME'), 23, (2, 0))
 	
 	def __iter__(self):
@@ -180,8 +226,13 @@ class CmDir(CmFile):
 			if kind in ['mp3', 'flac']:
 				size     = l['size']
 				duration = l['duration']
+				pretty   = l['pretty']
 				self.children.append(
-					CmAudio(guid, label, size,duration,kind, self,self.cm_label)
+					CmAudio(
+						guid, label, pretty['artist'], pretty['album'],
+						pretty['title'], pretty['n'], size, duration, kind,
+						self, self.cm_label
+					)
 				)
 				continue
 			
@@ -210,7 +261,7 @@ class Playlist(Tree):
 	def add(self, item):
 		if not isinstance(item, CmAudio):
 			return
-		print('Playlist add %s/%s' % (item.cm_label, item.guid))
+		print('Playlist add %s' % item)
 		if isinstance(self.children[0], Empty):
 			self.children = []
 		self.children.append(Link(item, self))
@@ -219,7 +270,7 @@ class Playlist(Tree):
 		if type(item) == Empty:
 			return
 		assert type(item) == Link
-		print('Playlist remove %s/%s' % (item.target.cm_label,item.target.guid))
+		print('Playlist remove %s' % item.target)
 		try:
 			index = self.children.index(item)
 			del self.children[index]
@@ -238,7 +289,13 @@ class Playlist(Tree):
 			obj = {}
 			obj['cm']     = item.cm_label
 			obj['guid']   = item.guid
-			obj['pretty'] = { 'label': item.label }
+			obj['pretty'] = {
+				'label' : item.label,
+				'artist': item.artist,
+				'album' : item.album,
+				'title' : item.title,
+				'n'     : item.n
+			}
 			obj['kind']   = item.format
 			if item.format in ['mp3', 'flac']:
 				obj['size'] = item.size
@@ -611,5 +668,20 @@ def make_item(cm, guid, pretty, kind, size=0, duration=0):
 		return CmFile(guid, pretty['label'], None, cm)
 
 	if kind in ['mp3', 'flac']:
-		return CmAudio(guid, pretty['label'], size, duration, kind, None, cm)
+		artist = None
+		if 'artist' in pretty:
+			artist = pretty['artist']
+		album = None
+		if 'album' in pretty:
+			album = pretty['album']
+		title = None
+		if 'title' in pretty:
+			title = pretty['title']
+		n = None
+		if 'n' in pretty:
+			n = pretty['n']
+		return CmAudio(
+			guid, pretty['label'], artist, album, title, n, size, duration,
+			kind, None, cm
+		)
 

@@ -14,6 +14,7 @@ import Image, ImageDraw, ImageFont
 class Render(object):
 	canvas  = None
 	timeout = datetime.now()
+	mode    = None
 
 	# Render objects keep track of their internal frame rate by setting a
 	# timeout (in absolute wall clock time) at which the next frame should
@@ -32,8 +33,12 @@ class Render(object):
 		now   = datetime.now()
 		delta = timedelta(milliseconds=msecs)
 		test  = now + delta
-		if self.timeout < test:
+		if not self.timeout or self.timeout < test:
 			self.timeout = test
+
+	# subclasses that have different display should look at self.mode
+	def set_mode(self, value):
+		self.mode = value
 
 class Window(object):
 	size    = 0
@@ -124,7 +129,7 @@ class TextRender(Render):
 			return True
 
 		now = datetime.now()
-		if now < self.timeout:
+		if self.timeout and now < self.timeout:
 			#print('later')
 			canvas.paste(self.image)
 			return False
@@ -254,11 +259,18 @@ class OverlayRender(Render):
 		return (t1 or t2)
 
 class NowPlayingRender(OverlayRender):
-	def __init__(self, label):
+	def __init__(self, item):
 		home = os.getenv('DWITE_HOME')
 		self.base = TextRender(
 			'%s/fonts/LiberationMono-Bold.ttf' % home, 35, (2, 0)
 		)
+		label = item.label # a safe default, but try to improve it:
+		if item.title:
+			label = item.title
+			if item.album:
+				label += ' / ' + item.album
+			if item.artist:
+				label += ' / ' + item.artist
 		self.base.curry(label)
 		self.overlay = ProgressRender()
 

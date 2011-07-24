@@ -251,7 +251,10 @@ class NowPlaying(object):
 		self.item     = item
 		self.duration = duration
 		self.start    = start
-		self.render   = NowPlayingRender(item.label)
+		if type(item) == Link:
+			self.render = NowPlayingRender(item.target)
+		else:
+			self.render = NowPlayingRender(item)
 
 	def	enter_state(self, state):
 		if state == self.state:

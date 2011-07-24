@@ -78,7 +78,7 @@ class FileSystem(Backend):
 				m = magic.from_file(path)
 		except Exception as e:
 			print 'INTERNAL ERROR: %s: %s' % (path, str(e))
-			return (None, None, None)
+			return (None, None)
 		if verbose:
 			print('Magic(%s):\n%s' % (path, m))
 
@@ -91,18 +91,7 @@ class FileSystem(Backend):
 						format = 'mp3'
 					elif type(audio) == mutagen.flac.FLAC:
 						format = 'flac'
-
-					if 'title' in audio.keys():
-						title = audio['title'][0]
-					else:
-						title = os.path.basename(path)
-					assert type(title) == unicode
-
-					duration = int(audio.info.length * 1000)
-
-					if verbose:
-						print((format, title, duration))
-					return (format, title, duration)
+					return (format, audio)
 				except AttributeError, e:
 					print('Unknown file type: %s' % path)
 					break
@@ -116,10 +105,10 @@ class FileSystem(Backend):
 
 		for i in ignored:
 			if re.search(i, m):
-				return (None, None, None)
+				return ('file', None)
 
 		print('UNKNOWN MAGIC (%s): %s' % (path, m))
-		return (None, None, None)
+		return ('file', None)
 	
 	def _get_children(self, guid, recursive, verbose=False):
 		assert type(guid) == unicode
@@ -150,15 +139,32 @@ class FileSystem(Backend):
 				if recursive:
 					children.extend(self._get_children(child_guid,True,verbose))
 			elif os.path.isfile(path):
-				(format, title, duration) = self._classify_file(path)
-				if format:
-					size = os.path.getsize(path)
+				(format, audio) = self._classify_file(path)
+				if format in ['mp3', 'flac']:
+					title = None
+					if 'title' in audio.keys():
+						title = audio['title'][0]
+					artist = None
+					if 'artist' in audio.keys():
+						artist = audio['artist'][0]
+					album = None
+					if 'album' in audio.keys():
+						album = audio['album'][0]
+					n = None
+					if 'tracknumber' in audio.keys():
+						n = audio['tracknumber'][0]
 					children.append({
 						'guid'    : child_guid,
-						'pretty'  : { 'label': title },
+						'pretty'  : {
+							'label' : l,
+							'artist': artist,
+							'album' : album,
+							'title' : title,
+							'n'     : n
+						},
 						'kind'    : format,
-						'size'    : size,
-						'duration': duration
+						'size'    : os.path.getsize(path),
+						'duration': int(audio.info.length * 1000)
 					})
 				else:
 					children.append({
@@ -179,18 +185,36 @@ class FileSystem(Backend):
 		if os.path.isdir(path):
 			return {
 				'guid'  : guid,
-				'pretty': { 'label':os.path.basename(path) },
+				'pretty': { 'label': os.path.basename(path) },
 				'kind'  :'dir'
 			}
 		elif os.path.isfile(path):
-			(format, title, duration) = self._classify_file(path)
-			if format:
+			(format, audio) = self._classify_file(path)
+			if format in ['mp3', 'flac']:
+				title = None
+				if 'title' in audio.keys():
+					title = audio['title'][0]
+				artist = None
+				if 'artist' in audio.keys():
+					artist = audio['artist'][0]
+				album = None
+				if 'album' in audio.keys():
+					album = audio['album'][0]
+				n = None
+				if 'tracknumber' in audio.keys():
+					n = audio['tracknumber'][0]
 				return {
 					'guid'    : guid,
-					'pretty'  : { 'label': title },
+					'pretty'  : {
+						'label' : os.path.basename(path),
+						'artist': artist,
+						'album' : album,
+						'title' : title,
+						'n'     : n
+					},
 					'kind'    : format,
 					'size'    : os.path.getsize(path),
-					'duration': duration
+					'duration': int(audio.info.length * 1000)
 				}
 			else:
 				return {

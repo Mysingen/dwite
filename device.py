@@ -871,6 +871,7 @@ class Classic(Device):
 
 					elif msg.code == IR.SEARCH:
 						self.menu.set_focus(self.menu.searcher.children[0])
+						self.select_now_playing_mode()
 						(guid, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.REPEAT:
@@ -881,6 +882,7 @@ class Classic(Device):
 
 					elif msg.code == IR.BROWSE:
 						self.menu.set_focus(self.menu.root.children[0])
+						self.select_now_playing_mode()
 						(guid, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.SLEEP:
@@ -888,6 +890,9 @@ class Classic(Device):
 							self.power = POWER.SLEEP
 							self.player.pause()
 							self.display.set_brightness(BRIGHTNESS.OFF, False)
+
+					elif msg.code == IR.SIZE:
+						print msg
 
 					elif msg.code < 0:
 						pass
