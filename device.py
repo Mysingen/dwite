@@ -813,6 +813,7 @@ class Classic(Device):
 						if self.power == POWER.ON:
 							self.wire.log = True
 							self.player.stop()
+							self.select_now_playing_mode()
 							self.volume.mute(True)
 							self.display.set_brightness(BRIGHTNESS.OFF, False)
 							self.save_settings()
