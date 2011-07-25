@@ -8,9 +8,10 @@ import sys
 import traceback
 
 from connection import Connection
-from protocol   import Hail, JsonMessage, JsonResult
+from protocol   import Hail, JsonMessage, JsonResult, Terms
 
 class CmConnection(Connection):
+	label       = None
 	stream_ip   = 0
 	stream_port = 0
 	registered  = False
@@ -53,6 +54,12 @@ class CmConnection(Connection):
 			except:
 				traceback.print_exc()
 				print 'throwing away %s' % msg
+			return
+
+		if type(msg) == Terms:
+			msg.sender = self.label
+			for dm in get_dm(None):
+				dm.in_queue.put(msg)
 			return
 
 		raise Exception('Unhandled message: %s' % msg)

@@ -17,8 +17,7 @@ from threading import Thread
 from wire       import JsonWire, Connected
 from backend_fs import FileSystem
 from streamer   import Streamer, Accepting
-
-import protocol
+from protocol   import JsonResult, Hail, Ls, GetItem
 
 STARTING = 1
 RUNNING  = 2
@@ -59,12 +58,12 @@ class Conman(Thread):
 
 	def send_hail(self):
 		def handle_hail(self, msg, orig_msg, user):
-			assert type(msg) == protocol.JsonResult
+			assert type(msg) == JsonResult
 			if msg.errno:
 				print msg.errstr
 				self.stop()
 		guid = random.randint(1, 1000000)
-		hail = protocol.Hail(guid, self.backend.name, 0, self.streamer.port)
+		hail = Hail(guid, self.backend.name, 0, self.streamer.port)
 		self.handlers[guid] = (hail, handle_hail, None)
 		self.jsonwire.send(hail.serialize())
 
@@ -99,11 +98,11 @@ class Conman(Thread):
 					self.state = RUNNING
 				continue
 
-			if isinstance(msg, protocol.Ls):
+			if isinstance(msg, Ls):
 				self.backend.in_queue.put(msg)
 				continue
 			
-			if isinstance(msg, protocol.JsonResult):
+			if isinstance(msg, JsonResult):
 				if msg.guid in self.handlers:
 					(orig_msg, handler, user) = self.get_handler(msg)
 					handler(self, msg, orig_msg, user)
@@ -111,7 +110,7 @@ class Conman(Thread):
 					print msg
 				continue
 
-			if isinstance(msg, protocol.GetItem):
+			if isinstance(msg, GetItem):
 				self.backend.in_queue.put(msg)
 
 		#print('Conman is dead')

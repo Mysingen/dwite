@@ -467,8 +467,7 @@ class Classic(Device):
 							print 'throwing away %s' % msg
 
 				elif isinstance(msg, Terms):
-					print('got terms')
-					self.menu.searcher.add_dict_terms(msg.terms)
+					self.menu.searcher.add_terms(msg.sender,msg.params['terms'])
 					continue						
 
 				elif isinstance(msg, PlayItem):

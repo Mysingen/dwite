@@ -728,6 +728,7 @@ class Ls(JsonCall):
 # used by content managers to send available search terms to the device
 # manager. there is no reply message class.
 class Terms(JsonCall):
+	sender = None
 
 	def __init__(self, guid, terms):
 		assert type(terms) == list
@@ -838,6 +839,9 @@ def parse_json(data):
 
 		if method == u'get_item':
 			return GetItem(guid, **params)
+
+		if method == u'terms':
+			return Terms(guid, **params)
 
 	return None
 

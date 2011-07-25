@@ -6,7 +6,7 @@ import traceback
 
 from magic import Magic
 
-from protocol import Ls, GetItem
+from protocol import Ls, GetItem, Terms
 
 from backend import Backend
 
@@ -25,6 +25,15 @@ def safe_unicode(string):
 			return string.decode('utf-8')
 		except:
 			return unicode(string.encode('string_escape'))
+
+def make_terms(*strings):
+	terms = set()
+	for s in strings:
+		if not s:
+			continue
+		tmp = re.split('[^a-zA-Z0-9]', s.lower())
+		terms |= set([t for t in tmp if len(t) > 2])
+	return terms
 
 class FileSystem(Backend):
 	root_dir = u'/'
@@ -53,8 +62,10 @@ class FileSystem(Backend):
 			else:
 				item_guid = msg.item
 			item = self._get_item(item_guid)
-			result = self._get_children(item_guid, msg.recursive)
+			(result, terms) = self._get_children(item_guid, msg.recursive)
 			msg.respond(0, u'', 0, False, { 'item':item, 'contents':result })
+			msg.wire.send(Terms(0, list(terms)).serialize())
+			
 			return
 		if isinstance(msg, GetItem):
 			item = self._get_item(msg.item)
@@ -113,6 +124,7 @@ class FileSystem(Backend):
 	def _get_children(self, guid, recursive, verbose=False):
 		assert type(guid) == unicode
 		children = []
+		terms    = set()
 		if guid == '/':
 			guid = ''
 		path = os.path.join(self.root_dir, guid)
@@ -128,7 +140,8 @@ class FileSystem(Backend):
 					# to something that can be handled without raising encoding
 					# exceptions all the time.
 					path = path.decode('string_escape')
-					
+
+			terms |= make_terms(l) # add file name to terms
 			child_guid = os.path.join(guid, l)
 			if os.path.isdir(path):
 				children.append({
@@ -136,8 +149,11 @@ class FileSystem(Backend):
 					'pretty': { 'label': l },
 					'kind'  :'dir'
 				})
+				terms |= make_terms(l)
 				if recursive:
-					children.extend(self._get_children(child_guid,True,verbose))
+					(c, t) = self._get_children(child_guid, recursive, verbose)
+					children.extend(c)
+					terms |= t # add recursive to terms
 			elif os.path.isfile(path):
 				(format, audio) = self._classify_file(path)
 				if format in ['mp3', 'flac']:
@@ -153,6 +169,7 @@ class FileSystem(Backend):
 					n = None
 					if 'tracknumber' in audio.keys():
 						n = audio['tracknumber'][0]
+					terms |= make_terms(title, artist, album) # add tag to terms
 					children.append({
 						'guid'    : child_guid,
 						'pretty'  : {
@@ -174,7 +191,7 @@ class FileSystem(Backend):
 					})
 			else:
 				print('WARNING: Unsupported VFS content: %s' % path)
-		return children
+		return (children, terms)
 
 	def _get_item(self, guid):
 		if guid == '/':

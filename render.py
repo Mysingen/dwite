@@ -129,7 +129,7 @@ class TextRender(Render):
 			return True
 
 		now = datetime.now()
-		if self.timeout and now < self.timeout:
+		if self.image and self.timeout and now < self.timeout:
 			#print('later')
 			canvas.paste(self.image)
 			return False

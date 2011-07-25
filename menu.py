@@ -295,7 +295,7 @@ class CandidateTree(Tree):
 
 	def __init__(self, guid, label, parent, query):
 		Tree.__init__(self, guid, label, parent)
-		self.query = query
+		self.query  = query
 		self.render = SearchRender()
 		self.render.curry(self.label, query)
 
@@ -319,6 +319,8 @@ class CandidateTree(Tree):
 	def ls(self):
 		return None
 
+class NoCandidateTree(CandidateTree):
+	pass
 
 class Searcher(Tree):
 	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
@@ -327,7 +329,7 @@ class Searcher(Tree):
 
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
-		self.children   = [CandidateTree(
+		self.children = [NoCandidateTree(
 			u'<Use T9 typing to add search terms>',
 			u'<Use T9 typing to add search terms>',
 			self,
@@ -338,7 +340,13 @@ class Searcher(Tree):
 		self.candidates = None # T9 encoded strings (i.e. digits only)
 		self.query      = []   # all built search terms (translated strings)
 	
-	def add_dict_terms(self, terms):
+	def get_query(self):
+		if self.query:
+			return u' '.join(self.query)
+		return u'<NO TERMS ADDED>'
+	
+	def add_terms(self, cm, terms):
+		print 'add search terms: %s' % terms
 		for t in terms:
 			# make a char list from each term so we can change single entries
 			translation = list(t)
@@ -375,9 +383,8 @@ class Searcher(Tree):
 			# change the translation from char list to string again:
 			translation = ''.join(translation)
 			if translation not in self.t9dict:
-				self.t9dict[translation] = [t]
-			else:
-				self.t9dict[translation].append(t)
+				self.t9dict[translation] = set()
+			self.t9dict[translation].add(t)
 	
 	def set_search_terms(self, terms):
 		self.terms = terms
@@ -416,30 +423,30 @@ class Searcher(Tree):
 		return pretty
 
 	def right(self, focused):
-		if isinstance(focused, Empty):
-			return False
 		if self.term:
+			if type(focused) == NoCandidateTree:
+				return False
 			# complete the current term against the focused candidate
 			self.query.append(focused.label)
 			self.term       = ''
 			self.candidates = None
-			self.children   = [CandidateTree(
+			self.children   = [NoCandidateTree(
 				u'<Use T9 typing to add search terms>',
 				u'<Use T9 typing to add search terms>',
 				self,
-				u' '.join(self.query)
-				)]
-
+				self.get_query()
+			)]
 			return True
-		else:
+		elif self.query:
 			# terminate the query list and run the search
 			print('search for %s' % self.query)
-			self.children = [CandidateTree(
+			print('NOT IMPLEMENTED')
+			self.children = [NoCandidateTree(
 				u'<SEARCHING>',
 				u'<SEARCHING>',
 				self,
-				u' '.join(self.query)
-				)]
+				self.get_query()
+			)]
 			self.query = []
 			return True
 		return False
@@ -448,21 +455,26 @@ class Searcher(Tree):
 		if len(self.term) > 1:
 			self.term = self.term[:-1]
 		else:
-			self.children = [Empty(self)]
-			self.query    = []
-			return False
-		candidates = self.get_candidates(self.term, clear=True)
-		if len(candidates) > 0:
-			self.children = [CandidateTree(c, c, self, ' '.join(self.query))
-			                 for c in candidates]
-		else:
-			self.children = [CandidateTree(
+			self.query = []
+			self.term  = ''
+			self.children = [NoCandidateTree(
 				u'<Use T9 typing to add search terms>',
 				u'<Use T9 typing to add search terms>',
 				self,
-				u'<NO TERMS ADDED>'
-				)]
-		print 'candidates: %s' % ' '.join(candidates)
+				self.get_query()
+			)]
+			return False
+		candidates = self.get_candidates(self.term, clear=True)
+		if len(candidates) > 0:
+			self.children = [CandidateTree(c, c, self, self.get_query())
+			                 for c in candidates]
+		else:
+			self.children = [NoCandidateTree(
+				u'<No match in the T9 dictionary>',
+				u'<No match in the T9 dictionary>',
+				self,
+				self.get_query()
+			)]
 		return True
 
 	def number(self, code):
@@ -470,19 +482,18 @@ class Searcher(Tree):
 		                IR.NUM_4, IR.NUM_5, IR.NUM_6,
 		                IR.NUM_7, IR.NUM_8, IR.NUM_9]:
 			return False
-		self.term = self.term + IR.codes_debug[code]
+		self.term += IR.codes_debug[code]
 		candidates = self.get_candidates(self.term)
 		if len(candidates) > 0:
-			self.children = [CandidateTree(c, c, self, ' '.join(self.query))
+			self.children = [CandidateTree(c, c, self, self.get_query())
 			                 for c in candidates]
 		else:
-			self.children =  [CandidateTree(
+			self.children = [NoCandidateTree(
 				u'<No match in the T9 dictionary>',
 				u'<No match in the T9 dictionary>',
 				self,
-				u' '.join(self.query)
-				)]
-		print('candidates: %s' % ' '.join(candidates))
+				self.get_query()
+			)]
 		return True
 
 	def ls(self):
