@@ -99,9 +99,11 @@ class FileSystem(Backend):
 				try:
 					audio = mutagen.File(path, easy=True)
 					if type(audio) == mutagen.mp3.EasyMP3:
-						format = 'mp3'
+						return ('mp3', audio)
 					elif type(audio) == mutagen.flac.FLAC:
-						format = 'flac'
+						return ('flac', audio)
+					else:
+						return ('file', None)
 					return (format, audio)
 				except AttributeError, e:
 					print('Unknown file type: %s' % path)
