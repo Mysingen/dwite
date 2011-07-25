@@ -346,7 +346,7 @@ class Searcher(Tree):
 		return u'<NO TERMS ADDED>'
 	
 	def add_terms(self, cm, terms):
-		print 'add search terms: %s' % terms
+		#print 'add search terms: %s' % terms
 		for t in terms:
 			# make a char list from each term so we can change single entries
 			translation = list(t)

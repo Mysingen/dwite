@@ -172,16 +172,16 @@ class Player(object):
 			next = self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
 			if next:
 				self.stop()
-				print 'STMt next = %s' % unicode(next)
+				#print 'STMt next = %s' % unicode(next)
 			return next
 		if stat.event == 'STMo':
 			# find next item to play, if any
 			try:
 				next = self.playing.item.next(self.repeat, self.shuffle)
-				print 'STMo next = %s' % unicode(next)
+				#print 'STMo next = %s' % unicode(next)
 			except:
 				next = None
-				print 'STMo next = None'
+				#print 'STMo next = None'
 			# finish the currently playing track
 			self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
 			self.stop()
