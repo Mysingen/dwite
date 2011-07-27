@@ -631,6 +631,7 @@ class Classic(Device):
 
 					elif msg.code == IR.LEFT:
 						focused = self.menu.focused()
+						ls      = None
 
 						if (self.menu.cwd != self.menu.root
 						and type(focused.parent) == CmDir
@@ -640,6 +641,14 @@ class Classic(Device):
 							# this happens e.g. when RPC was used to play an
 							# item and then NOW PLAYING was pressed on the
 							# remote.
+							if focused.parent.guid == u'<DUMMY>':
+								# if the focused item is in the process of
+								# being reparented, then we have to wait for
+								# that to finish. otherwise we will request
+								# the DUMMY guid from the CM (because that is
+								# the temporary parent to be replaced). just
+								# pretend that the user didn't press the key:
+								continue
 							focused.parent.parent = CmDir(
 								u'<DUMMY>', u'<WAITING>', None, focused.cm_label
 							)
@@ -657,8 +666,10 @@ class Classic(Device):
 								self.in_queue.put(response)
 							
 							msg_reg.set_handler(ls, handle_ls, self)
-							focused.cm.wire.send(ls.serialize())
+							#focused.cm.wire.send(ls.serialize())
 						(guid, render, transition) = self.menu.left()
+						if ls:
+							focused.cm.wire.send(ls.serialize())
 						self.select_now_playing_mode()
 
 					elif msg.code == IR.BRIGHTNESS:
