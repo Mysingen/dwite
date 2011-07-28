@@ -77,7 +77,7 @@ class TextRender(Render):
 	timeout  = None
 	position = (0, 0)
 
-	def __new__(cls, font_path, size, position):
+	def __new__(cls, font_path, size, position, scroll=True):
 		global singleton
 		key = (font_path, size, position)
 		if key in singleton:
@@ -88,17 +88,18 @@ class TextRender(Render):
 			singleton[key] = obj
 		return obj
 
-	def __init__(self, font_path, size, position):
+	def __init__(self, font_path, size, position, scroll=True):
 		self.font     = ImageFont.truetype(font_path, size)
 		self.image    = None
 		self.window   = None
 		self.timeout  = None
 		self.position = position
+		self.scroll   = scroll
 
 	def curry(self, text):
 		assert type(text) == unicode
-		if len(text) < 1:
-			raise Exception('len(TextRender.text = %s) < 1' % text)
+#		if len(text) < 1:
+#			raise Exception('len(TextRender.text = %s) < 1' % text)
 		self.text  = text
 		self.image = None
 
@@ -118,7 +119,10 @@ class TextRender(Render):
 	def tick(self, canvas):
 		if not self.image: # never called this render's tick() before
 			self.image = Image.new('1', canvas.size, 0)
-			self.window = self.make_window(canvas.size)
+			if self.scroll:
+				self.window = self.make_window(canvas.size)
+			else:
+				self.window = None
 			self.draw([self.position])
 			canvas.paste(self.image)
 			#print('first')
@@ -304,7 +308,7 @@ class SearchRender(Render):
 			'%s/fonts/LiberationMono-Regular.ttf' % home, 10, (2, 0)
 		)
 		self.term = TextRender(
-			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10)
+			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10), False
 		)
 
 	# TODO: would be nice if ticking of self.query wasn't interrupted by

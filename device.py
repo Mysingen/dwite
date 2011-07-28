@@ -729,11 +729,11 @@ class Classic(Device):
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()
-						if not self.player.play(item):
-							transition = TRANSITION.BOUNCE_RIGHT
-						else:
+						if self.player.play(item):
 							self.now_playing_mode = True
 							(guid, render) = self.player.ticker()
+						else:
+							(guid, render, transition) = self.menu.play()
 
 					elif msg.code == IR.PAUSE:
 						self.player.pause()

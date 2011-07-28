@@ -293,8 +293,8 @@ class Playlist(Tree):
 class CandidateTree(Tree):
 	query = None
 
-	def __init__(self, guid, label, parent, query):
-		Tree.__init__(self, guid, label, parent)
+	def __init__(self, label, parent, query):
+		Tree.__init__(self, u'CandidateTree', label, parent)
 		self.query  = query
 		self.render = SearchRender()
 		self.render.curry(self.label, query)
@@ -316,30 +316,33 @@ class CandidateTree(Tree):
 	def ticker(self):
 		return (self.guid, self.render)
 
-	def ls(self):
-		return None
-
-class NoCandidateTree(CandidateTree):
-	pass
-
 class Searcher(Tree):
 	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
-	terms  = None # list of actual search terms
+	term   = None # string of numbers the user has pressed to form a word
 	render = None
+	query  = None # list of actual search terms
 
 	def __init__(self, guid, label, parent):
 		Tree.__init__(self, guid, label, parent)
-		self.children = [NoCandidateTree(
-			u'<Use T9 typing to add search terms>',
-			u'<Use T9 typing to add search terms>',
-			self,
-			u'<NO TERMS ADDED>'
-			)]
-		self.t9dict     = {}
-		self.term       = ''   # search term built in T9 style (digits only)
-		self.candidates = None # T9 encoded strings (i.e. digits only)
-		self.query      = []   # all built search terms (translated strings)
-	
+		self.t9dict   = {}
+		self.term     = '' # search term built in T9 style (digits only)
+		self.query    = [] # all built search terms (translated strings)
+		label         = (u'<Type to get suggestions. UP/DOWN adds/removes '
+		              +   'suggestions, LEFT/RIGHT navigates suggestions>')
+		self.children = [CandidateTree(label, self, self.get_query())]
+
+		self.candidates  = None # T9 encoded search term suggestions
+		self.suggestions = None # plain text search term suggestions
+		self.index       = 0
+
+	def dump(self):
+		return {
+			'term'       : self.term,
+			'query'      : self.query,
+			'suggestions': self.suggestions,
+			'index'      : self.index
+		}
+
 	def get_query(self):
 		if self.query:
 			return u' '.join(self.query)
@@ -386,118 +389,153 @@ class Searcher(Tree):
 				self.t9dict[translation] = set()
 			self.t9dict[translation].add(t)
 	
-	def set_search_terms(self, terms):
-		self.terms = terms
-
-	def get_candidates(self, term, clear=False):
-		if clear or not self.candidates:
-			self.candidates = self.t9dict.keys()
-		self.candidates = [c for c in self.candidates if c.startswith(term)]
-		pretty = []
+	def make_suggestions(self):
+		self.suggestions = []
+		self.candidates = [
+			k for k in self.t9dict.keys() if k.startswith(self.term)
+		]
+		
+		tmp_1 = []
 		for c in self.candidates:
-			pretty.extend(self.t9dict[c])
-		# sort 'pretty' so that all words with one char appear first,
-		# followed by all words with two chars, et.c. Don't do more than
-		# 20 words (to keep down CPU usage).
-		tmp = {}
+			tmp_1.extend(self.t9dict[c])
+		# sort the suggestions so that all words with one char appear first,
+		# followed by all words with two chars, et.c. Don't do more than 20
+		# words (to keep down CPU usage).
+		tmp_2 = {}
 		count = 0
-		for p in pretty:
-			if len(p) not in tmp:
-				tmp[len(p)] = [p]
+		for s in tmp_1:
+			if len(s) not in tmp_2:
+				tmp_2[len(s)] = [s]
 			else:
-				tmp[len(p)].append(p)
+				tmp_2[len(s)].append(s)
 
 			count = count + 1
 			if count == 20:
 				break
-		# we now have a dict with words from 'pretty' sorted into different
-		# "length buckets". go through them from shortest to longest and
-		# build the final 'pretty'.
-		pretty = []
-		keys = tmp.keys()
+		# we now have a dict with suggestions sorted into different "length
+		# buckets". go through them from shortest to longest and build the
+		# final list of suggestions.
+		keys = tmp_2.keys()
 		keys.sort()
 		for i in keys:
-			p = tmp[i]
+			p = tmp_2[i]
 			p.sort()
-			pretty.extend(p)
-		return pretty
+			self.suggestions.extend(p)
 
-	def right(self, focused):
-		if self.term:
-			if type(focused) == NoCandidateTree:
-				return False
-			# complete the current term against the focused candidate
-			self.query.append(focused.label)
-			self.term       = ''
-			self.candidates = None
-			self.children   = [NoCandidateTree(
-				u'<Use T9 typing to add search terms>',
-				u'<Use T9 typing to add search terms>',
-				self,
-				self.get_query()
-			)]
-			return True
-		elif self.query:
-			# terminate the query list and run the search
-			print('search for %s' % self.query)
-			print('NOT IMPLEMENTED')
-			self.children = [NoCandidateTree(
-				u'<SEARCHING>',
-				u'<SEARCHING>',
-				self,
-				self.get_query()
-			)]
-			self.query = []
-			return True
-		return False
-	
+	def right(self):
+		#print 'right + %s' % self.dump()
+		# if there are suggestions, increase the suggestion index and redraw:
+		if self.suggestions:
+			if self.index < len(self.suggestions) - 1:
+				self.index += 1
+				transition = TRANSITION.NONE
+			else:
+				transition = TRANSITION.BOUNCE_LEFT
+			label = u' '.join(self.suggestions[self.index:])
+		else:
+			label      = u''
+			transition = TRANSITION.BOUNCE_LEFT
+		self.children = [CandidateTree(label, self, self.get_query())]
+		return transition
+
 	def left(self):
-		if len(self.term) > 1:
-			self.term = self.term[:-1]
+		#print 'left + %s' % self.dump()
+		# if a search is running, return to the query construction widget:
+		if self.children[0].label == u'<SEARCHING>':
+			self.term  = u''
+			label      = (u'<Type to get suggestions. UP/DOWN adds/removes '
+			           +   'suggestions, LEFT/RIGHT navigates suggestions>')
+			transition = TRANSITION.SCROLL_RIGHT
+		# if there are suggestions, decrease the suggestion index and redraw:
+		elif self.suggestions and self.index > 0:
+			self.index -= 1
+			transition  = TRANSITION.NONE
+			label       = u' '.join(self.suggestions[self.index:])
+		# if a term is under construction, reduce it by one character:
+		elif self.term:
+			self.term  = self.term[:-1]
+			transition = TRANSITION.NONE
+			self.index = 0
+			if self.term:
+				self.make_suggestions()
+				label = u' '.join([s for s in self.suggestions])
+			else:
+				label = u''
+		# remove the last term in the query, if any:
+		elif self.query:
+			self.query = self.query[:-1]
+			transition = TRANSITION.NONE
+			if self.query:
+				label = u''
+			else:
+				label = (u'<Type to get suggestions. UP/DOWN adds/removes '
+				      +   'suggestions, LEFT/RIGHT navigates suggestions>')
+		# leave the widget (by throwing an exception) if there is no query
+		# and no search term under construction:
 		else:
-			self.query = []
-			self.term  = ''
-			self.children = [NoCandidateTree(
-				u'<Use T9 typing to add search terms>',
-				u'<Use T9 typing to add search terms>',
-				self,
-				self.get_query()
-			)]
-			return False
-		candidates = self.get_candidates(self.term, clear=True)
-		if len(candidates) > 0:
-			self.children = [CandidateTree(c, c, self, self.get_query())
-			                 for c in candidates]
+			label = (u'<Type to get suggestions. UP/DOWN adds/removes '
+			      +   'suggestions, LEFT/RIGHT navigates suggestions>')
+			self.children = [CandidateTree(label, self, self.get_query())]
+			raise Exception('The user has left the widget')
+		self.children = [CandidateTree(label, self, self.get_query())]
+		return transition
+
+	def up(self):
+		#print 'up + %s' % self.dump()
+		# if there are suggestions, add the indexed one to the query:
+		if self.suggestions:
+			self.query.append(self.suggestions[self.index])
+			self.term        = u''
+			self.candidates  = None
+			self.suggestions = None
+			self.index       = 0
+			label            = u''
+			self.children = [CandidateTree(label, self, self.get_query())]
+			transition = TRANSITION.NONE
 		else:
-			self.children = [NoCandidateTree(
-				u'<No match in the T9 dictionary>',
-				u'<No match in the T9 dictionary>',
-				self,
-				self.get_query()
-			)]
-		return True
+			transition = TRANSITION.BOUNCE_DOWN
+		return transition
+
+	def down(self):
+		#print 'down + %s' % self.dump()
+		# if there are terms in the query, remove the last one:
+		if self.query:
+			self.query = self.query[:-1]
+			label = (u'<Type to get suggestions. UP/DOWN adds/removes '
+			      +   'suggestions, LEFT/RIGHT navigates suggestions>')
+			self.children = [CandidateTree(label, self, self.get_query())]
+			transition = TRANSITION.NONE
+		else:
+			transition = TRANSITION.BOUNCE_UP
+		return transition
 
 	def number(self, code):
-		if code not in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
-		                IR.NUM_4, IR.NUM_5, IR.NUM_6,
-		                IR.NUM_7, IR.NUM_8, IR.NUM_9]:
-			return False
+		if code not in [IR.NUM_0, IR.NUM_1, IR.NUM_2, IR.NUM_3, IR.NUM_4,
+		                IR.NUM_5, IR.NUM_6, IR.NUM_7, IR.NUM_8, IR.NUM_9]:
+			raise Exception('Unknown numeric code: %d' % code)
+		#print '%s + %s' % (IR.codes_debug[code], self.dump())
 		self.term += IR.codes_debug[code]
-		candidates = self.get_candidates(self.term)
-		if len(candidates) > 0:
-			self.children = [CandidateTree(c, c, self, self.get_query())
-			                 for c in candidates]
+		self.make_suggestions()
+		if self.suggestions:
+			self.index = 0
+			label      = u' '.join([s for s in self.suggestions])
+			transition = TRANSITION.NONE
 		else:
-			self.children = [NoCandidateTree(
-				u'<No match in the T9 dictionary>',
-				u'<No match in the T9 dictionary>',
-				self,
-				self.get_query()
-			)]
-		return True
+			self.term  = self.term[:-1]
+			self.make_suggestions()
+			label      = u' '.join(self.suggestions[self.index:])
+			transition = TRANSITION.BOUNCE_LEFT
+		self.children = [CandidateTree(label, self, self.get_query())]
+		return transition
 
-	def ls(self):
-		return self.children
+	def play(self):
+		print 'play + %s' % self.dump()
+		if self.query:
+			self.children = [
+				CandidateTree(u'<SEARCHING>', self, self.get_query())
+			]
+			return TRANSITION.SCROLL_LEFT
+		return TRANSITION.BOUNCE_LEFT
 
 
 # specialty class to hold the menu system root node
@@ -561,17 +599,17 @@ class Menu:
 
 	def right(self):
 		if self.cwd == self.searcher:
-			if self.searcher.right(self.focused()):
-				transition = TRANSITION.SCROLL_LEFT
-			else:
-				transition = TRANSITION.BOUNCE_LEFT
-
+			try:
+				transition = self.searcher.right()
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searcher)
+				transition = TRANSITION.SCROLL_RIGHT
 		elif self.focused().ls():
 			self.cwd     = self.focused()
 			self.current = 0
 			#print 'enter %s' % str(self.cwd.guid)
 			transition = TRANSITION.SCROLL_LEFT
-
 		else:
 			# self.current has no listable content and can thus not be entered
 			transition = TRANSITION.BOUNCE_LEFT
@@ -580,11 +618,13 @@ class Menu:
 
 	def left(self):
 		if self.cwd == self.searcher:
-			if self.searcher.left():
-				(guid, render) = self.focused().curry()
-				return (guid, render, TRANSITION.NONE)
-
-		if self.cwd.parent:
+			try:
+				transition = self.searcher.left()
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searcher)
+				transition = TRANSITION.SCROLL_RIGHT
+		elif self.cwd.parent:
 			self.current = self.cwd.parent.children.index(self.cwd)
 			self.cwd     = self.cwd.parent
 			#print 'return %s' % str(self.cwd.guid)
@@ -595,7 +635,14 @@ class Menu:
 		return (guid, render, transition)
 	
 	def up(self):
-		if self.current > 0:
+		if self.cwd == self.searcher:
+			try:
+				transition = self.searcher.up()
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searchar)
+				transition = TRANSITION.SCROLL_RIGHT
+		elif self.current > 0:
 			self.current = self.current - 1
 			transition = TRANSITION.SCROLL_DOWN
 		else:
@@ -604,7 +651,14 @@ class Menu:
 		return (guid, render, transition)
 	
 	def down(self):
-		if self.current < len(self.cwd.children) - 1:
+		if self.cwd == self.searcher:
+			try:
+				transition = self.searcher.down()
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searcher)
+				transition = TRANSITION.SCROLL_RIGHT
+		elif self.current < len(self.cwd.children) - 1:
 			self.current = self.current + 1
 			transition = TRANSITION.SCROLL_UP
 		else:
@@ -614,13 +668,29 @@ class Menu:
 
 	def number(self, ir_code):
 		if self.cwd == self.searcher:
-			if self.searcher.number(ir_code):
-				transition = TRANSITION.NONE
-			else:
-				transition = TRANSITION.BOUNCE_UP
-			(guid, render) = self.focused().curry()
-			return (guid, render, transition)
-		return (0, None, TRANSITION.NONE)
+			try:
+				transition = self.searcher.number(ir_code)
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searcher)
+				transition = TRANSITION.SCROLL_RIGHT
+		else:
+			transition = TRANSITION.NONE
+		(guid, render) = self.focused().curry()
+		return (guid, render, transition)
+
+	def play(self):
+		if self.cwd == self.searcher:
+			try:
+				transition = self.searcher.play()
+			except:
+				traceback.print_exc()
+				self.set_focus(self.searcher)
+				transition = TRANSITION.SCROLL_RIGHT
+		else:
+			transition = TRANSITION.BOUNCE_LEFT
+		(guid, render) = self.focused().curry()
+		return (guid, render, transition)
 
 	def next_render_mode(self):
 		(guid, render) = self.focused().ticker()
