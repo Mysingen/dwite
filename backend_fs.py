@@ -6,7 +6,7 @@ import traceback
 
 from magic import Magic
 
-from protocol import Ls, GetItem, Terms
+from protocol import Ls, GetItem, Terms, Search
 
 from backend import Backend
 
@@ -26,18 +26,26 @@ def safe_unicode(string):
 		except:
 			return unicode(string.encode('string_escape'))
 
+def is_int(string):
+	try:
+		int(string)
+		return True
+	except:
+		return False
+
 def make_terms(*strings):
 	terms = set()
 	for s in strings:
 		if not s:
 			continue
 		tmp = re.split('[^a-zA-Z0-9]', s.lower())
-		terms |= set([t for t in tmp if len(t) > 2])
+		terms |= set([t for t in tmp if len(t) > 2 and not is_int(t)])
 	return terms
 
 class FileSystem(Backend):
 	root_dir = u'/'
 	name     = u'File system'
+	index    = {} # search terms to guids
 
 	def __init__(self, out_queue):
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
@@ -65,8 +73,8 @@ class FileSystem(Backend):
 			(result, terms) = self._get_children(item_guid, msg.recursive)
 			msg.respond(0, u'', 0, False, { 'item':item, 'contents':result })
 			msg.wire.send(Terms(0, list(terms)).serialize())
-			
 			return
+
 		if isinstance(msg, GetItem):
 			item = self._get_item(msg.item)
 			if not item:
@@ -74,7 +82,34 @@ class FileSystem(Backend):
 			else:
 				msg.respond(0, u'', 0, False, item)
 			return
+
+		if isinstance(msg, Search):
+			terms = msg.params['terms']
+			if len(terms) == 0:
+				msg.respond(1, u'Empty search term', 0, False, None)
+				return
+			# add all guids indexed by the first term:
+			print 'term: %s' % terms[0]
+			result = set(self._get_index(terms[0]))
+			if len(terms) > 1:
+				for t in terms[1:]:
+					result &= set(self._get_index(t))
+			# turn all guids into items:
+			result = [self._get_item(guid) for guid in result]
+			msg.respond(0, u'', 0, False, result)
+			return
+		
 		raise Exception('Unhandled message: %s' % str(msg))
+
+	def _set_index(self, term, guid):
+		if term not in self.index:
+			self.index[term] = []
+		self.index[term].append(guid)
+
+	def _get_index(self, term):
+		if term not in self.index:
+			return []
+		return self.index[term]
 	
 	def _classify_file(self, path, verbose=False):
 		assert type(path) in [str, unicode]
@@ -143,7 +178,6 @@ class FileSystem(Backend):
 					# exceptions all the time.
 					path = path.decode('string_escape')
 
-			terms |= make_terms(l) # add file name to terms
 			child_guid = os.path.join(guid, l)
 			if os.path.isdir(path):
 				children.append({
@@ -151,7 +185,9 @@ class FileSystem(Backend):
 					'pretty': { 'label': l },
 					'kind'  :'dir'
 				})
-				terms |= make_terms(l)
+				for t in make_terms(l):
+					terms.add(t) # add file name to terms
+					self._set_index(t, child_guid)
 				if recursive:
 					(c, t) = self._get_children(child_guid, recursive, verbose)
 					children.extend(c)
@@ -171,7 +207,6 @@ class FileSystem(Backend):
 					n = None
 					if 'tracknumber' in audio.keys():
 						n = audio['tracknumber'][0]
-					terms |= make_terms(title, artist, album) # add tag to terms
 					children.append({
 						'guid'    : child_guid,
 						'pretty'  : {
@@ -185,12 +220,18 @@ class FileSystem(Backend):
 						'size'    : os.path.getsize(path),
 						'duration': int(audio.info.length * 1000)
 					})
+					for t in make_terms(title, artist, album):
+						terms.add(t) # add tag to terms
+						self._set_index(t, child_guid)
 				else:
 					children.append({
 						'guid'  : child_guid,
 						'pretty': { 'label': l },
 						'kind'  : 'file'
 					})
+					for t in make_terms(l):
+						terms.add(t) # add tag to terms
+						self._set_index(t, child_guid)
 			else:
 				print('WARNING: Unsupported VFS content: %s' % path)
 		return (children, terms)

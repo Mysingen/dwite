@@ -98,10 +98,6 @@ class Conman(Thread):
 					self.state = RUNNING
 				continue
 
-			if isinstance(msg, Ls):
-				self.backend.in_queue.put(msg)
-				continue
-			
 			if isinstance(msg, JsonResult):
 				if msg.guid in self.handlers:
 					(orig_msg, handler, user) = self.get_handler(msg)
@@ -110,8 +106,7 @@ class Conman(Thread):
 					print msg
 				continue
 
-			if isinstance(msg, GetItem):
-				self.backend.in_queue.put(msg)
+			self.backend.in_queue.put(msg)
 
 		#print('Conman is dead')
 
