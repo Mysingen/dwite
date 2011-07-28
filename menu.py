@@ -12,8 +12,7 @@ import traceback
 import sys
 import random
 
-import protocol
-
+from protocol import Search
 from render   import SearchRender, ItemRender
 from display  import TRANSITION
 from tactile  import IR
@@ -394,7 +393,7 @@ class Searcher(Tree):
 		self.candidates = [
 			k for k in self.t9dict.keys() if k.startswith(self.term)
 		]
-		
+
 		tmp_1 = []
 		for c in self.candidates:
 			tmp_1.extend(self.t9dict[c])
@@ -529,11 +528,15 @@ class Searcher(Tree):
 		return transition
 
 	def play(self):
-		print 'play + %s' % self.dump()
+		from dwite import msg_reg, get_cm
+		#print 'play + %s' % self.dump()
 		if self.query:
 			self.children = [
 				CandidateTree(u'<SEARCHING>', self, self.get_query())
 			]
+			for cm in get_cm(None):
+				search = Search(msg_reg.make_guid(), self.query)
+				cm.wire.send(search.serialize())
 			return TRANSITION.SCROLL_LEFT
 		return TRANSITION.BOUNCE_LEFT
 

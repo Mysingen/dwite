@@ -783,6 +783,12 @@ class GetItem(JsonCall):
 		assert type(item) == unicode
 		JsonCall.__init__(self, guid, u'get_item', { 'item': item })
 
+class Search(JsonCall):
+	
+	def __init__(self, guid, terms):
+		assert type(terms) == list
+		JsonCall.__init__(self, guid, u'search', { 'terms': terms })
+
 class JsonResult(JsonMessage):
 
 	def __init__(self, guid, errno, errstr, chunk, more, result):
@@ -842,6 +848,9 @@ def parse_json(data):
 
 		if method == u'terms':
 			return Terms(guid, **params)
+
+		if method == u'search':
+			return Search(guid, **params)
 
 	return None
 
