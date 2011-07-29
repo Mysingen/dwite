@@ -19,7 +19,7 @@ from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
                       StrmStatus, Ls, GetItem, ID, JsonMessage, Resp, Anic)
 from display   import Display, TRANSITION, BRIGHTNESS
 from tactile   import IR
-from menu      import Menu, CmFile, CmAudio, CmDir, make_item
+from menu      import Menu, CmFile, CmAudio, CmDir, Link, make_item
 from player    import Player
 from seeker    import Seeker
 from render    import ProgressRender, OverlayRender
@@ -676,6 +676,7 @@ class Classic(Device):
 						self.display.next_brightness()
 
 					elif msg.code == IR.ADD:
+						done = False
 						item = self.menu.focused()
 						if self.menu.cwd == self.menu.playlist:
 							# if the user is browsing the playlist, then ADD
@@ -691,6 +692,7 @@ class Classic(Device):
 								while next and not self.player.play(next):
 									next = next.next(wrap, random)
 							self.menu.playlist.remove(item)
+							# TODO: next may == item if random
 							if next and next != item:
 								self.menu.set_focus(next)
 								transition = TRANSITION.SCROLL_UP
@@ -702,9 +704,15 @@ class Classic(Device):
 								(guid, render) = self.menu.ticker(curry=True)
 							self.select_now_playing_mode()
 							#transition = TRANSITION.SCROLL_UP
-						elif isinstance(item, CmAudio):
+							done = True
+						if not done and isinstance(item, Link):
+							item = item.target
+							# don't set done. next two rules pick up item
+							print 'Link target: %s' % item.dump()
+						if not done and isinstance(item, CmAudio):
 							self.menu.playlist.add(item)
-						elif isinstance(item, CmDir):
+							done = True
+						if not done and isinstance(item, CmDir):
 							# ask CM for a recursive listing of the directory
 							# and remember the sequence number of the message
 							# so that special handling can be applied to the
@@ -726,6 +734,9 @@ class Classic(Device):
 
 							msg_reg.set_handler(ls, handle_ls_r, (self,item.cm))
 							item.cm.wire.send(ls.serialize())
+							done = True
+						if not done:
+							(guid, render, transition) = self.menu.add()
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()

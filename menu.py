@@ -26,6 +26,7 @@ class Tree(object):
 
 	def __init__(self, guid, label, parent):
 		assert type(label) == unicode
+		assert (not parent) or isinstance(parent, Tree)
 		self.guid   = guid
 		self.label  = label
 		self.parent = parent
@@ -51,6 +52,18 @@ class Tree(object):
 
 	def __ne__(self, other):
 		return not self.__eq__(other)
+
+	def dump(self):
+		if self.parent:
+			parent = self.parent.dump()
+		else:
+			parent = None
+		return {
+			'class' : unicode(type(self)),
+			'guid'  : self.guid,
+			'label' : self.label,
+			'parent': parent
+		}
 
 	def get_pretty(self):
 		return self.label
@@ -100,6 +113,25 @@ class Tree(object):
 			if other.parent.guid == self.guid:
 				return True
 			other = other.parent
+
+	def up(self):
+		return None
+	def down(self):
+		return None
+	def left(self):
+		return None
+	def right(self):
+		return None
+	def add(self):
+		return None
+	def play(self):
+		return None
+
+	def focused(self):
+		return self.parent.focused()
+
+	def set_focus(self, item):
+		self.parent.set_focus(item)
 
 class Waiting(Tree):
 	def __init__(self, parent):
@@ -289,17 +321,23 @@ class Playlist(Tree):
 			result.append(obj)
 		return result
 
-class CandidateTree(Tree):
-	query = None
+class SearcherPanel(Tree):
+	top_panel = None
 
-	def __init__(self, label, parent, query):
-		Tree.__init__(self, u'CandidateTree', label, parent)
-		self.query  = query
-		self.render = SearchRender()
-		self.render.curry(self.label, query)
+	@property
+	def bot_panel(self):
+		return self.label
+
+	def __init__(self, bot_panel, top_panel, parent):
+		assert type(top_panel) == unicode
+		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
+		Tree.__init__(self, guid, bot_panel, parent)
+		self.top_panel = top_panel
+		self.render    = SearchRender()
+		self.render.curry(self.bot_panel, self.top_panel)
 
 	def __str__(self):
-		return "%s (query = %s)" % (self.label, self.query)
+		return "%s (query = %s)" % (self.bot_panel, self.top_panel)
 	
 	def __cmp__(self, other):
 		if self.guid == other.guid:
@@ -309,11 +347,44 @@ class CandidateTree(Tree):
 		return 1
 
 	def curry(self):
-		self.render.curry(self.label, self.query)
+		self.render.curry(self.bot_panel, self.top_panel)
 		return (self.guid, self.render)
 
 	def ticker(self):
 		return (self.guid, self.render)
+
+class SearcherSuggestions(SearcherPanel):
+	pass
+
+class SearcherNotice(SearcherPanel):
+	def __init__(self, bot_panel, top_panel, parent):
+		if not bot_panel:
+			bot_panel = (u'<Type to get suggestions. ADD adds a suggestion to '
+			              'the query, LEFT/RIGHT navigates suggestions. LEFT
+			              'also removes terms from the query if there are no '
+			              'suggestions')
+		SearcherPanel.__init__(self, bot_panel, top_panel, parent)
+
+class SearcherSearching(SearcherNotice):
+	def __init__(self, top_panel, parent):
+		SearcherNotice.__init__(self, u'<SEARCHING>', top_panel, parent)
+
+class SearcherResults(SearcherNotice):
+	terms = None
+
+	def __init__(self, terms, top_panel, parent):
+		bot_panel = u'Results for "%s"' % ' '.join(terms)
+		SearcherNotice.__init__(self, bot_panel, top_panel, parent)
+		self.terms = terms
+
+	def up(self):
+		return None
+	def down(self):
+		return None
+	def left(self):
+		return None
+	def right(self):
+		return None
 
 class Searcher(Tree):
 	t9dict = None # {string:[strings]} to map digits to characters (T9 style)
@@ -326,9 +397,7 @@ class Searcher(Tree):
 		self.t9dict   = {}
 		self.term     = '' # search term built in T9 style (digits only)
 		self.query    = [] # all built search terms (translated strings)
-		label         = (u'<Type to get suggestions. UP/DOWN adds/removes '
-		              +   'suggestions, LEFT/RIGHT navigates suggestions>')
-		self.children = [CandidateTree(label, self, self.get_query())]
+		self.children = [SearcherNotice(None, self.get_query(), self)]
 
 		self.candidates  = None # T9 encoded search term suggestions
 		self.suggestions = None # plain text search term suggestions
@@ -344,8 +413,8 @@ class Searcher(Tree):
 
 	def get_query(self):
 		if self.query:
-			return u' '.join(self.query)
-		return u'<NO TERMS ADDED>'
+			return 'Query: s%' % u' '.join(self.query)
+		return u'Query:'
 	
 	def add_terms(self, cm, terms):
 		#print 'add search terms: %s' % terms
@@ -423,6 +492,8 @@ class Searcher(Tree):
 
 	def right(self):
 		#print 'right + %s' % self.dump()
+		if type(self.focused()) == SearcherResults:
+			return None
 		# if there are suggestions, increase the suggestion index and redraw:
 		if self.suggestions:
 			if self.index < len(self.suggestions) - 1:
@@ -430,57 +501,45 @@ class Searcher(Tree):
 				transition = TRANSITION.NONE
 			else:
 				transition = TRANSITION.BOUNCE_LEFT
-			label = u' '.join(self.suggestions[self.index:])
-		else:
-			label      = u''
-			transition = TRANSITION.BOUNCE_LEFT
-		self.children = [CandidateTree(label, self, self.get_query())]
-		return transition
+			label         = u' '.join(self.suggestions[self.index:])
+			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			return transition
+		return TRANSITION.BOUNCE_LEFT
 
 	def left(self):
 		#print 'left + %s' % self.dump()
 		# if a search is running, return to the query construction widget:
-		if self.children[0].label == u'<SEARCHING>':
-			self.term  = u''
-			label      = (u'<Type to get suggestions. UP/DOWN adds/removes '
-			           +   'suggestions, LEFT/RIGHT navigates suggestions>')
-			transition = TRANSITION.SCROLL_RIGHT
+		if type(self.focused()) == SearcherResults:
+			return None
 		# if there are suggestions, decrease the suggestion index and redraw:
 		elif self.suggestions and self.index > 0:
-			self.index -= 1
-			transition  = TRANSITION.NONE
-			label       = u' '.join(self.suggestions[self.index:])
+			self.index   -= 1
+			label         = u' '.join(self.suggestions[self.index:])
+			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			return TRANSITION.NONE
 		# if a term is under construction, reduce it by one character:
 		elif self.term:
 			self.term  = self.term[:-1]
-			transition = TRANSITION.NONE
 			self.index = 0
 			if self.term:
 				self.make_suggestions()
 				label = u' '.join([s for s in self.suggestions])
 			else:
 				label = u''
+			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			return TRANSITION.NONE
 		# remove the last term in the query, if any:
 		elif self.query:
-			self.query = self.query[:-1]
-			transition = TRANSITION.NONE
-			if self.query:
-				label = u''
-			else:
-				label = (u'<Type to get suggestions. UP/DOWN adds/removes '
-				      +   'suggestions, LEFT/RIGHT navigates suggestions>')
-		# leave the widget (by throwing an exception) if there is no query
-		# and no search term under construction:
-		else:
-			label = (u'<Type to get suggestions. UP/DOWN adds/removes '
-			      +   'suggestions, LEFT/RIGHT navigates suggestions>')
-			self.children = [CandidateTree(label, self, self.get_query())]
-			raise Exception('The user has left the widget')
-		self.children = [CandidateTree(label, self, self.get_query())]
-		return transition
+			self.query    = self.query[:-1]
+			self.children[0] = SearcherNotice(None, self.get_query(), self)
+			return TRANSITION.NONE
+		# let the menu system handle LEFT key:
+		return None
 
-	def up(self):
-		#print 'up + %s' % self.dump()
+	def add(self):
+		#print 'add + %s' % self.dump()
+		if type(self.focused()) == SearcherResults:
+			return None # let menu handle UP key
 		# if there are suggestions, add the indexed one to the query:
 		if self.suggestions:
 			self.query.append(self.suggestions[self.index])
@@ -488,27 +547,13 @@ class Searcher(Tree):
 			self.candidates  = None
 			self.suggestions = None
 			self.index       = 0
-			label            = u''
-			self.children = [CandidateTree(label, self, self.get_query())]
-			transition = TRANSITION.NONE
-		else:
-			transition = TRANSITION.BOUNCE_DOWN
-		return transition
-
-	def down(self):
-		#print 'down + %s' % self.dump()
-		# if there are terms in the query, remove the last one:
-		if self.query:
-			self.query = self.query[:-1]
-			label = (u'<Type to get suggestions. UP/DOWN adds/removes '
-			      +   'suggestions, LEFT/RIGHT navigates suggestions>')
-			self.children = [CandidateTree(label, self, self.get_query())]
-			transition = TRANSITION.NONE
-		else:
-			transition = TRANSITION.BOUNCE_UP
-		return transition
+			self.children[0] = SearcherNotice(None, self.get_query(), self)
+			return TRANSITION.NONE
+		return TRANSITION.BOUNCE_DOWN
 
 	def number(self, code):
+		if type(self.focused()) == SearcherResults:
+			return None # let menu handle DOWN key
 		if code not in [IR.NUM_0, IR.NUM_1, IR.NUM_2, IR.NUM_3, IR.NUM_4,
 		                IR.NUM_5, IR.NUM_6, IR.NUM_7, IR.NUM_8, IR.NUM_9]:
 			raise Exception('Unknown numeric code: %d' % code)
@@ -524,27 +569,64 @@ class Searcher(Tree):
 			self.make_suggestions()
 			label      = u' '.join(self.suggestions[self.index:])
 			transition = TRANSITION.BOUNCE_LEFT
-		self.children = [CandidateTree(label, self, self.get_query())]
+		self.children[0] = SearcherSuggestions(label, self.get_query(), self)
 		return transition
 
 	def play(self):
-		from dwite import msg_reg, get_cm
 		#print 'play + %s' % self.dump()
+		if type(self.focused()) == SearcherResults:
+			return None # let menu handle DOWN key
+		from dwite import msg_reg, get_cm
 		if self.query:
-			self.children = [
-				CandidateTree(u'<SEARCHING>', self, self.get_query())
-			]
+			results = SearcherResults(self.query, u'', self)
+			self.children.append(results)
+			waiting = SearcherSearching(self.get_query(), results)
+			results.children = [waiting]
+			results.set_focus(waiting)
+
 			for cm in get_cm(None):
 				search = Search(msg_reg.make_guid(), self.query)
+
+				def handle_search(msg_reg, response, orig_msg, user):
+					(self, cm) = user
+					assert type(self) == Searcher
+					if response.errno:
+						print response.errstr # TODO: better UI
+						return TRANSITION.NONE
+					parent = self.get_results(orig_msg.terms)
+					assert parent != None # not possible because added above
+					parent.children = []
+					
+					for r in response.result:
+						item = make_item(cm, **r)
+						link = Link(item, parent)
+						parent.children.append(link)
+					firstborn = parent.children[0]
+					parent.set_focus(firstborn)
+					firstborn.render.curry(firstborn.target)
+
+				msg_reg.set_handler(search, handle_search, (self, cm.label))
 				cm.wire.send(search.serialize())
+
+			self.query = []
+			self.children[0] = SearcherNotice(None, self.get_query(), self)
 			return TRANSITION.SCROLL_LEFT
 		return TRANSITION.BOUNCE_LEFT
 
+	def get_results(self, terms):
+		for c in self.children:
+			if type(c) == SearcherResults and c.terms == terms:
+				return c
+		return None
 
 # specialty class to hold the menu system root node
 class Root(Tree):
-	def __init__(self):
+	menu = None # back reference to make set_focus() work
+
+	def __init__(self, menu):
+		assert type(menu) == Menu
 		Tree.__init__(self, u'/', u'/', None)
+		self.menu = menu
 		self.children = []
 
 	def __eq__(self, other):
@@ -575,14 +657,20 @@ class Root(Tree):
 			print('Could not remove %s' % item)
 			pass
 
-class Menu:
+	def focused(self):
+		return self.menu.focused()
+
+	def set_focus(self, item):
+		self.menu.set_focus(item)	
+
+class Menu(object):
 	root     = None # must always point to a Tree instance that implements ls()
 	cwd      = None # must always point to a Tree instance that implements ls()
 	current  = 0    # index into cwd.children[]
 	searcher = None
 
 	def __init__(self):
-		self.root = Root()
+		self.root = Root(self)
 		self.cwd  = self.root
 		self.searcher = Searcher(u'Searcher', u'Search', self.root)
 		self.playlist = Playlist(self.root)
@@ -601,96 +689,106 @@ class Menu:
 			self.current = 0
 
 	def right(self):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.right()
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searcher)
-				transition = TRANSITION.SCROLL_RIGHT
-		elif self.focused().ls():
-			self.cwd     = self.focused()
-			self.current = 0
-			#print 'enter %s' % str(self.cwd.guid)
-			transition = TRANSITION.SCROLL_LEFT
-		else:
-			# self.current has no listable content and can thus not be entered
-			transition = TRANSITION.BOUNCE_LEFT
+		try:
+			transition = self.cwd.right()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
+			if self.focused().ls():
+				self.cwd     = self.focused()
+				self.current = 0
+				#print 'enter %s' % str(self.cwd.guid)
+				transition = TRANSITION.SCROLL_LEFT
+			else:
+				# self.current has no listable content and can not be entered
+				transition = TRANSITION.BOUNCE_LEFT
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 
 	def left(self):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.left()
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searcher)
-				transition = TRANSITION.SCROLL_RIGHT
-		elif self.cwd.parent:
-			self.current = self.cwd.parent.children.index(self.cwd)
-			self.cwd     = self.cwd.parent
-			#print 'return %s' % str(self.cwd.guid)
+		try:
+			transition = self.cwd.left()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
 			transition = TRANSITION.SCROLL_RIGHT
-		else:
-			transition = TRANSITION.BOUNCE_RIGHT
+		if not transition:
+			if self.cwd.parent:
+				self.current = self.cwd.parent.children.index(self.cwd)
+				self.cwd     = self.cwd.parent
+				#print 'return %s' % str(self.cwd.guid)
+				transition = TRANSITION.SCROLL_RIGHT
+			else:
+				transition = TRANSITION.BOUNCE_RIGHT
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 	
 	def up(self):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.up()
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searchar)
-				transition = TRANSITION.SCROLL_RIGHT
-		elif self.current > 0:
-			self.current = self.current - 1
-			transition = TRANSITION.SCROLL_DOWN
-		else:
-			transition = TRANSITION.BOUNCE_DOWN
+		try:
+			transition = self.cwd.up()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
+			if self.current > 0:
+				self.current = self.current - 1
+				transition = TRANSITION.SCROLL_DOWN
+			else:
+				transition = TRANSITION.BOUNCE_DOWN
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 	
 	def down(self):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.down()
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searcher)
-				transition = TRANSITION.SCROLL_RIGHT
-		elif self.current < len(self.cwd.children) - 1:
-			self.current = self.current + 1
-			transition = TRANSITION.SCROLL_UP
-		else:
-			transition = TRANSITION.BOUNCE_UP
+		try:
+			transition = self.cwd.down()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
+			if self.current < len(self.cwd.children) - 1:
+				self.current = self.current + 1
+				transition = TRANSITION.SCROLL_UP
+			else:
+				transition = TRANSITION.BOUNCE_UP
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 
 	def number(self, ir_code):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.number(ir_code)
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searcher)
-				transition = TRANSITION.SCROLL_RIGHT
-		else:
+		try:
+			transition = self.cwd.number(ir_code)
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
 			transition = TRANSITION.NONE
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
 
+	def add(self):
+		try:
+			transition = self.cwd.add()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
+			transition = TRANSITION.BOUNCE_LEFT
+		(guid, render) = self.focused().curry()
+		return (guid, render, transition)
+
 	def play(self):
-		if self.cwd == self.searcher:
-			try:
-				transition = self.searcher.play()
-			except:
-				traceback.print_exc()
-				self.set_focus(self.searcher)
-				transition = TRANSITION.SCROLL_RIGHT
-		else:
+		try:
+			transition = self.cwd.play()
+		except:
+			traceback.print_exc()
+			self.set_focus(self.cwd)
+			transition = TRANSITION.SCROLL_RIGHT
+		if not transition:
 			transition = TRANSITION.BOUNCE_LEFT
 		(guid, render) = self.focused().curry()
 		return (guid, render, transition)
@@ -719,7 +817,7 @@ class Menu:
 			self.cwd = item.parent
 			self.current = self.cwd.children.index(item)
 		else:
-			raise Exception('Can only focus items with parents')
+			raise Exception('Can only focus items with parents: %s'%item.dump())
 
 	def get_item(self, label):
 		for c in self.root.children:

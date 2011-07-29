@@ -784,10 +784,12 @@ class GetItem(JsonCall):
 		JsonCall.__init__(self, guid, u'get_item', { 'item': item })
 
 class Search(JsonCall):
+	terms = None
 	
 	def __init__(self, guid, terms):
 		assert type(terms) == list
 		JsonCall.__init__(self, guid, u'search', { 'terms': terms })
+		self.terms = terms
 
 class JsonResult(JsonMessage):
 

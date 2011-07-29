@@ -89,12 +89,16 @@ class FileSystem(Backend):
 				msg.respond(1, u'Empty search term', 0, False, None)
 				return
 			# add all guids indexed by the first term:
-			print 'term: %s' % terms[0]
 			result = set(self._get_index(terms[0]))
 			if len(terms) > 1:
 				for t in terms[1:]:
 					result &= set(self._get_index(t))
 			# turn all guids into items:
+			if not result:
+				msg.respond(1, u'Nothing found', 0, False, None)
+				return
+			result = list(result)
+			result.sort()
 			result = [self._get_item(guid) for guid in result]
 			msg.respond(0, u'', 0, False, result)
 			return
