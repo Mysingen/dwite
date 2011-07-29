@@ -360,7 +360,7 @@ class SearcherNotice(SearcherPanel):
 	def __init__(self, bot_panel, top_panel, parent):
 		if not bot_panel:
 			bot_panel = (u'<Type to get suggestions. ADD adds a suggestion to '
-			              'the query, LEFT/RIGHT navigates suggestions. LEFT
+			              'the query, LEFT/RIGHT navigates suggestions. LEFT '
 			              'also removes terms from the query if there are no '
 			              'suggestions')
 		SearcherPanel.__init__(self, bot_panel, top_panel, parent)
@@ -413,7 +413,7 @@ class Searcher(Tree):
 
 	def get_query(self):
 		if self.query:
-			return 'Query: s%' % u' '.join(self.query)
+			return 'Query: %s' % u' '.join(self.query)
 		return u'Query:'
 	
 	def add_terms(self, cm, terms):
@@ -590,12 +590,15 @@ class Searcher(Tree):
 				def handle_search(msg_reg, response, orig_msg, user):
 					(self, cm) = user
 					assert type(self) == Searcher
-					if response.errno:
-						print response.errstr # TODO: better UI
-						return TRANSITION.NONE
 					parent = self.get_results(orig_msg.terms)
 					assert parent != None # not possible because added above
 					parent.children = []
+
+					if response.errno:
+						parent.children.append(SearcherNotice(
+							u'<%s>' % response.errstr, u'', parent
+						))
+						return TRANSITION.NONE
 					
 					for r in response.result:
 						item = make_item(cm, **r)
