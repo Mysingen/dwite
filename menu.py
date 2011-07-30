@@ -608,7 +608,7 @@ class Searcher(Tree):
 		#print 'play + %s' % self.dump()
 		if type(self.focused()) == SearcherResults:
 			return None # let menu handle DOWN key
-		from dwite import msg_reg, get_cm
+		from dwite import msg_reg, get_cm, get_dm
 		if self.query:
 			results = SearcherResults(self.query, u'', self)
 			self.children.append(results)
@@ -619,7 +619,7 @@ class Searcher(Tree):
 			for cm in get_cm(None):
 				search = Search(msg_reg.make_guid(), self.query)
 
-				def handle_search(msg_reg, response, orig_msg, user):
+				def __handle_search(msg_reg, response, orig_msg, user):
 					(self, cm) = user
 					assert type(self) == Searcher
 					parent = self.get_results(orig_msg.terms)
@@ -639,6 +639,14 @@ class Searcher(Tree):
 					firstborn = parent.children[0]
 					parent.set_focus(firstborn)
 					firstborn.render.curry(firstborn.target)
+
+				# warning: handler is run by a CM thread
+				def handle_search(msg_reg, response, orig_msg, user):
+					# move the message to the DM's queue so that we can
+					# handle it safely:
+					msg_reg.set_handler(orig_msg, __handle_search, user)
+					for dm in get_dm(None):
+						dm.in_queue.put(response)
 
 				msg_reg.set_handler(search, handle_search, (self, cm.label))
 				cm.wire.send(search.serialize())
