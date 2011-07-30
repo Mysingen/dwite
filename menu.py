@@ -726,8 +726,12 @@ class Menu(object):
 			self.set_focus(self.cwd)
 			transition = TRANSITION.SCROLL_RIGHT
 		if not transition:
-			if self.focused().ls():
-				self.cwd     = self.focused()
+			focused = self.focused()
+			if type(focused) == Link:
+				print focused
+				focused = focused.target
+			if focused.ls():
+				self.cwd     = focused
 				self.current = 0
 				#print 'enter %s' % str(self.cwd.guid)
 				transition = TRANSITION.SCROLL_LEFT

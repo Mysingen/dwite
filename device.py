@@ -387,7 +387,8 @@ class Classic(Device):
 				# playing. then only the focused item has been reparented but
 				# the playing item needs reparenting too. otherwise the next
 				# track to play will not be found when it plays to finish.
-				if self.player.get_playing().guid == item.guid:
+				playing = self.player.get_playing()
+				if playing and playing.guid == item.guid:
 					self.player.playing.item = item
 				return
 
@@ -616,6 +617,8 @@ class Classic(Device):
 
 					elif msg.code == IR.RIGHT:
 						focused = self.menu.focused()
+						if type(focused) == Link:
+							focused = focused.target
 						if type(focused) == CmDir:
 							ls = Ls(msg_reg.make_guid(), focused.guid)
 						
