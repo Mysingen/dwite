@@ -15,7 +15,7 @@ from Queue     import Queue, Empty
 from threading import Thread
 
 from wire       import JsonWire, Connected
-from backend_fs import FileSystem
+from backend_fs import FileSystem, Scan
 from streamer   import Streamer, Accepting
 from protocol   import JsonResult, Hail, Ls, GetItem
 

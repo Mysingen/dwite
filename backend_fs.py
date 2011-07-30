@@ -3,12 +3,17 @@ import mutagen
 import json
 import re
 import traceback
+import sqlite3
 
 from magic import Magic
 
-from protocol import Ls, GetItem, Terms, Search
+from protocol import Ls, GetItem, Search, GetTerms
 
 from backend import Backend
+
+# private message class:
+class Scan(object):
+	pass
 
 class Track:
 	uri = None
@@ -45,7 +50,8 @@ def make_terms(*strings):
 class FileSystem(Backend):
 	root_dir = u'/'
 	name     = u'File system'
-	index    = {} # search terms to guids
+	db_conn  = None
+	db_curs  = None
 
 	def __init__(self, out_queue):
 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
@@ -58,9 +64,17 @@ class FileSystem(Backend):
 		Backend.__init__(self, self.name, out_queue)
 
 	def on_start(self):
-		pass
+		# load database of search indexes:
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'index.sqlite3')
+		self.db_conn = sqlite3.connect(path)
+		self.db_curs = self.db_conn.cursor()
+		try:
+			self.db_curs.execute('create table search_index (term, guid)')
+		except:
+			pass
 	
 	def on_stop(self):
+		self.db_conn.close()
 		pass
 
 	def handle(self, msg):
@@ -70,9 +84,12 @@ class FileSystem(Backend):
 			else:
 				item_guid = msg.item
 			item = self._get_item(item_guid)
-			(result, terms) = self._get_children(item_guid, msg.recursive)
+			result = self._get_children(item_guid, msg.recursive)
 			msg.respond(0, u'', 0, False, { 'item':item, 'contents':result })
-			msg.wire.send(Terms(0, list(terms)).serialize())
+			return
+
+		if type(msg) == GetTerms:
+			msg.respond(0, u'', 0, False, list(self._get_terms()))
 			return
 
 		if isinstance(msg, GetItem):
@@ -102,18 +119,27 @@ class FileSystem(Backend):
 			result = [self._get_item(guid) for guid in result]
 			msg.respond(0, u'', 0, False, result)
 			return
+
+		if type(msg) == Scan:
+			self._scan(u'', True, True)
+			return
 		
 		raise Exception('Unhandled message: %s' % str(msg))
 
 	def _set_index(self, term, guid):
-		if term not in self.index:
-			self.index[term] = []
-		self.index[term].append(guid)
+		self.db_curs.execute(
+			'insert into search_index values (?,?)', (term, guid)
+		)
 
 	def _get_index(self, term):
-		if term not in self.index:
-			return []
-		return self.index[term]
+		self.db_curs.execute(
+			'select guid from search_index where term=?', (term,)
+		)
+		return [row[0] for row in self.db_curs]
+	
+	def _get_terms(self):
+		self.db_curs.execute('select term from search_index')
+		return set([row[0] for row in self.db_curs])
 	
 	def _classify_file(self, path, verbose=False):
 		assert type(path) in [str, unicode]
@@ -165,7 +191,6 @@ class FileSystem(Backend):
 	def _get_children(self, guid, recursive, verbose=False):
 		assert type(guid) == unicode
 		children = []
-		terms    = set()
 		if guid == '/':
 			guid = ''
 		path = os.path.join(self.root_dir, guid)
@@ -189,13 +214,10 @@ class FileSystem(Backend):
 					'pretty': { 'label': l },
 					'kind'  :'dir'
 				})
-				for t in make_terms(l):
-					terms.add(t) # add file name to terms
-					self._set_index(t, child_guid)
 				if recursive:
-					(c, t) = self._get_children(child_guid, recursive, verbose)
-					children.extend(c)
-					terms |= t # add recursive to terms
+					children.extend(
+						self._get_children(child_guid, recursive, verbose)
+					)
 			elif os.path.isfile(path):
 				(format, audio) = self._classify_file(path)
 				if format in ['mp3', 'flac']:
@@ -224,21 +246,15 @@ class FileSystem(Backend):
 						'size'    : os.path.getsize(path),
 						'duration': int(audio.info.length * 1000)
 					})
-					for t in make_terms(title, artist, album, l):
-						terms.add(t) # add tag to terms
-						self._set_index(t, child_guid)
 				else:
 					children.append({
 						'guid'  : child_guid,
 						'pretty': { 'label': l },
 						'kind'  : 'file'
 					})
-					for t in make_terms(l):
-						terms.add(t) # add tag to terms
-						self._set_index(t, child_guid)
 			else:
 				print('WARNING: Unsupported VFS content: %s' % path)
-		return (children, terms)
+		return children
 
 	def _get_item(self, guid):
 		if guid == '/':
@@ -291,4 +307,50 @@ class FileSystem(Backend):
 
 	def get_item(self, guid):
 		return Track(os.path.join(self.root_dir, guid))
+
+	def _scan(self, guid, recursive, verbose=False):
+		assert type(guid) == unicode
+
+		if verbose:
+			print guid
+
+		if guid == '/':
+			guid = ''
+		path = os.path.join(self.root_dir, guid)
+		listing = os.listdir(path)
+		listing = [safe_unicode(l) for l in listing]
+		listing.sort()
+		for l in listing:
+			path = os.path.join(self.root_dir, guid, l)
+			if not os.path.exists(path):
+				if os.path.exists(path.decode('string_escape')):
+					# the filename contains characters with unknown encoding
+					# and the call to safe_unicode() earlier has converted it
+					# to something that can be handled without raising encoding
+					# exceptions all the time.
+					path = path.decode('string_escape')
+
+			child_guid = os.path.join(guid, l)
+			if os.path.isfile(path):
+				(format, audio) = self._classify_file(path)
+				if format in ['mp3', 'flac']:
+					title = None
+					if 'title' in audio.keys():
+						title = audio['title'][0]
+					artist = None
+					if 'artist' in audio.keys():
+						artist = audio['artist'][0]
+					album = None
+					if 'album' in audio.keys():
+						album = audio['album'][0]
+					for t in make_terms(title, artist, album, l):
+						self._set_index(t, child_guid)
+					continue
+			self.db_conn.commit()
+
+			if os.path.isdir(path) and recursive:
+				self._scan(child_guid, recursive, verbose)
+
+			else:
+				print('WARNING: Unsupported VFS content: %s' % path)
 
