@@ -65,7 +65,7 @@ class FileSystem(Backend):
 
 	def on_start(self):
 		# load database of search indexes:
-		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'index.sqlite3')
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.sqlite3')
 		self.db_conn = sqlite3.connect(path)
 		self.db_curs = self.db_conn.cursor()
 		try:
