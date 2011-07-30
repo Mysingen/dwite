@@ -22,6 +22,7 @@ Dependencies
  * Mutagen - To extract media file meta data.
  * libmagic + magic Python wrappers.
  * libflac + pyflac Python wrappers (https://github.com/dsully/pyflac).
+ * SQLite3.
 
 The code is not terribly hard to port to Python 3, but several dependencies
 do not support Python 3, so it would still be a lot of work to make it happen.
