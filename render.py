@@ -76,6 +76,17 @@ class TextRender(Render):
 	window   = None
 	timeout  = None
 	position = (0, 0)
+	_scroll  = True
+
+	@property
+	def scroll(self):
+		return self._scroll
+
+	@scroll.setter
+	def scroll(self, value):
+		if value != self._scroll:
+			self.image = None
+		self._scroll = value
 
 	def __new__(cls, font_path, size, position, scroll=True):
 		global singleton
@@ -94,7 +105,7 @@ class TextRender(Render):
 		self.window   = None
 		self.timeout  = None
 		self.position = position
-		self.scroll   = scroll
+		self._scroll   = scroll
 
 	def curry(self, text):
 		assert type(text) == unicode
@@ -119,7 +130,7 @@ class TextRender(Render):
 	def tick(self, canvas):
 		if not self.image: # never called this render's tick() before
 			self.image = Image.new('1', canvas.size, 0)
-			if self.scroll:
+			if self._scroll:
 				self.window = self.make_window(canvas.size)
 			else:
 				self.window = None
@@ -301,6 +312,15 @@ class NowPlayingRender(OverlayRender):
 class SearchRender(Render):
 	query = None
 	term  = None
+	
+	@property
+	def scroll(self):
+		return self.term.scroll
+	
+	@scroll.setter
+	def scroll(self, value):
+		assert type(value) == bool
+		self.term.scroll = value
 
 	def __init__(self):
 		home = os.getenv('DWITE_HOME')
@@ -308,7 +328,7 @@ class SearchRender(Render):
 			'%s/fonts/LiberationMono-Regular.ttf' % home, 10, (2, 0)
 		)
 		self.term = TextRender(
-			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10), False
+			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10), True
 		)
 
 	# TODO: would be nice if ticking of self.query wasn't interrupted by

@@ -126,6 +126,8 @@ class Tree(object):
 		return None
 	def play(self):
 		return None
+	def number(self, ir_code):
+		return None
 
 	def focused(self):
 		return self.parent.focused()
@@ -328,6 +330,13 @@ class SearcherPanel(Tree):
 	def bot_panel(self):
 		return self.label
 
+	@bot_panel.setter
+	def bot_panel(self, label):
+		if label == self.label:
+			return
+		self.label = label
+		self.render.term.curry(label)
+
 	def __init__(self, bot_panel, top_panel, parent):
 		assert type(top_panel) == unicode
 		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
@@ -354,15 +363,16 @@ class SearcherPanel(Tree):
 		return (self.guid, self.render)
 
 class SearcherSuggestions(SearcherPanel):
-	pass
+	def __init__(self, bot_panel, top_panel, parent):
+		SearcherPanel.__init__(self, bot_panel, top_panel, parent)
+		self.render.scroll = False
+
+default_notice = (u'<Type to get suggestions. ADD adds a suggestion to the '
+				   'query, LEFT/RIGHT navigates suggestions. LEFT also removes '
+				   'terms from the query if there are no suggestions')
 
 class SearcherNotice(SearcherPanel):
 	def __init__(self, bot_panel, top_panel, parent):
-		if not bot_panel:
-			bot_panel = (u'<Type to get suggestions. ADD adds a suggestion to '
-			              'the query, LEFT/RIGHT navigates suggestions. LEFT '
-			              'also removes terms from the query if there are no '
-			              'suggestions')
 		SearcherPanel.__init__(self, bot_panel, top_panel, parent)
 
 class SearcherSearching(SearcherNotice):
@@ -397,7 +407,7 @@ class Searcher(Tree):
 		self.t9dict   = {}
 		self.term     = '' # search term built in T9 style (digits only)
 		self.query    = [] # all built search terms (translated strings)
-		self.children = [SearcherNotice(None, self.get_query(), self)]
+		self.children = [SearcherNotice(default_notice, self.get_query(), self)]
 
 		self.candidates  = None # T9 encoded search term suggestions
 		self.suggestions = None # plain text search term suggestions
@@ -410,6 +420,18 @@ class Searcher(Tree):
 			'suggestions': self.suggestions,
 			'index'      : self.index
 		}
+
+	def suggest(self, label):
+		if type(self.children[0]) == SearcherSuggestions:
+			self.children[0].bot_panel = label
+		else:
+			self.children[0] = SearcherSuggestions(label, self.get_query(),self)
+	
+	def notify(self, label):
+		if type(self.children[0]) == SearcherNotice:
+			self.children[0].bot_panel = label
+		else:
+			self.children[0] = SearcherNotice(label, self.get_query(), self)
 
 	def get_query(self):
 		if self.query:
@@ -502,7 +524,7 @@ class Searcher(Tree):
 			else:
 				transition = TRANSITION.BOUNCE_LEFT
 			label         = u' '.join(self.suggestions[self.index:])
-			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			self.suggest(label)
 			return transition
 		return TRANSITION.BOUNCE_LEFT
 
@@ -515,7 +537,7 @@ class Searcher(Tree):
 		elif self.suggestions and self.index > 0:
 			self.index   -= 1
 			label         = u' '.join(self.suggestions[self.index:])
-			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			self.suggest(label)
 			return TRANSITION.NONE
 		# if a term is under construction, reduce it by one character:
 		elif self.term:
@@ -526,12 +548,12 @@ class Searcher(Tree):
 				label = u' '.join([s for s in self.suggestions])
 			else:
 				label = u''
-			self.children[0] = SearcherSuggestions(label,self.get_query(),self)
+			self.suggest(label)
 			return TRANSITION.NONE
 		# remove the last term in the query, if any:
 		elif self.query:
 			self.query    = self.query[:-1]
-			self.children[0] = SearcherNotice(None, self.get_query(), self)
+			self.notify(default_notice)
 			return TRANSITION.NONE
 		# let the menu system handle LEFT key:
 		return None
@@ -547,7 +569,7 @@ class Searcher(Tree):
 			self.candidates  = None
 			self.suggestions = None
 			self.index       = 0
-			self.children[0] = SearcherNotice(None, self.get_query(), self)
+			self.notify(default_notice)
 			return TRANSITION.NONE
 		return TRANSITION.BOUNCE_DOWN
 
@@ -569,7 +591,7 @@ class Searcher(Tree):
 			self.make_suggestions()
 			label      = u' '.join(self.suggestions[self.index:])
 			transition = TRANSITION.BOUNCE_LEFT
-		self.children[0] = SearcherSuggestions(label, self.get_query(), self)
+		self.suggest(label)
 		return transition
 
 	def play(self):
@@ -612,7 +634,7 @@ class Searcher(Tree):
 				cm.wire.send(search.serialize())
 
 			self.query = []
-			self.children[0] = SearcherNotice(None, self.get_query(), self)
+			self.notify(default_notice)
 			return TRANSITION.SCROLL_LEFT
 		return TRANSITION.BOUNCE_LEFT
 
