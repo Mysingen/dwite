@@ -11,6 +11,7 @@ import os.path
 import traceback
 import sys
 import random
+import json
 
 from protocol import Search
 from render   import SearchRender, ItemRender
@@ -34,7 +35,7 @@ class Tree(object):
 		                         % os.getenv('DWITE_HOME'), 27, (2, 0))
 
 	def __str__(self):
-		return 'Tree %s %s' % (self.guid, self.label)
+		return '%s %s' % (unicode(type(self)), json.dumps(self.dump(),indent=4))
 	
 	def __cmp__(self, other):
 		if self.guid == other.guid:
@@ -110,9 +111,10 @@ class Tree(object):
 
 	def is_parent_of(self, other):
 		while other.parent:
-			if other.parent.guid == self.guid:
+			if other.parent == self:
 				return True
 			other = other.parent
+		return False
 
 	def up(self):
 		return None
@@ -414,12 +416,14 @@ class Searcher(Tree):
 		self.index       = 0
 
 	def dump(self):
-		return {
+		r = Tree.dump(self)
+		r.update({
 			'term'       : self.term,
 			'query'      : self.query,
 			'suggestions': self.suggestions,
 			'index'      : self.index
-		}
+		})
+		return r
 
 	def suggest(self, label):
 		if type(self.children[0]) == SearcherSuggestions:
@@ -650,7 +654,8 @@ class Root(Tree):
 
 	def __init__(self, menu):
 		assert type(menu) == Menu
-		Tree.__init__(self, u'/', u'/', None)
+		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
+		Tree.__init__(self, guid, u'<Root>', None)
 		self.menu = menu
 		self.children = []
 
