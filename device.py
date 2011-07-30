@@ -16,7 +16,8 @@ from Queue     import Queue, Empty
 from datetime  import datetime
 
 from protocol  import(Helo, Tactile, Stat, JsonResult, Terms, Dsco, Ping,
-                      StrmStatus, Ls, GetItem, ID, JsonMessage, Resp, Anic)
+                      StrmStatus, Ls, GetItem, ID, JsonMessage, Resp, Anic,
+                      GetTerms)
 from display   import Display, TRANSITION, BRIGHTNESS
 from tactile   import IR
 from menu      import Menu, CmFile, CmAudio, CmDir, Link, make_item
@@ -446,6 +447,13 @@ class Classic(Device):
 
 				if isinstance(msg, AddCM):
 					self.menu.add_cm(msg.cm)
+
+					def handle_get_terms(msg_reg, response, orig_msg, self):
+						self.menu.searcher.add_terms(response.result)
+
+					get_terms = GetTerms(msg_reg.make_guid())
+					msg_reg.set_handler(get_terms, handle_get_terms, self)
+					msg.cm.wire.send(get_terms.serialize())
 					continue
 
 				elif isinstance(msg, RemCM):

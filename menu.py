@@ -428,12 +428,14 @@ class Searcher(Tree):
 	def suggest(self, label):
 		if type(self.children[0]) == SearcherSuggestions:
 			self.children[0].bot_panel = label
+			self.children[0].top_panel = self.get_query()
 		else:
 			self.children[0] = SearcherSuggestions(label, self.get_query(),self)
 	
 	def notify(self, label):
 		if type(self.children[0]) == SearcherNotice:
 			self.children[0].bot_panel = label
+			self.children[0].top_panel = self.get_query()
 		else:
 			self.children[0] = SearcherNotice(label, self.get_query(), self)
 
@@ -442,7 +444,7 @@ class Searcher(Tree):
 			return 'Query: %s' % u' '.join(self.query)
 		return u'Query:'
 	
-	def add_terms(self, cm, terms):
+	def add_terms(self, terms):
 		#print 'add search terms: %s' % terms
 		for t in terms:
 			# make a char list from each term so we can change single entries
@@ -556,7 +558,7 @@ class Searcher(Tree):
 			return TRANSITION.NONE
 		# remove the last term in the query, if any:
 		elif self.query:
-			self.query    = self.query[:-1]
+			self.query = self.query[:-1]
 			self.notify(default_notice)
 			return TRANSITION.NONE
 		# let the menu system handle LEFT key:
@@ -593,7 +595,11 @@ class Searcher(Tree):
 		else:
 			self.term  = self.term[:-1]
 			self.make_suggestions()
-			label      = u' '.join(self.suggestions[self.index:])
+			if self.suggestions:
+				label = u' '.join(self.suggestions[self.index:])
+			else:
+				self.notify(default_notice)
+				return TRANSITION.BOUNCE_LEFT
 			transition = TRANSITION.BOUNCE_LEFT
 		self.suggest(label)
 		return transition
