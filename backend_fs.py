@@ -224,7 +224,7 @@ class FileSystem(Backend):
 						'size'    : os.path.getsize(path),
 						'duration': int(audio.info.length * 1000)
 					})
-					for t in make_terms(title, artist, album):
+					for t in make_terms(title, artist, album, l):
 						terms.add(t) # add tag to terms
 						self._set_index(t, child_guid)
 				else:
