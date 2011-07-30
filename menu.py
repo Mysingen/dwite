@@ -728,7 +728,6 @@ class Menu(object):
 		if not transition:
 			focused = self.focused()
 			if type(focused) == Link:
-				print focused
 				focused = focused.target
 			if focused.ls():
 				self.cwd     = focused

@@ -669,7 +669,6 @@ class Classic(Device):
 								self.in_queue.put(response)
 							
 							msg_reg.set_handler(ls, handle_ls, self)
-							#focused.cm.wire.send(ls.serialize())
 						(guid, render, transition) = self.menu.left()
 						if ls:
 							focused.cm.wire.send(ls.serialize())
