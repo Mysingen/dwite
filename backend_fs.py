@@ -1,3 +1,5 @@
+﻿# coding=utf-8
+
 import os
 import mutagen
 import json
@@ -43,7 +45,7 @@ def make_terms(*strings):
 	for s in strings:
 		if not s:
 			continue
-		tmp = re.split('[^a-zA-Z0-9]', s.lower())
+		tmp = re.split('[^\w]', s.lower(), flags=re.UNICODE)
 		terms |= set([t for t in tmp if len(t) > 2 and not is_int(t)])
 	return terms
 
@@ -121,7 +123,7 @@ class FileSystem(Backend):
 			return
 
 		if type(msg) == Scan:
-			self._scan(u'', True, True)
+			self._scan(u'', True, False)
 			return
 		
 		raise Exception('Unhandled message: %s' % str(msg))
@@ -185,7 +187,8 @@ class FileSystem(Backend):
 			if re.search(i, m):
 				return ('file', None)
 
-		print('UNKNOWN MAGIC (%s): %s' % (path, m))
+		if verbose:
+			print('UNKNOWN MAGIC (%s): %s' % (path, m))
 		return ('file', None)
 	
 	def _get_children(self, guid, recursive, verbose=False):
@@ -252,11 +255,11 @@ class FileSystem(Backend):
 						'pretty': { 'label': l },
 						'kind'  : 'file'
 					})
-			else:
+			elif verbose:
 				print('WARNING: Unsupported VFS content: %s' % path)
 		return children
 
-	def _get_item(self, guid):
+	def _get_item(self, guid, verbose=False):
 		if guid == '/':
 			guid = ''
 		path = os.path.join(self.root_dir, guid)
@@ -302,7 +305,7 @@ class FileSystem(Backend):
 					'pretty': { 'label': os.path.basename(path) },
 					'kind'  : 'file'
 				}
-		else:
+		elif verbose:
 			print('WARNING: Unsupported VFS content: %s' % path)
 
 	def get_item(self, guid):
@@ -311,8 +314,7 @@ class FileSystem(Backend):
 	def _scan(self, guid, recursive, verbose=False):
 		assert type(guid) == unicode
 
-		if verbose:
-			print guid
+		print 'scanning %s' % guid
 
 		if guid == '/':
 			guid = ''
@@ -336,13 +338,13 @@ class FileSystem(Backend):
 				if format in ['mp3', 'flac']:
 					title = None
 					if 'title' in audio.keys():
-						title = audio['title'][0]
+						title = unicode(audio['title'][0])
 					artist = None
 					if 'artist' in audio.keys():
-						artist = audio['artist'][0]
+						artist = unicode(audio['artist'][0])
 					album = None
 					if 'album' in audio.keys():
-						album = audio['album'][0]
+						album = unicode(audio['album'][0])
 					for t in make_terms(title, artist, album, l):
 						self._set_index(t, child_guid)
 					continue
@@ -351,6 +353,12 @@ class FileSystem(Backend):
 			if os.path.isdir(path) and recursive:
 				self._scan(child_guid, recursive, verbose)
 
-			else:
+			elif verbose:
 				print('WARNING: Unsupported VFS content: %s' % path)
 
+
+if __name__ == '__main__':
+	# test 1: check that make_terms splits strings with unicode characters:
+	terms = make_terms(u'hellå Björk')
+	assert u'hellå' in terms
+	assert u'björk' in terms

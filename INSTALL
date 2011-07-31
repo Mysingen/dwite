@@ -1,0 +1,97 @@
+How to install Dwite
+====================
+Klas Lindberg <klas.lindberg@gmail.com>
+v1.0, July 2011
+
+Dependencies
+------------
+
+Python
+~~~~~~
+Dwite requires Python 2.7. Python 3 is not yet supported. Python 2.6 may work
+but is not tested.
+
+Check which version you have:
+
+----
+python --version
+----
+
+PIL
+~~~
+
+Mutagen
+~~~~~~~
+
+
+
+
+
+Debian GNU/Linux and derivatives
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Run
+
+----
+sudo apt-get install python2.7
+----
+
+Installation On OS X
+--------------------
+
+Python
+~~~~~~
+* Go to +http://python.org/download/releases/+ and download a 2.7 release.
+* Follow regular installation procedures for OS X programs.
+
+PIL
+~~~
+Dwite requires that PIL is built with support for FreeType2. PIL itself requires
+GCC to build.
+
+* GCC: Follow instructions given here: +http://stackoverflow.com/questions/4360110/
+installing-gcc-to-mac-os-x-leopard-without-installing-xcode+
+* FreeType2: Follow instructions given here: +http://groups.google.com/group/
+python-virtualenv/browse_thread/thread/d42f8fd2c52e88b7+
+
+Now you should be able to install PIL:
+
+* Go to http://www.pythonware.com/products/pil/ and download the latest "Source
+  Kit (all platforms)".
+* Unpack the download and enter the resulting directory from a Terminal:
+  ----
+  cd <your path to unpacked directory>
+  python2.7 setup.py build
+  ----
+* Pay attention to the SETUP SUMMARY. It should include a line that reads
+  ----
+  --- FREETYPE2 support available
+  ----
+* To install, run
+  ----
+  sudo python2.7 setup.py install
+  ----
+
+Mutagen
+~~~~~~~
+* Go to +http://code.google.com/p/mutagen/downloads/list+ and download the
+  latest release. E.g. mutagen-1.20.tar.gz.
+* Unpack the downloaded package.
+* Open a terminal and enter the directory +mutagen-x.xx+ (where x.xx is the
+  version you downloaded).
+* Run the command
+  ----
+  sudo python2.7 setup.py install
+  ----
+
+Python-Magic
+~~~~~~~~~~~~
+Python-Magic requires libmagic which is part of the +file+ utility.
+
+* Download +http://ftp.de.debian.org/debian/pool/main/f/file/
+  file_5.04.orig.tar.gz+, unpack it and follow the instructions in +INSTALL+.
+* go to +http://pypi.python.org/pypi/python-magic/+ and download the latest
+  source release.
+* Unpack the Python-Magic tarball, enter it from a Terminal and run:
+  ----
+  sudo python2.7 setup.py install
+  ----
