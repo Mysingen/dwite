@@ -8,14 +8,7 @@ Dependencies
 
 Python
 ~~~~~~
-Dwite requires Python 2.7. Python 3 is not yet supported. Python 2.6 may work
-but is not tested.
-
-Check which version you have:
-
-----
-python --version
-----
+Dwite requires Python 2.6 or 2.7. Python 3 is not yet supported.
 
 PIL
 ~~~
@@ -27,16 +20,12 @@ Mutagen
 
 
 
-Debian GNU/Linux and derivatives
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Run
+Installation on Debian GNU/Linux and derivatives
+------------------------------------------------
 
-----
-sudo apt-get install python2.7
-----
 
-Installation On OS X
---------------------
+Installation On OS X 10.5
+-------------------------
 
 Python
 ~~~~~~
@@ -58,18 +47,21 @@ Now you should be able to install PIL:
 * Go to http://www.pythonware.com/products/pil/ and download the latest "Source
   Kit (all platforms)".
 * Unpack the download and enter the resulting directory from a Terminal:
-  ----
-  cd <your path to unpacked directory>
-  python2.7 setup.py build
-  ----
+----
+cd <your path to unpacked directory>
+python2.7 setup.py build
+----
+
 * Pay attention to the SETUP SUMMARY. It should include a line that reads
-  ----
-  --- FREETYPE2 support available
-  ----
+
+----
+--- FREETYPE2 support available
+----
+
 * To install, run
-  ----
-  sudo python2.7 setup.py install
-  ----
+----
+sudo python2.7 setup.py install
+----
 
 Mutagen
 ~~~~~~~
@@ -79,9 +71,9 @@ Mutagen
 * Open a terminal and enter the directory +mutagen-x.xx+ (where x.xx is the
   version you downloaded).
 * Run the command
-  ----
-  sudo python2.7 setup.py install
-  ----
+----
+sudo python2.7 setup.py install
+----
 
 Python-Magic
 ~~~~~~~~~~~~
@@ -92,6 +84,25 @@ Python-Magic requires libmagic which is part of the +file+ utility.
 * go to +http://pypi.python.org/pypi/python-magic/+ and download the latest
   source release.
 * Unpack the Python-Magic tarball, enter it from a Terminal and run:
-  ----
-  sudo python2.7 setup.py install
-  ----
+----
+sudo python2.7 setup.py install
+----
+
+libFLAC
+~~~~~~~
+* Go to +http://flac.sourceforge.net/download.html+, download one of the
+  installers for OS X and run it. Hopefully it will work. Otherwise try another
+  one.
+
+PyFlac
+~~~~~~
+* Go to https://github.com/dsully/pyflac and download the latest version.
+* Unpack the download, enter the resulting directory from a Terminal and run:
+----
+sudo python 2.7 setup.py install
+----
+
+SQLite3
+~~~~~~~
+This appears to be a standard install on OS X 10.5. You shouldn't have to do
+anything.
