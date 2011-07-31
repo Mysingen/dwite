@@ -133,16 +133,17 @@ class Wire(Thread):
 	def _connect(self):
 		if self.socket:
 			self.socket.close()
-		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self.socket.settimeout(0.5)
 		while self.state not in [STOPPED, STOPPING]:
 			try:
+				self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				self.socket.settimeout(0.5)
 				self.socket.connect((self.host, self.port))
 				self.socket.setblocking(False)
 				self.state = RUNNING
 				self.out_queue.put(Connected(self.host, self.port, self))
 				break
 			except Exception, e:
+				self.socket.close()
 				time.sleep(1) # stop pointless runaway loop
 
 	def run(self):
@@ -241,7 +242,7 @@ class Wire(Thread):
 				left = left - sent
 			except socket.error, e:
 				if e[0] == errno.ECONNRESET:
-					#print(send() Connection reset')
+					#print('send() Connection reset')
 					self.stop(hard=True)
 					return
 				elif e[0] == errno.EAGAIN: # temporarily unavailable. try again
