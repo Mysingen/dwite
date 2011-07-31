@@ -22,7 +22,7 @@ STOPPED  = 0
 STARTING = 1
 RUNNING  = 2
 
-class Accepting:
+class Accepting(object):
 	host = None
 	port = 0
 
@@ -72,7 +72,7 @@ class Streamer(Thread):
 			except:
 				self.port = self.port + 1
 				pass
-		print('Streamer accepting on %d' % self.port)
+		#print('Streamer accepting on %d' % self.port)
 		
 		self.state = RUNNING
 		self.queue.put(Accepting('', self.port))
@@ -87,7 +87,7 @@ class Streamer(Thread):
 			try:
 				self.socket, address = self.socket.accept()
 				self.socket.setblocking(False)
-				print('Streamer connected on %d' % self.port)
+				#print('Streamer connected on %d' % self.port)
 				break
 			except:
 				pass
@@ -117,7 +117,7 @@ class Streamer(Thread):
 						in_data = self.socket.recv(4096)
 					except socket.error, e:
 						if e[0] == errno.ECONNRESET:
-							print('Streamer connection RESET')
+							#print('Streamer connection RESET')
 							self.state = STARTING
 							continue
 					except Exception, e:
@@ -125,8 +125,11 @@ class Streamer(Thread):
 						traceback.print_exc()
 						self.stop()
 
+					if len(in_data) == 0:
+						continue
+
 					if in_data.startswith('GET '):
-						out_data = self.handle_http_get(in_data)
+						out_data = self.handle_http_get(in_data.decode('utf-8'))
 						out_left = len(out_data)
 						if out_left > 0:
 							selected[1] = [self.socket]
@@ -161,12 +164,12 @@ class Streamer(Thread):
 							self.stop()
 						continue
 
-		print('streamer is dead')
+		#print('streamer is dead')
 
 	def handle_http_get(self, data):
 		# check what resource is requested and whether to start playing it
 		# at some offset:
-		print data
+		print data.strip()
 		try:
 			m = re.search('GET (.+?)\?seek=(\d+) HTTP/1\.0', data, re.MULTILINE)
 			track = self.backend.get_item(m.group(1))
@@ -181,15 +184,16 @@ class Streamer(Thread):
 			# create a new one:
 			if (not self.decoder) or (self.decoder.path != path):
 				self.decoder = Decoder(path)
+			else:
+				self.decoder.__init__(path)
 		except Exception, e:
-			print 'oooops %s' % str(e)
+			self.decoder = None
 			return 'HTTP/1.0 404 Not Found\r\n\r\n'
 
 		try:
 			self.decoder.seek(int(seek))
 		except Exception, e:
-			print e
-			pass
+			traceback.print_exc()
 
 		# device expects an HTTP response in return. tell the decoder to send
 		# the response next time it is asked for data to stream.
@@ -213,7 +217,18 @@ class Decoder:
 	mimetype = None
 
 	def __init__(self, path):
-		self.path  = path
+		self.path = path
+		if not os.path.exists(path):
+			# filenames with characters of unknown encoding can still be found
+			# this way because the CM is supposed to handle non-UTF8 filenames
+			# by replacing the weird characters with escape representations.
+			# try to un-escape such characters and check for the file again.
+			# if it still can't be found, then it really doesn't exist. note
+			# that we still set Decoder.path to the path that couldn't be found
+			# as it should be the path passed from the DM.
+			path = path.decode('string_escape')
+		if not os.path.exists(path):
+			raise Exception('No such file')
 		self.audio = mutagen.File(path, easy=True)
 		self.file = open(path, 'rb')
 		if type(self.audio) == mutagen.mp3.EasyMP3:
@@ -249,7 +264,9 @@ class Decoder:
 				self.frames = []
 				dec = flac.decoder.StreamDecoder()
 				# path parameter must not be unicode:
-				dec.init(str(self.path), write_cb, metadata_cb, error_cb)
+				dec.init(
+					self.path.encode('utf-8'), write_cb, metadata_cb, error_cb
+				)
 				dec.process_until_end_of_metadata()
 				while dec.get_state() != 4:
 					self.frames.append(dec.get_decode_position())
@@ -265,10 +282,10 @@ class Decoder:
 				result = self.frames[index]
 			else:
 				result = self.frames[-1]
-			print(
-				'flac seek %d of %d msec = %d byte offset (of %d)'
-				% (msec, int(duration), result, os.path.getsize(self.path))
-			)
+			#print(
+			#	'flac seek %d of %d msec = %d byte offset (of %d)'
+			#	% (msec, int(duration), result, os.path.getsize(self.path))
+			#)
 			return result
 
 		raise Exception('Unhandled execution path')

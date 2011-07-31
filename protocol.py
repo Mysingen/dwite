@@ -52,7 +52,7 @@ class ID:
 # JSON message:   exactly like device message.
 
 
-class Message:
+class Message(object):
 	head = None # string
 
 class Helo(Message):
@@ -61,9 +61,9 @@ class Helo(Message):
 	def __init__(self, id, revision, mac_addr, uuid, language):
 		self.id       = id       # integer
 		self.revision = revision # integer
-		self.mac_addr = mac_addr # string
-		self.uuid     = uuid     # string
-		self.language = language # string
+		self.mac_addr = unicode(mac_addr) # string
+		self.uuid     = unicode(uuid)     # string
+		self.language = unicode(language) # string
 
 	def __str__(self):
 		return 'HELO: %s %d %s %s %s' % (ID.debug[self.id], self.revision,
@@ -213,7 +213,7 @@ class Dsco(Message):
 
 ### COMMANDS ###################################################################
 
-class Command:
+class Command(object):
 	def serialize(self):
 		raise Exception, 'All Command subclasses must implement serialize()'
 	
@@ -341,8 +341,8 @@ class Strm(Command):
 		if len(tmp) != 24:
 			raise Exception, 'strm command not 24 bytes in length'
 		if self.operation == Strm.OP_START:
-			s = str('GET %s?seek=%s HTTP/1.0\r\n'
-			        % (self.resource, self.seek))
+			s = 'GET %s?seek=%s HTTP/1.0\r\n' % (self.resource, self.seek)
+			s = s.encode('utf-8')
 			params = tmp + struct.pack('%ds' % len(s), s)
 			# SqueezeCenter does this (on the GET, but it's all the same). why?
 			#if len(params) % 2 != 0:
@@ -357,6 +357,8 @@ class StrmStart(Strm):
 	operation = Strm.OP_START
 
 	def __init__(self, ip, port, resource, seek=0, background=False):
+		assert type(ip)   == int
+		assert type(port) == int
 		print('%d %d %s %d' % (ip, port, resource, seek))
 		self.server_ip     = ip
 		self.server_port   = port
@@ -430,6 +432,11 @@ class Aude(Command):
 	analog  = True
 	digital = True
 	
+	def __init__(self, analog, digital):
+		assert type(analog) == type(digital) == bool
+		self.analog  = analog
+		self.digital = digital
+
 	def serialize(self):
 		cmd    = 'aude'
 		params = ( struct.pack('<B', self.analog)
@@ -494,6 +501,14 @@ class Visu(Command):
 	# channels
 	STEREO   = 0
 	MONO     = 1
+
+	def __eq__(self, other):
+		if not other:
+			return False
+		return type(self) == type(other)
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
 
 	def serialize(self):
 		raise Exception, 'Visu must be subclassed'
@@ -624,111 +639,227 @@ class Ping(Command):
 
 
 
+
 # JSON based messages. Note that there is no Command class for JSON messaging.
 # all communication is done with a common tree of message classes.
 class JsonMessage(Message):
 	head = 'JSON'
-
-	def dump(self):
-		print('ERROR: Your JsonMessage subclass must implement dump()')
-		sys.exit(1)
-
-	def serialize(self):
-		data   = self.dump()
-		length = struct.pack('<L', socket.htonl(len(data)))
-		return self.head + length + data
-
-# this command is used by a content manager to hail a device manager. There
-# is no reply message class.
-class Hail(JsonMessage):
-	label       = None
-	stream_ip   = None # the ip address of the device manager's streamer
-	stream_port = None # the port of the device manager's streamer
-
-	def __init__(self, label, stream_ip, stream_port):
-		self.label       = label
-		self.stream_ip   = stream_ip
-		self.stream_port = stream_port
-
-	def __str__(self):
-		return 'Hail(%s %d:%d)' % (self.label, self.stream_ip, self.stream_port)
-
-	def dump(self):
-		return json.dumps(['Hail', {'label'      :self.label,
-		                            'stream_ip'  :self.stream_ip,
-		                            'stream_port':self.stream_port}])
-
-# used by device manager to ask content manager for a listing of the contents
-# of some item by GUID. use Listing to reply.
-class Ls(JsonMessage):
-	guid = None
+	guid = 0    # integer to tie results to method calls
+	wire = None # back reference so that replies can easily be sent back
 
 	def __init__(self, guid):
+		assert type(guid) == int
+		if guid < 0:
+			guid = make_json_guid()
+			json_guids[guid] = self
 		self.guid = guid
 
 	def __str__(self):
-		return 'Ls(%s)' % self.guid
-	
+		return unicode(self.dump())
+
 	def dump(self):
-		return json.dumps(['Ls', {'guid': self.guid}])
+		return { 'guid': self.guid }
 
-# used to list the contents of a content manager item by GUID.
-class Listing(JsonMessage):
-	guid    = None
-	listing = None
+	def serialize(self):
+		data   = json.dumps(self.dump())
+		length = struct.pack('<L', socket.htonl(len(data)))
+		return self.head + length + data
 
-	def __init__(self, guid, listing):
-		self.guid    = guid
-		self.listing = listing
+	def respond(self, errno, errstr, chunk, more, result):
+		if self.wire:
+			msg = JsonResult(self.guid, errno, errstr, chunk, more, result)
+			self.wire.send(msg.serialize())
 
-	def __str__(self):
-		return 'Listing(%s): %s' % (self.guid, self.listing)
-	
+class JsonCall(JsonMessage):
+	method = None # unicode string
+	params = None # JSON compatible dictionary
+
+	def __init__(self, guid, method, params):
+		JsonMessage.__init__(self, guid)
+		assert type(method) == unicode
+		assert type(params) == dict
+		self.method = method
+		self.params = params
+
+	def __getattr__(self, name):
+		if name in self.params:
+			return self.params[name]
+		else:
+			raise AttributeError(name)
+
 	def dump(self):
-		return json.dumps(['Listing', {'guid'   :self.guid,
-		                               'listing':self.listing}])
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': self.method,
+			'params': self.params
+		})
+		return r
+
+# this command is used by a content manager to hail a device manager. There
+# is no reply message class.
+class Hail(JsonCall):
+
+	def __init__(self, guid, label, stream_ip, stream_port):
+		assert type(label)       == unicode
+		assert type(stream_ip)   == int
+		assert type(stream_port) == int
+		params = {
+			'label'      : label,
+			'stream_ip'  : stream_ip,
+			'stream_port': stream_port
+		}
+		JsonCall.__init__(self, guid, u'hail', params)
+
+# used by device manager to ask content manager for a listing of the contents
+# of some item by GUID. use JsonResult to reply.
+class Ls(JsonCall):
+
+	def __init__(self, guid, item, recursive=False, parent=False):
+		assert type(item)      == unicode
+		assert type(recursive) == bool
+		assert type(parent)    == bool
+		params = {
+			'item'     : item,
+			'recursive': recursive,
+			'parent'   : parent
+		}
+		JsonCall.__init__(self, guid, u'ls', params)
 
 # used by content managers to send available search terms to the device
 # manager. there is no reply message class.
-class Terms(JsonMessage):
-	terms = None
+class Terms(JsonCall):
+	sender = None
 
-	def __init__(self, terms):
+	def __init__(self, guid, terms):
+		assert type(terms) == list
+		JsonCall.__init__(self, guid, u'terms', { 'terms': terms })
+
+class Play(JsonCall):
+
+	def __init__(
+		self, guid, url, seek=0, kind=None, pretty=None, size=None,
+		duration=None
+	):
+		assert type(url)      == unicode
+		assert type(seek)     == int
+		assert (not kind)     or type(kind)     == unicode
+		assert (not pretty)   or type(pretty)   == dict
+		assert (not size)     or type(size)     == int
+		assert (not duration) or type(duration) == int
+		params = {
+			'url'     : url,
+			'seek'    : seek,
+			'kind'    : kind,
+			'pretty'  : pretty,
+			'size'    : size,
+			'duration': duration
+		}
+		JsonCall.__init__(self, guid, u'play', params)
+
+class Add(JsonCall):
+	
+	def __init__(
+		self, guid, url, kind=None, pretty=None, size=None, duration=None
+	):
+		assert type(url)      == unicode
+		assert (not kind)     or type(kind)     == unicode
+		assert (not pretty)   or type(pretty)   == dict
+		assert (not size)     or type(size)     == int
+		assert (not duration) or type(duration) == int
+		if pretty and 'label' in pretty:
+			assert type(pretty['label']) == unicode
+		params = {
+			'url'     : url,
+			'kind'    : kind,
+			'pretty'  : pretty,
+			'size'    : size,
+			'duration': duration
+		}
+		JsonCall.__init__(self, guid, u'add', params)
+
+class GetItem(JsonCall):
+
+	def __init__(self, guid, item):
+		assert type(item) == unicode
+		JsonCall.__init__(self, guid, u'get_item', { 'item': item })
+
+class GetTerms(JsonCall):
+	def __init__(self, guid):
+		JsonCall.__init__(self, guid, u'get_terms', {})
+
+class Search(JsonCall):
+	terms = None
+	
+	def __init__(self, guid, terms):
+		assert type(terms) == list
+		JsonCall.__init__(self, guid, u'search', { 'terms': terms })
 		self.terms = terms
 
-	def __str__(self):
-		return 'Terms(): %s' % self.terms
-	
-	def dump(self):
-		return json.dumps(['Terms', {'terms': self.terms}])
+class JsonResult(JsonMessage):
 
-class Bark(JsonMessage):
-	
-	def __str__(self):
-		return 'Bark'
+	def __init__(self, guid, errno, errstr, chunk, more, result):
+		JsonMessage.__init__(self, guid)
+		assert type(errno)  == int
+		assert type(errstr) == unicode
+		assert type(chunk)  == int
+		assert type(more)   == bool
+		# no type checking done on result. can be any JSON compatible object.
+		self.errno  = errno
+		self.errstr = errstr
+		self.chunk  = chunk
+		self.more   = more
+		self.result = result
 	
 	def dump(self):
-		return json.dumps(['Bark', {}])
+		r = JsonMessage.dump(self)
+		r.update({
+			'method': u'result',
+			'errno' : self.errno,
+			'errstr': self.errstr,
+			'chunk' : self.chunk,
+			'more'  : self.more,
+			'result': self.result
+		})
+		return r
 
 def parse_json(data):
-	obj  = json.loads(data)
-	head = obj[0]
-	body = obj[1]
+	body = json.loads(data)
+	method = body['method']
+	guid = body['guid']
 
-	if head == 'Hail':
-		return Hail(**body)
+	if method == u'result':
+		del body['method']
+		return JsonResult(**body)
 	
-	if head == 'Ls':
-		return Ls(**body)
+	else:
+		params = body['params']	
+
+		if method == u'hail':
+			return Hail(guid, **params)
 	
-	if head == 'Listing':
-		return Listing(**body)
+		if method == u'ls':
+			return Ls(guid, **params)
+	
+		if method == u'terms':
+			return Terms(guid, **params)
 
-	if head == 'Terms':
-		return Terms(**body)
+		if method == u'play':
+			return Play(guid, **params)
+		
+		if method == u'add':
+			return Add(guid, **params)
 
-	if head == 'Bark':
-		return Bark()
+		if method == u'get_item':
+			return GetItem(guid, **params)
+
+		if method == u'terms':
+			return Terms(guid, **params)
+
+		if method == u'search':
+			return Search(guid, **params)
+		
+		if method == u'get_terms':
+			return GetTerms(guid, **params)
 
 	return None
 
@@ -769,7 +900,7 @@ def parse_header(head):
 		kind = head[0:4]
 		if kind not in ['HELO', 'ANIC', 'IR  ', 'BYE!', 'STAT', 'RESP',
 		                'UREQ', 'JSON', 'DSCO']:
-			print('ERROR: unknown header kind %s' % kind)
+			#print('ERROR: unknown header kind %s' % kind)
 			return (None, 0)
 		size = socket.ntohl(struct.unpack('<L', head[4:8])[0])
 		return (kind, size)

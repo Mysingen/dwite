@@ -12,30 +12,50 @@ import os.path
 import traceback
 import threading
 import time
+import getopt
 
-from conman import Conman
+from conman import Conman, Scan
 
-path = os.path.expanduser('~/.dwite')
-os.environ['DWITE_CFG_DIR'] = path
-if not os.path.isdir(path):
-	raise Exception('No configuration directory "%s"' % path)
+def syntax():
+	print('Syntax: conman [--scan]')
+	sys.exit(1)
 
-try:
-	cm = Conman()
-	cm.start()
-	while True:
-		if cm.isAlive():
-			time.sleep(0.5)
-		else:
-			break
-			#cm = Conman()
-			#cm.start()
-except:
-	info = sys.exc_info()
-	traceback.print_tb(info[2])
-	print info[1]
+if __name__ == '__main__':
+	path = os.path.expanduser('~/.dwite')
+	os.environ['DWITE_CFG_DIR'] = path
+	if not os.path.isdir(path):
+		raise Exception('No configuration directory "%s"' % path)
+	
+	try:
+		(opts, args) = getopt.gnu_getopt(sys.argv, '', ['scan'])
+	except:
+		syntax()
 
-cm.stop()
+	scan = False
+	for (opt, arg) in opts:
+		if opt == '--scan':
+			scan = True
 
-print('Goodbye')
+	try:
+		cm = Conman()
+		if scan:
+			cm.queue.put(Scan())
+		cm.start()
+		while True:
+			if cm.is_alive():
+				time.sleep(0.5)
+			else:
+				break
+	except KeyboardInterrupt:
+		pass
+	except:
+		traceback.print_exc()
+
+	cm.stop(hard=True)
+
+	while threading.active_count() > 1:
+		print [t.name for t in threading.enumerate()]
+		time.sleep(1)
+
+	print('Goodbye')
 

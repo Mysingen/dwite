@@ -5,14 +5,16 @@
 # by the Free Software Foundation.
 
 import os
+
 from datetime import datetime, timedelta
 
 # PIL dependencies
 import Image, ImageDraw, ImageFont
 
-class Render:
+class Render(object):
 	canvas  = None
 	timeout = datetime.now()
+	mode    = None
 
 	# Render objects keep track of their internal frame rate by setting a
 	# timeout (in absolute wall clock time) at which the next frame should
@@ -31,10 +33,14 @@ class Render:
 		now   = datetime.now()
 		delta = timedelta(milliseconds=msecs)
 		test  = now + delta
-		if self.timeout < test:
+		if not self.timeout or self.timeout < test:
 			self.timeout = test
 
-class Window:
+	# subclasses that have different display should look at self.mode
+	def	next_mode(self):
+		pass
+
+class Window(object):
 	size    = 0
 	slack   = 0 # the space to keep unpainted when the window contents wrap
 	start   = 0
@@ -70,33 +76,41 @@ class TextRender(Render):
 	window   = None
 	timeout  = None
 	position = (0, 0)
+	_scroll  = True
 
-	def __new__(cls, font_path, size, position):
+	@property
+	def scroll(self):
+		return self._scroll
+
+	@scroll.setter
+	def scroll(self, value):
+		if value != self._scroll:
+			self.image = None
+		self._scroll = value
+
+	def __new__(cls, font_path, size, position, scroll=True):
 		global singleton
 		key = (font_path, size, position)
 		if key in singleton:
-			object = singleton[key]
+			obj = singleton[key]
 		else:
-			object = Render.__new__(cls)
-			TextRender.__init__(object, font_path, size, position)
-			singleton[key] = object
-		return object
+			obj = Render.__new__(cls)
+			TextRender.__init__(obj, font_path, size, position)
+			singleton[key] = obj
+		return obj
 
-	def __init__(self, font_path, size, position):
+	def __init__(self, font_path, size, position, scroll=True):
 		self.font     = ImageFont.truetype(font_path, size)
 		self.image    = None
 		self.window   = None
 		self.timeout  = None
 		self.position = position
+		self._scroll   = scroll
 
 	def curry(self, text):
-		if type(text) != unicode:
-			raise Exception(
-				'type(TextRender.text = %s) != unicode (%s)'
-				% (str(text), type(text))
-			)
-		if len(text) < 1:
-			raise Exception('len(TextRender.text = %s) < 1' % text)
+		assert type(text) == unicode
+#		if len(text) < 1:
+#			raise Exception('len(TextRender.text = %s) < 1' % text)
 		self.text  = text
 		self.image = None
 
@@ -116,7 +130,10 @@ class TextRender(Render):
 	def tick(self, canvas):
 		if not self.image: # never called this render's tick() before
 			self.image = Image.new('1', canvas.size, 0)
-			self.window = self.make_window(canvas.size)
+			if self._scroll:
+				self.window = self.make_window(canvas.size)
+			else:
+				self.window = None
 			self.draw([self.position])
 			canvas.paste(self.image)
 			#print('first')
@@ -127,7 +144,7 @@ class TextRender(Render):
 			return True
 
 		now = datetime.now()
-		if now < self.timeout:
+		if self.image and self.timeout and now < self.timeout:
 			#print('later')
 			canvas.paste(self.image)
 			return False
@@ -144,6 +161,25 @@ class TextRender(Render):
 		self.timeout = now + timedelta(milliseconds=100)
 		return True
 
+class RENDER_MODE:
+	LABEL  = 1
+	PRETTY = 2
+
+class ItemRender(TextRender):
+	mode = RENDER_MODE.LABEL
+
+	def curry(self, item):
+		if self.mode == RENDER_MODE.LABEL:
+			TextRender.curry(self, item.label)
+		if self.mode == RENDER_MODE.PRETTY:
+			TextRender.curry(self, item.get_pretty())
+
+	def next_mode(self):
+		if self.mode == RENDER_MODE.LABEL:
+			self.mode = RENDER_MODE.PRETTY
+		else:
+			self.mode = RENDER_MODE.LABEL
+
 class VolumeMeter(Render):
 	level    = 0 # integer 0-100
 	size     = (200, 30)
@@ -155,9 +191,9 @@ class VolumeMeter(Render):
 		if cls in singleton:
 			obj = singleton[cls]
 		else:
-			object = Render.__new__(cls)
+			obj = Render.__new__(cls)
 			singleton[cls] = obj
-		VolumeMeter.__init__(obj, level)
+		VolumeMeter.__init__(obj)
 		return obj
 	
 	def __init__(self):
@@ -198,15 +234,11 @@ class ProgressRender(Render):
 	position = (200, 0)
 	image    = None
 
-	def __new__(cls, progress=0):
-		global singleton
-		if cls in singleton:
-			obj = singleton[cls]
-		else:
-			obj = Render.__new__(cls)
-			singleton[cls] = obj
-		ProgressRender.__init__(obj, progress)
-		return obj
+	# __new__() should not be implemented to use singletons. If there is only
+	# one, then there is a race condition between seeking and playback. Regular
+	# playback progress updates will overwrite the progress indicated by the
+	# seeker. The visible effect is that the progress bar is not updated
+	# correctly while the user is pressing REW or FWD.
 
 	def __init__(self, progress=0.0):
 		self.progress = progress
@@ -261,20 +293,34 @@ class OverlayRender(Render):
 		return (t1 or t2)
 
 class NowPlayingRender(OverlayRender):
-	def __init__(self, label):
-		home = os.getenv('DWITE_HOME')
-		self.base = TextRender(
-			'%s/fonts/LiberationMono-Bold.ttf' % home, 35, (2, 0)
+	def __init__(self):
+		self.base = ItemRender(
+			'%s/fonts/LiberationMono-Bold.ttf' % os.getenv('DWITE_HOME'),
+			35,(2,0)
 		)
-		self.base.curry(label)
+		self.base.mode = RENDER_MODE.PRETTY
 		self.overlay = ProgressRender()
 
-	def curry(self, progress):
+	def curry(self, progress, item):
+		if item:
+			self.base.curry(item)
 		self.overlay.curry(progress)
+
+	def next_mode(self):
+		self.base.next_mode()
 
 class SearchRender(Render):
 	query = None
 	term  = None
+	
+	@property
+	def scroll(self):
+		return self.term.scroll
+	
+	@scroll.setter
+	def scroll(self, value):
+		assert type(value) == bool
+		self.term.scroll = value
 
 	def __init__(self):
 		home = os.getenv('DWITE_HOME')
@@ -282,7 +328,7 @@ class SearchRender(Render):
 			'%s/fonts/LiberationMono-Regular.ttf' % home, 10, (2, 0)
 		)
 		self.term = TextRender(
-			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10)
+			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10), True
 		)
 
 	# TODO: would be nice if ticking of self.query wasn't interrupted by

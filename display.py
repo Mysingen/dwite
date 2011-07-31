@@ -34,10 +34,10 @@ class TRANSITION:
 	BOUNCE_RIGHT = 'L'
 
 all_visualizers = [
+	VisuNone(),
 	VisuMeter(),
 	VisuMeter(0,159, 161,159),
-	VisuSpectrum(),
-	VisuNone()
+	VisuSpectrum()
 ]
 
 class Display:
@@ -45,17 +45,49 @@ class Display:
 	brightness  = BRIGHTNESS.FULL
 	canvas      = None
 	visualizers = iter(all_visualizers)
+	cur_visual  = None
 	
-	def __init__(self, size, wire):
+	def __init__(self, size, wire, brightness, visualizer):
+		assert brightness in [
+			BRIGHTNESS.OFF,
+			BRIGHTNESS.ONE,
+			BRIGHTNESS.TWO,
+			BRIGHTNESS.THREE,
+			BRIGHTNESS.FULL
+		]
 		self.wire   = wire
 		self.canvas = Canvas(size)
+		self.set_brightness(brightness)
+		self.cur_visual = all_visualizers[visualizer]
+		# set the iterator to the value that matches the visualizer parameter
+ 		while True:
+ 			try:
+ 				if self.cur_visual == self.visualizers.next():
+ 					break
+ 			except:
+ 				self.visualizers = iter(all_visualizers)
+			pass
 
-	def set_brightness(self, brightness):
+	@classmethod
+	def dump_defaults(cls):
+		return {
+			'brightness': BRIGHTNESS.FULL,
+			'visualizer': 0
+		}
+
+	def dump_settings(self):
+		return {
+			'brightness': self.brightness,
+			'visualizer': all_visualizers.index(self.cur_visual)
+		}
+
+	def set_brightness(self, brightness, remember=True):
 		if brightness < BRIGHTNESS.OFF or brightness > BRIGHTNESS.FULL:
 			raise Exception, 'Unknown brightness code %d' % brightness
-		self.brightness = brightness
+		if remember:
+			self.brightness = brightness
 		grfb = Grfb()
-		grfb.brightness = BRIGHTNESS.map[self.brightness]
+		grfb.brightness = BRIGHTNESS.map[brightness]
 		self.wire.send(grfb.serialize())
 	
 	def next_brightness(self):
@@ -68,9 +100,16 @@ class Display:
 		try:
 			visu = self.visualizers.next()
 			self.wire.send(visu.serialize())
+			self.cur_visual = visu
 		except:
 			self.visualizers = iter(all_visualizers)
 			self.next_visualizer()
+
+	def visualizer_on(self):
+		self.wire.send(self.cur_visual.serialize())
+
+	def visualizer_off(self):
+		self.wire.send(VisuNone().serialize())
 
 	def show(self, transition):
 		self.canvas.prepare_transmission()
@@ -78,3 +117,8 @@ class Display:
 		grfe.transition = transition
 		grfe.bitmap     = self.canvas.bitmap
 		self.wire.send(grfe.serialize())
+
+	def clear(self):
+		self.canvas.clear()
+		self.show(TRANSITION.NONE)
+

@@ -6,59 +6,61 @@
 
 import sys
 import traceback
-import Queue
 
-from threading import Thread
+from connection import Connection
+from protocol   import Hail, JsonMessage, JsonResult, Terms
 
-from protocol import Bark
-from watchdog import Watchdog
-
-class ContentManager(Thread):
-	alive       = True
+class CmConnection(Connection):
 	label       = None
-	wire        = None
 	stream_ip   = 0
 	stream_port = 0
-	in_queue    = None
-	out_queue   = None
-	watchdog    = None
+	registered  = False
 	
-	def __init__(self, label, wire, stream_ip, stream_port, in_queue,out_queue):
-		print('ContentManager __init__')
-		Thread.__init__(self, name=label)
-		self.label       = label
-		self.wire        = wire
-		self.stream_ip   = stream_ip
-		self.stream_port = stream_port
-		self.in_queue    = in_queue
-		self.out_queue   = out_queue
-		self.watchdog    = Watchdog(2000)
+	def __init__(self, wire, out_queue):
+		Connection.__init__(self, wire, out_queue)
 
-	def stop(self):
-		self.wire.stop()
-		self.alive = False
+	def on_start(self):
+		pass
+	
+	def on_stop(self):
+		from dwite import unregister_cm
+		if self.registered:
+			unregister_cm(self.label)
 
-	def run(self):
-		while self.alive:
+	def handle(self, msg):
+		from dwite import register_cm, get_dm, msg_reg
+
+		if type(msg) == Hail:
+			assert type(msg.label)   == unicode
+			assert type(msg.stream_ip)   == int
+			assert type(msg.stream_port) == int
+			self.label       = msg.label
+			self.stream_ip   = msg.stream_ip
+			self.stream_port = msg.stream_port
 			try:
-				msg = self.in_queue.get(block=True, timeout=0.5)
-				self.watchdog.reset()
-			except Queue.Empty:
-				if self.watchdog.wakeup():
-					self.wire.send(Bark().serialize())
-				elif self.watchdog.expired():
-					self.stop()
-				continue
+				register_cm(self, self.label)
+				self.registered = True
+			except Exception, e:
+				msg.respond(1, unicode(e), 0, False, False)
+				self.stop()
+				return
+			msg.respond(0, u'EOK', 0, False, True)
+			return
+
+		if type(msg) == JsonResult:
+			#print 'cm JsonResult %d' % msg.guid
+			try:
+				msg_reg.run_handler(msg)
 			except:
-				# unknown exception. print stack trace.
-				info = sys.exc_info()
-				traceback.print_tb(info[2])
-				print info[1]
+				traceback.print_exc()
+				print 'throwing away %s' % msg
+			return
 
-			if isinstance(msg, Bark):
-				continue
+		if type(msg) == Terms:
+			msg.sender = self.label
+			for dm in get_dm(None):
+				dm.in_queue.put(msg)
+			return
 
-			self.out_queue.put(msg)
-				
-		print('%s is dead' % self.label)
+		raise Exception('Unhandled message: %s' % msg)
 

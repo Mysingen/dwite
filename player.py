@@ -13,20 +13,36 @@ import time
 from protocol import(Strm, StrmStartMpeg, StrmStartFlac, StrmStop, StrmFlush,
                      StrmSkip, Stat, StrmPause, StrmUnpause)
 from render   import NowPlayingRender
-from menu     import CmAudio
+from menu     import CmAudio, Link
 
-class Player:
-	guid        = None # used when telling the device how to present itself
-	wire        = None
-	cm          = None
-	playing     = None # NowPlaying instance
+class Player(object):
+	guid    = None # used when telling the device how to present itself
+	wire    = None
+	playing = None # NowPlaying instance
+	repeat  = False
+	shuffle = False
 
-	def __init__(self, wire, guid):
-		self.guid = guid
-		self.wire = wire
+	def __init__(self, wire, guid, repeat=False, shuffle=False):
+		assert type(repeat) == bool
+		assert type(shuffle) == bool
+		self.guid    = guid
+		self.wire    = wire
+		self.repeat  = repeat
+		self.shuffle = shuffle
 		self.stop()
-	
-	# playback manipulations
+
+	def dump_settings(self):
+		return { 'repeat': self.repeat, 'shuffle': self.shuffle }
+
+	@classmethod
+	def dump_defaults(cls):
+		return { 'repeat': False, 'shuffle': False }
+
+	def toggle_repeat(self):
+		self.repeat = not self.repeat
+
+	def toggle_shuffle(self):
+		self.shuffle = not self.shuffle
 
 	def get_in_threshold(self, size):
 		if size < 10*1024:
@@ -36,12 +52,23 @@ class Player:
 		return 10 # I'm just guessing
 	
 	def play(self, item, seek=0):
+		link = None
+		if isinstance(item, Link):
+			link = item
+			item = item.target
 		if not isinstance(item, CmAudio):
+			return False
+		if not item.cm:
+			return False
+		if seek > item.duration:
 			return False
 
 		# always send stop command before initiating a new stream.
 		self.stop()
-		self.playing = NowPlaying(item, item.duration, seek)
+		if link:
+			self.playing = NowPlaying(link, item.duration, seek)
+		else:
+			self.playing = NowPlaying(item, item.duration, seek)
 		if item.format == 'mp3':
 			Cls = StrmStartMpeg
 		elif item.format == 'flac':
@@ -53,18 +80,7 @@ class Player:
 		return True
 
 	def jump(self, position):
-		item = self.playing.item
-		self.wire.send(StrmStop().serialize())
-		if item.format == 'mp3':
-			Cls = StrmStartMpeg
-		elif item.format == 'flac':
-			Cls = StrmStartFlac
-		strm = Cls(item.cm.stream_ip, item.cm.stream_port, item.guid, position)
-		strm.in_threshold = self.get_in_threshold(item.size)
-		time.sleep(0.1) # necessary to make sure the device doesn't get confused
-		self.wire.send(strm.serialize())
-		self.playing.start    = position
-		self.playing.progress = 0
+		self.play(self.playing.item, position)
 
 	def duration(self):
 		return self.playing.duration
@@ -96,6 +112,7 @@ class Player:
 				self.wire.send(StrmUnpause().serialize())
 		except Exception, e:
 			print e
+			traceback.print_stack()
 
 #	def skip(self, msecs):
 #		if self.playing.state != NowPlaying.PLAYING:
@@ -112,26 +129,41 @@ class Player:
 			return None
 		else:
 			try:
-				return self.playing.item.next()
+				return self.playing.item.next(self.repeat, self.shuffle)
 			except:
 				return None
 
 	def get_progress(self):
 		return self.playing.position()
 
-	def finish(self):
-		self.playing = None
-	
-	def ticker(self):
+	def get_playing(self):
+		if not self.playing:
+			return None
+		return self.playing.item
+
+	def ticker(self, curry=False):
 		if self.playing:
-			return self.playing.curry()
+			return self.playing.curry(curry)
 		else:
 			return (None, None)
+
+	def next_render_mode(self):
+		if not self.playing:
+			return
+		self.playing.render.next_mode()
+
+	def handle_resp(self, resp):
+		if resp.http_header.startswith('HTTP/1.0 200 OK'):
+			return
+		if resp.http_header.startswith('HTTP/1.0 404 Not Found'):
+			self.stop()
+			return
+		print('INTERNAL ERROR: Unknown HTTP response: %s' % resp.http_header)
 
 	def handle_stat(self, stat):
 		if not isinstance(stat, Stat):
 			raise Exception('Invalid Player.handle_stat(stat): %s' % str(stat))
-		print(stat.log(level=1))
+		#print(stat.log(level=1))
 		if stat.event == 'STMt':
 			# SBS sources calls this the "timer" event. it seems to mean that
 			# the device has a periodic timeout going, because the STMt is sent
@@ -140,19 +172,19 @@ class Player:
 			next = self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
 			if next:
 				self.stop()
-				print 'STMt next = %s' % str(next)
+				#print 'STMt next = %s' % unicode(next)
 			return next
 		if stat.event == 'STMo':
 			# find next item to play, if any
 			try:
-				next = self.playing.item.next()
-				print 'STMo next = %s' % str(next)
+				next = self.playing.item.next(self.repeat, self.shuffle)
+				#print 'STMo next = %s' % unicode(next)
 			except:
 				next = None
-				print 'STMo next = None'
+				#print 'STMo next = None'
 			# finish the currently playing track
 			self.set_progress(stat.msecs, stat.in_fill, stat.out_fill)
-			self.finish()
+			self.stop()
 			return next
 		if stat.event == '\0\0\0\0':
 			# undocumented but always received right after the device connects
@@ -170,32 +202,32 @@ class Player:
 			# received whether the device was previously connected to a streamer
 			# or not. it's also not about flushed buffers as those are typically
 			# reported as unaffected.
-			print('Device closed the stream connection')
+			#print('Device closed the stream connection')
 			return None
 		if stat.event == 'STMc':
 			# SBS sources say this means "connected", but to what? probably the
 			# streamer even though it is received before ACK of strm command.
-			print('Device connected to streamer')
+			#print('Device connected to streamer')
 			return None
 		if stat.event == 'STMe':
 			# connection established with streamer. i.e. more than just an open
 			# socket.
-			print('Device established connection to streamer')
+			#print('Device established connection to streamer')
 			return None
 		if stat.event == 'STMh':
 			# "end of headers", but which ones? probably the header sent by the
 			# streamer in response to HTTP GET.
-			print('Device finished reading headers')
+			#print('Device finished reading headers')
 			return None
 		if stat.event == 'STMs':
-			print('Device started playing')
+			#print('Device started playing')
 			self.playing.enter_state(NowPlaying.PLAYING)
 			return None
 		if stat.event == 'STMp':
-			print('Device paused playback')
+			#print('Device paused playback')
 			return None
 		if stat.event == 'STMr':
-			print('Device resumed playback')
+			#print('Device resumed playback')
 			return None
 
 		# simple ACKs of commands sent to the device. ignore:
@@ -207,7 +239,7 @@ class Player:
 		print str(stat)
 		return None		
 	
-class NowPlaying:
+class NowPlaying(object):
 	# state definitions
 	BUFFERING = 0 # forced pause to give a device's buffers time to fill up
 	PLAYING   = 1
@@ -224,7 +256,8 @@ class NowPlaying:
 		self.item     = item
 		self.duration = duration
 		self.start    = start
-		self.render   = NowPlayingRender(item.label)
+		self.render = NowPlayingRender()
+		self.curry(True)
 
 	def	enter_state(self, state):
 		if state == self.state:
@@ -256,7 +289,15 @@ class NowPlaying:
 	def position(self):
 		return self.start + self.progress
 
-	def curry(self):
-		self.render.curry(self.position() / float(self.duration))
+	def curry(self, curry):
+		if type(self.item) == Link:
+			item = self.item.target
+		else:
+			item = self.item
+		if curry:
+			self.render.curry(self.position() / float(self.duration), item)
+		else:
+			# always curry the progress bar even if it hasn't been asked for.
+			self.render.curry(self.position() / float(self.duration), None)
 		return (self.item.guid, self.render)
 

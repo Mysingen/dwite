@@ -9,16 +9,15 @@ import os
 import os.path
 import time
 import traceback
+import random
 
 from Queue     import Queue, Empty
 from threading import Thread
 
 from wire       import JsonWire, Connected
-from backend_fs import FileSystem
+from backend_fs import FileSystem, Scan
 from streamer   import Streamer, Accepting
-from watchdog   import Watchdog
-
-import protocol
+from protocol   import JsonResult, Hail, Ls, GetItem
 
 STARTING = 1
 RUNNING  = 2
@@ -27,12 +26,14 @@ STOPPED  = 4
 
 class Conman(Thread):
 	label     = None
-	state     = PAUSED
+	state     = STARTING
 	backend   = None
 	streamer  = None
 	jsonwire  = None
 	queue     = None
-	watchdog  = None
+	handlers  = {}
+	connected = False
+	accepting = False
 
 	def __init__(self):
 		Thread.__init__(self, target=Conman.run, name='Conman')
@@ -43,31 +44,30 @@ class Conman(Thread):
 		self.backend.start()
 		self.streamer.start()
 		self.jsonwire.start()
-		self.state    = RUNNING
 
-	def stop(self):
+	def get_handler(self, msg):
+		if msg.guid in self.handlers:
+			return self.handlers[msg.guid]
+		return None
+
+	def stop(self, hard=False):
 		self.streamer.stop()
-		self.jsonwire.stop()
+		self.jsonwire.stop(hard)
 		self.backend.stop()
 		self.state = STOPPED
 
-	def run(self):
-		# wait for other subsystems to come up before going on
-		todo = 2
-		while todo > 0:
-			msg = self.queue.get(block=True)
-			if isinstance(msg, Connected):
-				todo -= 1
-			if isinstance(msg, Accepting):
-				streamer_port = msg.port
-				todo -= 1
-		self.watchdog = Watchdog(5000)
-
-		# ready to hail the DM with all necessary info about conman subsystems
-		print('Conman hails')
-		hail = protocol.Hail(self.backend.name, 0, streamer_port)
+	def send_hail(self):
+		def handle_hail(self, msg, orig_msg, user):
+			assert type(msg) == JsonResult
+			if msg.errno:
+				print msg.errstr
+				self.stop()
+		guid = random.randint(1, 1000000)
+		hail = Hail(guid, self.backend.name, 0, self.streamer.port)
+		self.handlers[guid] = (hail, handle_hail, None)
 		self.jsonwire.send(hail.serialize())
 
+	def run(self):
 		while self.state != STOPPED:
 
 			if self.state == PAUSED:
@@ -77,30 +77,36 @@ class Conman(Thread):
 			msg = None
 			try:
 				msg = self.queue.get(block=True, timeout=0.5)
-				self.watchdog.reset()
 			except Empty:
-				if self.watchdog.wakeup():
-					self.jsonwire.send(protocol.Bark().serialize())
-				elif self.watchdog.expired():
-					print 'expired'
-					self.stop()
+				if (not self.jsonwire.is_alive()) and self.state == RUNNING:
+					self.state = STARTING
+					self.connected = False
+					self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
+					self.jsonwire.start()
 				continue
 			except Exception, e:
 				print 'VERY BAD!'
-				print str(e)
+				traceback.print_exc()
 
-			if isinstance(msg, protocol.Ls):
-				print 'Ls'
-				self.backend.in_queue.put(msg)
-				continue
-			
-			if isinstance(msg, protocol.Listing):
-				print 'Listing()'
-				self.jsonwire.send(msg.serialize())
-				continue
-			
-			if isinstance(msg, protocol.Bark):
+			if type(msg) in [Accepting, Connected]:
+				self.connected |= (type(msg) == Connected)
+				self.accepting |= (type(msg) == Accepting)
+				if self.connected and self.accepting and self.state == STARTING:
+					# ready to hail the DM with all necessary info about conman
+					# subsystems
+					self.send_hail()
+					self.state = RUNNING
 				continue
 
-		print('Conman is dead')
+			if isinstance(msg, JsonResult):
+				if msg.guid in self.handlers:
+					(orig_msg, handler, user) = self.get_handler(msg)
+					handler(self, msg, orig_msg, user)
+				else:
+					print msg
+				continue
+
+			self.backend.in_queue.put(msg)
+
+		#print('Conman is dead')
 
