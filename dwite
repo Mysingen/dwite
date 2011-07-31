@@ -9,6 +9,14 @@
 import sys
 import os
 import os.path
+
+if sys.version_info < (2,6):
+	print("Python 2.6 or higher is required")
+	sys.exit(1)
+if sys.version_info >= (3,0):
+	print("Python 3 not supported yet")
+	sys.exit(1)
+
 import dwite
 
 os.environ['DWITE_HOME']    = os.path.dirname(os.path.realpath(sys.argv[0]))

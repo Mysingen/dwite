@@ -8,6 +8,13 @@
 
 import sys
 
+if sys.version_info < (2,6):
+	print("Python 2.6 or higher is required")
+	sys.exit(1)
+if sys.version_info >= (3,0):
+	print("Python 3 not supported yet")
+	sys.exit(1)
+
 from cli import *
 
 if __name__ == '__main__':
