@@ -45,7 +45,7 @@ def make_terms(*strings):
 	for s in strings:
 		if not s:
 			continue
-		tmp = re.split('[^\w]', s.lower(), flags=re.UNICODE)
+		tmp = re.compile('[^\w]', re.UNICODE).split(s.lower())
 		terms |= set([t for t in tmp if len(t) > 2 and not is_int(t)])
 	return terms
 
@@ -338,13 +338,13 @@ class FileSystem(Backend):
 				if format in ['mp3', 'flac']:
 					title = None
 					if 'title' in audio.keys():
-						title = unicode(audio['title'][0])
+						title = audio['title'][0]
 					artist = None
 					if 'artist' in audio.keys():
-						artist = unicode(audio['artist'][0])
+						artist = audio['artist'][0]
 					album = None
 					if 'album' in audio.keys():
-						album = unicode(audio['album'][0])
+						album = audio['album'][0]
 					for t in make_terms(title, artist, album, l):
 						self._set_index(t, child_guid)
 					continue
@@ -362,3 +362,4 @@ if __name__ == '__main__':
 	terms = make_terms(u'hellå Björk')
 	assert u'hellå' in terms
 	assert u'björk' in terms
+
