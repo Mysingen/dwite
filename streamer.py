@@ -13,8 +13,10 @@ import os
 import flac.decoder
 import traceback
 
-# mutagen dependency
 import mutagen
+if not (hasattr(mutagen, 'version') and mutagen.version >= (1,19)):
+	print('Dwite requires at least version 1.19 of Mutagen')
+	sys.exit(1)
 
 from threading import Thread
 

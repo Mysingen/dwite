@@ -1,17 +1,20 @@
 ﻿# coding=utf-8
 
+import sys
 import os
-import mutagen
 import json
 import re
 import traceback
 import sqlite3
 
-from magic import Magic
+import mutagen
+if not (hasattr(mutagen, 'version') and mutagen.version >= (1,19)):
+	print('Dwite requires at least version 1.19 of Mutagen')
+	sys.exit(1)
 
+from magic    import Magic
 from protocol import Ls, GetItem, Search, GetTerms
-
-from backend import Backend
+from backend  import Backend
 
 # private message class:
 class Scan(object):
