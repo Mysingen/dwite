@@ -67,12 +67,10 @@ def write_callback(decoder, frame, buf, user):
 	return FlacDecoder.WRITE_STATUS_CONTINUE
 
 def metadata_callback(decoder, metadata, user):
-	print 'metadata_callback()'
+	pass
 
 def error_callback(decoder, status, user):
 	print 'error_callback()'
-
-
 
 class FlacDecoder(object):
 	SEARCH_FOR_METADATA   = 0x0
@@ -87,10 +85,16 @@ class FlacDecoder(object):
 	def __init__(self, path):
 		self.decoder = prototype.new()
 
-		cb1 = write_callback_type(write_callback)
-		cb3 = error_callback_type(error_callback)
+		# IMPORTANT: the callbacks must be saved somewhere to prevent the
+		# garbage collector from smoking them (which leads to segfaults if
+		# the calls are ever made)
+		self.cb1 = write_callback_type(write_callback)
+		self.cb2 = metadata_callback_type(metadata_callback)
+		self.cb3 = error_callback_type(error_callback)
 
-		state = prototype.init_file(self.decoder, path, cb1, None, cb3, None)
+		state = prototype.init_file(
+			self.decoder, path, self.cb1, self.cb2, self.cb3, None
+		)
 		if state != FlacDecoder.SEARCH_FOR_METADATA:
 			raise Exception('decoder_init_file() failed')
 
@@ -110,4 +114,6 @@ class FlacDecoder(object):
 		position = ctypes.c_int()
 		prototype.get_position(self.decoder, ctypes.byref(position))
 		return position.value
+
+
 
