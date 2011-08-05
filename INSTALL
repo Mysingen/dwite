@@ -15,8 +15,8 @@ Dependencies
 * pyflac: Commit f23598ce23f9e7b7b9ae5ef140ae4ee3e7b1d685 or newer is required.
 * SQLite: Tested with 3.7.3-1.
 
-Installation on Debian GNU/Linux and Ubuntu 10.04 TLS
------------------------------------------------------
+Installation on Debian GNU/Linux
+--------------------------------
 * Become +root+ or some other user with privileges to run +apt-get+.
 * Run +apt-get install python python-imaging python-mutagen libmagic1
   libflac8 sqlite3+
