@@ -19,13 +19,7 @@ Installation on Debian GNU/Linux and Ubuntu 10.04 TLS
 -----------------------------------------------------
 * Become +root+ or some other user with privileges to run +apt-get+.
 * Run +apt-get install python python-imaging python-mutagen libmagic1
-  libflac8 sqlite3 swig libflac-dev+
-* Download pyflac from +github.com/dsully/pyflac+, unpack it, enter it from
-  a terminal and run:
-----
-make
-make install
-----
+  libflac8 sqlite3+
 Now you should be able to run Dwite and the Conman:
 ----
 cd <the Dwite sources directory>
@@ -106,14 +100,6 @@ anything, but if you do:
 * Go to +http://flac.sourceforge.net/download.html+, download one of the
   installers for OS X and run it. Hopefully it will work. Otherwise try another
   one.
-
-PyFlac
-~~~~~~
-* Go to https://github.com/dsully/pyflac and download the latest version.
-* Unpack the download, enter the resulting directory from a Terminal and run:
-----
-sudo python 2.7 setup.py install
-----
 
 SQLite3
 ~~~~~~~

@@ -10,7 +10,6 @@ import errno
 import re
 import urllib
 import os
-import flac.decoder
 import traceback
 
 import mutagen
@@ -19,6 +18,8 @@ if not (hasattr(mutagen, 'version') and mutagen.version >= (1,19)):
 	sys.exit(1)
 
 from threading import Thread
+
+from flac import FlacDecoder
 
 STOPPED  = 0
 STARTING = 1
@@ -264,15 +265,12 @@ class Decoder:
 				def write_cb(decoder, buff, size):
 					pass
 				self.frames = []
-				dec = flac.decoder.StreamDecoder()
 				# path parameter must not be unicode:
-				dec.init(
-					self.path.encode('utf-8'), write_cb, metadata_cb, error_cb
-				)
-				dec.process_until_end_of_metadata()
-				while dec.get_state() != 4:
-					self.frames.append(dec.get_decode_position())
-					dec.skip_single_frame()
+				dec = FlacDecoder(self.path.encode('utf-8'))
+				dec.skip_metadata()
+				while dec.get_state() != FlacDecoder.END_OF_STREAM:
+					self.frames.append(dec.get_position())
+					dec.skip_frame()
 			try:
 				make_frames()
 			except Exception, e:
