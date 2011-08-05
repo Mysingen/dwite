@@ -104,14 +104,10 @@ def from_buffer(buffer, mime=False):
 
 
 
-
-libmagic = None
-# Let's try to find magic or magic1
-dll = ctypes.util.find_library('magic') or ctypes.util.find_library('magic1')
-
-# This is necessary because find_library returns None if it doesn't find the library
-if dll:
-    libmagic = ctypes.CDLL(dll)
+# load the DLL included with Dwite instead of any system installation as we
+# have no control on OS X (through dependence tracking packages) what is or
+# isn't installed on the system:
+libmagic = ctypes.CDLL(os.path.join('.', 'lib', 'libmagic.dylib'))
 
 if not libmagic or not libmagic._name:
     import sys
