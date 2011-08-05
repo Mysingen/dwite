@@ -1,13 +1,11 @@
+import os.path
 import ctypes
 import ctypes.util
 
 # load the library
-libflac = None
-path = ctypes.util.find_library('FLAC')
-if path:
-    libflac = ctypes.CDLL(path)
+libflac = ctypes.CDLL(os.path.join('.', 'lib', 'libFLAC.dylib'))
 if not libflac or not libflac._name:
-    raise ImportError('failed to find libFLAC. Check your installation')
+	raise ImportError('failed to find libFLAC. Check your installation')
 
 # define prototypes for all library functions we need
 class prototype(object):
