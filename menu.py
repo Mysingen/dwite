@@ -490,6 +490,7 @@ class Searcher(Tree):
 		self.candidates = [
 			k for k in self.t9dict.keys() if k.startswith(self.term)
 		]
+		self.candidates.sort()
 
 		tmp_1 = []
 		for c in self.candidates:

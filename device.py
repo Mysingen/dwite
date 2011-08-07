@@ -448,7 +448,9 @@ class Classic(Device):
 				if isinstance(msg, AddCM):
 					self.menu.add_cm(msg.cm)
 
+					# warning: callback run by CM thread:
 					def handle_get_terms(msg_reg, response, orig_msg, self):
+						# TODO: race condition between DM and CM:
 						self.menu.searcher.add_terms(response.result)
 
 					get_terms = GetTerms(msg_reg.make_guid())
