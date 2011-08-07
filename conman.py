@@ -10,6 +10,8 @@ import os.path
 import time
 import traceback
 import random
+import getopt
+import threading
 
 from Queue     import Queue, Empty
 from threading import Thread
@@ -109,4 +111,44 @@ class Conman(Thread):
 			self.backend.in_queue.put(msg)
 
 		#print('Conman is dead')
+
+def syntax():
+	print('Syntax: conman [--scan]')
+	sys.exit(1)
+
+def main(argv):
+	path = os.environ['DWITE_CFG_DIR']
+	if not os.path.isdir(path):
+		raise Exception('No configuration directory "%s"' % path)
+
+	try:
+		(opts, args) = getopt.gnu_getopt(sys.argv, '', ['scan'])
+	except:
+		syntax()
+
+	scan = False
+	for (opt, arg) in opts:
+		if opt == '--scan':
+			scan = True
+
+	try:
+		cm = Conman()
+		if scan:
+			cm.queue.put(Scan())
+		cm.start()
+		while True:
+			if cm.is_alive():
+				time.sleep(0.5)
+			else:
+				break
+	except KeyboardInterrupt:
+		pass
+	except:
+		traceback.print_exc()
+
+	cm.stop(hard=True)
+
+	while threading.active_count() > 1:
+		print [t.name for t in threading.enumerate()]
+		time.sleep(1)
 

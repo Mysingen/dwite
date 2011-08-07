@@ -359,7 +359,6 @@ class StrmStart(Strm):
 	def __init__(self, ip, port, resource, seek=0, background=False):
 		assert type(ip)   == int
 		assert type(port) == int
-		print('%d %d %s %d' % (ip, port, resource, seek))
 		self.server_ip     = ip
 		self.server_port   = port
 		self.resource      = resource
