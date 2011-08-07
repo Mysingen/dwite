@@ -48,7 +48,7 @@ def make_terms(*strings):
 	for s in strings:
 		if not s:
 			continue
-		tmp = re.compile('[^\w]', re.UNICODE).split(s.lower())
+		tmp = re.compile('[^\w]|_', re.UNICODE).split(s.lower())
 		terms |= set([t for t in tmp if len(t) > 2 and not is_int(t)])
 	return terms
 
