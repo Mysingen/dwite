@@ -4,4 +4,5 @@ blaha.png
 *.jpg
 *~
 *.html
-
+build/*
+dist/*

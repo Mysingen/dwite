@@ -148,9 +148,10 @@ class FileSystem(Backend):
 	
 	def _classify_file(self, path, verbose=False):
 		assert type(path) in [str, unicode]
-		supported = ['MPEG ADTS', 'FLAC', 'MPEG Layer 3', 'Audio', '^data$']
-		ignored = ['ASCII', 'JPEG', 'PNG', 'text', '^data$', 'AppleDouble']
-		magic = Magic()
+		supported  = ['MPEG ADTS', 'FLAC', 'MPEG Layer 3', 'Audio', '^data$']
+		ignored    = ['ASCII', 'JPEG', 'PNG', 'text', '^data$', 'AppleDouble']
+		magic_file = os.path.join(os.environ['DWITE_HOME'], 'lib', 'magic.mgc')
+		magic      = Magic(magic_file=magic_file)
 
 		try:
 			if type(path) == unicode:

@@ -1,9 +1,11 @@
-import os.path
+import os
 import ctypes
 import ctypes.util
 
 # load the library
-libflac = ctypes.CDLL(os.path.join('.', 'lib', 'libFLAC.dylib'))
+libflac = ctypes.CDLL(os.path.join(
+	os.environ['DWITE_HOME'], 'lib', 'libFLAC.dylib'
+))
 if not libflac or not libflac._name:
 	raise ImportError('failed to find libFLAC. Check your installation')
 

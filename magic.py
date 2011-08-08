@@ -17,7 +17,7 @@ Usage:
 
 """
 
-import os.path
+import os
 import ctypes
 import ctypes.util
 
@@ -107,18 +107,9 @@ def from_buffer(buffer, mime=False):
 # load the DLL included with Dwite instead of any system installation as we
 # have no control on OS X (through dependence tracking packages) what is or
 # isn't installed on the system:
-libmagic = ctypes.CDLL(os.path.join('.', 'lib', 'libmagic.dylib'))
-
-if not libmagic or not libmagic._name:
-    import sys
-    platform_to_lib = {'darwin': '/opt/local/lib/libmagic.dylib',
-                       'win32': 'magic1.dll'}
-    if sys.platform in platform_to_lib:
-        try:
-            libmagic = ctypes.CDLL(platform_to_lib[sys.platform])
-        except OSError:
-            pass
-
+libmagic = ctypes.CDLL(os.path.join(
+	os.environ['DWITE_HOME'], 'lib', 'libmagic.dylib'
+))
 if not libmagic or not libmagic._name:
     # It is better to raise an ImportError since we are importing magic module
     raise ImportError('failed to find libmagic.  Check your installation')
