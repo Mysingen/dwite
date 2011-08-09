@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 # PIL dependencies
 import Image, ImageDraw, ImageFont
 
+import fonts
+
 class Render(object):
 	canvas  = None
 	timeout = datetime.now()
@@ -294,10 +296,7 @@ class OverlayRender(Render):
 
 class NowPlayingRender(OverlayRender):
 	def __init__(self):
-		self.base = ItemRender(
-			'%s/fonts/LiberationMono-Bold.ttf' % os.getenv('DWITE_HOME'),
-			35,(2,0)
-		)
+		self.base = ItemRender(fonts.get_path('LiberationMono-Bold'), 35, (2,0))
 		self.base.mode = RENDER_MODE.PRETTY
 		self.overlay = ProgressRender()
 
@@ -323,12 +322,11 @@ class SearchRender(Render):
 		self.term.scroll = value
 
 	def __init__(self):
-		home = os.getenv('DWITE_HOME')
 		self.query = TextRender(
-			'%s/fonts/LiberationMono-Regular.ttf' % home, 10, (2, 0)
+			fonts.get_path('LiberationMono-Regular'), 10, (2, 0)
 		)
 		self.term = TextRender(
-			'%s/fonts/LiberationMono-Regular.ttf' % home, 20, (2, 10), True
+			fonts.get_path('LiberationMono-Regular'), 20, (2, 10), True
 		)
 
 	# TODO: would be nice if ticking of self.query wasn't interrupted by
