@@ -10,9 +10,7 @@ Dependencies
 * PIL: Tested with 1.1.6 and 1.1.7.
 * Mutagen: Tested with 1.19 and 1.20.
 * libmagic: Tested with 5.04-5.
-* python-magic: Tested with 5.04-5+b1.
 * libFLAC: Tested with 1.2.1-4.
-* pyflac: Commit f23598ce23f9e7b7b9ae5ef140ae4ee3e7b1d685 or newer is required.
 * SQLite: Tested with 3.7.3-1.
 
 Installation on Debian GNU/Linux
@@ -74,20 +72,6 @@ Mutagen
 * Open a terminal and enter the directory +mutagen-x.xx+ (where x.xx is the
   version you downloaded).
 * Run the command
-----
-sudo python2.7 setup.py install
-----
-
-Python-Magic
-~~~~~~~~~~~~
-Python-Magic requires libmagic which is part of the +file+ utility.
-
-* Download +http://ftp.de.debian.org/debian/pool/main/f/file/
-  file_5.04.orig.tar.gz+, unpack it and follow the instructions in the
-  included +INSTALL+ file.
-* go to +http://pypi.python.org/pypi/python-magic/+ and download the latest
-  source release of Python-Magic.
-* Unpack the Python-Magic tarball, enter it from a Terminal and run:
 ----
 sudo python2.7 setup.py install
 ----
