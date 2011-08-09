@@ -4,10 +4,10 @@ Maintainer: Klas Lindberg <klas.lindberg@gmail.com>
 Section: contrib/sound
 Priority: optional
 Architecture: all
-Depends: python (>= 2.6), python-imaging (>= 1.1.6), python-mutagen (>= 1.19)
-         libmagic1 (>= 5.04), libflac8 (>= 1.2) sqlite3 (>= 3.7)
+Depends: python (>= 2.6), python-imaging (>= 1.1.6), python-mutagen (>= 1.19),
+         libmagic1 (>= 5.04), libflac8 (>= 1.2), sqlite3 (>= 3.7),
+         ttf-liberation (>= 1.07)
 Version: 110809-1
-Date: Tue, 09 Aug 2011 16:17:00 +1
 Description: A server for Logitech Squeezebox music streamers
  Currently only the Classic model, versions 2 and 3, are supported.
 

@@ -1,0 +1,35 @@
+#! /usr/bin/make -f
+
+VERSION := 110809-1
+
+default: binary-indep
+
+clean:
+	rm -rf usr
+
+binary: binary-arch binary-indep
+
+binary-arch:
+	# do nothing
+
+make_dirs:
+	mkdir -p debian/usr/bin
+	mkdir -p debian/usr/share/dwite
+	mkdir -p debian/usr/share/doc/dwite
+
+binary-indep: make_dirs
+	cp copyright debian/usr/share/doc/dwite
+	cp HACKING debian/usr/share/doc/dwite
+	cp README debian/usr/share/doc/dwite
+	cp changelog debian/usr/share/doc/dwite
+	cp *.py debian/usr/share/dwite
+	cp cli debian/usr/share/dwite
+	cp conman debian/usr/share/dwite
+	cp dwite debian/usr/share/dwite
+	cp launcher debian/usr/share/dwite
+	ln -s /usr/share/dwite/launcher debian/usr/bin/dwite-launcher
+	dpkg-deb -b debian dwite_${VERSION}.deb
+
+build:
+	# do nothing
+
