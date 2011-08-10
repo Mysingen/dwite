@@ -108,7 +108,7 @@ class Device(Thread):
 		raise Exception('Device classes must implement load_settings()')
 
 	def save_settings(self):
-		raise Exception('Device classes must implement load_settings()')
+		raise Exception('Device classes must implement save_settings()')
 
 	def load_playlist(self):
 		raise Exception('Device classes must implement load_playlist()')

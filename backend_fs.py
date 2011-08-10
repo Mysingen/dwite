@@ -2,7 +2,6 @@
 
 import sys
 import os
-import json
 import re
 import traceback
 import sqlite3
@@ -53,20 +52,26 @@ def make_terms(*strings):
 	return terms
 
 class FileSystem(Backend):
-	root_dir = u'/'
-	name     = u'File system'
+	root_dir = None
 	db_conn  = None
 	db_curs  = None
 
-	def __init__(self, out_queue):
-		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
-		if os.path.exists(path):
-			f             = open(path)
-			cfg           = json.load(f)
-			self.root_dir = cfg['backends']['file_system']['root_dir']
-			self.name     = cfg['backends']['file_system']['name']
-			f.close()
-		Backend.__init__(self, self.name, out_queue)
+	def __init__(self, name, out_queue, root_dir):
+		Backend.__init__(self, name, out_queue)
+		self.root_dir = root_dir
+
+	def dump_settings(self):
+		return {
+			'root_dir': self.root_dir,
+			'name'    : self.name
+		}
+	
+	@classmethod
+	def dump_defaults(self):
+		return {
+			'root_dir': os.environ['HOME'],
+			'name'    : u'CM ~%s' % os.environ['USER']
+		}
 
 	def on_start(self):
 		# load database of search indexes:
