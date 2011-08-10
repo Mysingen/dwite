@@ -6,3 +6,6 @@ blaha.png
 *.html
 build/*
 dist/*
+debian/usr
+*.deb
+
