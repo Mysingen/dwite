@@ -13,6 +13,8 @@ import sys
 import random
 import json
 
+import fonts
+
 from protocol import Search
 from render   import SearchRender, ItemRender
 from display  import TRANSITION
@@ -31,8 +33,9 @@ class Tree(object):
 		self.guid   = guid
 		self.label  = label
 		self.parent = parent
-		self.render = ItemRender('%s/fonts/LiberationSerif-Regular.ttf'
-		                         % os.getenv('DWITE_HOME'), 27, (2, 0))
+		self.render = ItemRender(
+			fonts.get_path('LiberationSerif-Regular'), 27, (2, 0)
+		)
 
 	def __str__(self):
 		return '%s %s' % (unicode(type(self)), json.dumps(self.dump(),indent=4))
@@ -216,8 +219,9 @@ class CmDir(CmFile):
 
 	def __init__(self, guid, label, parent, cm):
 		CmFile.__init__(self, guid, label, parent, cm)
-		self.render = ItemRender('%s/fonts/LiberationSerif-Regular.ttf'
-		                         % os.getenv('DWITE_HOME'), 23, (2, 0))
+		self.render = ItemRender(
+			fonts.get_path('LiberationSerif-Regular'), 23, (2, 0)
+		)
 	
 	def __iter__(self):
 		return self.children.__iter__()

@@ -4,4 +4,6 @@ blaha.png
 *.jpg
 *~
 *.html
+debian/usr
+*.deb
 
