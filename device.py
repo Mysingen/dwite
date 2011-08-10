@@ -459,8 +459,8 @@ class Classic(Device):
 					continue
 
 				elif isinstance(msg, RemCM):
-					self.menu.rem_cm(msg.cm)
-					continue
+					transition = self.menu.rem_cm(msg.cm)
+					render = self.select_render()
 
 				#### MESSAGES FROM OTHER PROGRAMS/SUBSYSTEMS ####
 

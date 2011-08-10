@@ -161,6 +161,11 @@ class CmFile(Tree):
 		from dwite import get_cm
 		return get_cm(self.cm_label)
 
+	def __eq__(self, other):
+		if not other:
+			return False
+		return Tree.__eq__(self, other) and self.cm_label == other.cm_label
+
 class CmAudio(CmFile):
 	size     = 0 # bytes
 	duration = 0 # milliseconds
@@ -222,7 +227,7 @@ class CmDir(CmFile):
 		self.render = ItemRender(
 			fonts.get_path('LiberationSerif-Regular'), 23, (2, 0)
 		)
-	
+
 	def __iter__(self):
 		return self.children.__iter__()
 
@@ -736,6 +741,14 @@ class Menu(object):
 		if removed.is_parent_of(focused):
 			self.cwd     = self.root
 			self.current = 0
+			self.focused().curry()
+			return TRANSITION.SCROLL_RIGHT
+		elif removed == focused:
+			self.current -= 1 # always safe because other kinds of root items
+			                  # come before CM toplevel dirs.
+			self.focused().curry()
+			return TRANSITION.SCROLL_DOWN
+		return TRANSITION.NONE
 
 	def right(self):
 		try:
