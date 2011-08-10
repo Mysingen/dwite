@@ -179,7 +179,13 @@ def main(argv):
 
 	cm.stop(hard=True)
 
-	while threading.active_count() > 1:
+	while True:
 		print [t.name for t in threading.enumerate()]
+		target = threading.active_count() - 1
+		for t in threading.enumerate():
+			if t.daemon:
+				target -= 1
+		if target == 0:
+			break
 		time.sleep(1)
 

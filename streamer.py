@@ -175,7 +175,7 @@ class Streamer(Thread):
 		print data.strip()
 		try:
 			m = re.search('GET (.+?)\?seek=(\d+) HTTP/1\.0', data, re.MULTILINE)
-			track = self.backend.get_item(m.group(1))
+			track = self.backend.get_track(m.group(1))
 			seek  = m.group(2)
 			if track.uri.startswith('file://'):
 				path = track.uri[7:]
