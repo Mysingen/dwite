@@ -107,7 +107,7 @@ class TextRender(Render):
 		self.window   = None
 		self.timeout  = None
 		self.position = position
-		self._scroll   = scroll
+		self._scroll  = scroll
 
 	def curry(self, text):
 		assert type(text) == unicode
@@ -142,7 +142,7 @@ class TextRender(Render):
 			if self.image:
 				self.timeout = datetime.now() + timedelta(milliseconds=1000)
 			else:
-				self.timeout = datetime.now() + timedelta(days=1)
+				self.timeout = datetime.now() + timedelta(years=1)
 			return True
 
 		now = datetime.now()
@@ -162,6 +162,48 @@ class TextRender(Render):
 		canvas.paste(self.image)
 		self.timeout = now + timedelta(milliseconds=100)
 		return True
+
+class HighlightTextRender(TextRender):
+	bold_render    = None
+	regular_render = None
+	bold_len       = 0
+	
+	def __new__(cls, font_name, size, position):
+		global singleton
+		key = (cls, font_name, size)
+		if key in singleton:
+			obj = singleton[key]
+		else:
+			obj = Render.__new__(cls)
+			HighlightTextRender.__init__(obj, font_name, size, position)
+			singleton[obj] = obj
+		return obj
+	
+	def __init__(self, font_name, size, position):
+		bold_path    = fonts.get_path('%s-Bold' % font_name)
+		regular_path = fonts.get_path('%s-Regular' % font_name)
+		TextRender.__init__(self, bold_path, size, position)
+		self.bold_font    = self.font
+		self.regular_font = ImageFont.truetype(regular_path, size)
+
+	def draw(self, positions):
+		draw = ImageDraw.Draw(self.image)
+		for p in positions:
+			# first draw the bold text. then check how much space that took
+			# on the X axis...
+			b_text = self.text[:self.bold_len].upper()
+			draw.text(p, b_text, font=self.bold_font, fill=1)
+			(w, h) = draw.textsize(b_text, font=self.bold_font)
+			# ...and add that to an infered starting position for regular text
+			p2 = (p[0]+w, p[1])
+			r_text = self.text[self.bold_len:]
+			draw.text(p2, r_text, font=self.regular_font, fill=1)
+	
+	def curry(self, text, bold_len=0):
+		assert type(text) == unicode
+		assert len(text)  >= bold_len
+		self.text     = text
+		self.bold_len = bold_len
 
 class RENDER_MODE:
 	LABEL  = 1
@@ -325,9 +367,7 @@ class SearchRender(Render):
 		self.query = TextRender(
 			fonts.get_path('LiberationMono-Regular'), 10, (2, 0)
 		)
-		self.term = TextRender(
-			fonts.get_path('LiberationMono-Regular'), 20, (2, 10), True
-		)
+		self.term = HighlightTextRender('LiberationMono', 20, (2, 10))
 
 	# TODO: would be nice if ticking of self.query wasn't interrupted by
 	# key presses to form the next term. only applicable when the query
@@ -337,7 +377,7 @@ class SearchRender(Render):
 		t2 = self.term.tick(canvas)
 		return (t1 or t2)
 
-	def curry(self, term_text, query_text):
+	def curry(self, term_text, query_text, term_len=0):
 		self.query.curry(query_text)
-		self.term.curry(term_text)
+		self.term.curry(term_text, term_len)
 

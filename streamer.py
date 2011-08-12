@@ -291,7 +291,7 @@ class Decoder:
 				self.frames = q.get()
 				if self.frames == None:
 					self.frames = []
-					p.terminate()
+				p.terminate()
 
 			try:
 				make_frames()

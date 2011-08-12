@@ -336,6 +336,7 @@ class Playlist(Tree):
 
 class SearcherPanel(Tree):
 	top_panel = None
+	bot_bold  = 0
 
 	@property
 	def bot_panel(self):
@@ -346,7 +347,6 @@ class SearcherPanel(Tree):
 		if label == self.label:
 			return
 		self.label = label
-		self.render.term.curry(label)
 
 	def __init__(self, bot_panel, top_panel, parent):
 		assert type(top_panel) == unicode
@@ -367,7 +367,7 @@ class SearcherPanel(Tree):
 		return 1
 
 	def curry(self):
-		self.render.curry(self.bot_panel, self.top_panel)
+		self.render.curry(self.bot_panel, self.top_panel, self.bot_bold)
 		return (self.guid, self.render)
 
 	def ticker(self):
@@ -434,10 +434,11 @@ class Searcher(Tree):
 		})
 		return r
 
-	def suggest(self, label):
+	def suggest(self, label, bold_len):
 		if type(self.children[0]) == SearcherSuggestions:
 			self.children[0].bot_panel = label
 			self.children[0].top_panel = self.get_query()
+			self.children[0].bot_bold  = bold_len
 		else:
 			self.children[0] = SearcherSuggestions(label, self.get_query(),self)
 	
@@ -445,6 +446,7 @@ class Searcher(Tree):
 		if type(self.children[0]) == SearcherNotice:
 			self.children[0].bot_panel = label
 			self.children[0].top_panel = self.get_query()
+			self.children[0].bot_bold  = 0
 		else:
 			self.children[0] = SearcherNotice(label, self.get_query(), self)
 
@@ -540,7 +542,7 @@ class Searcher(Tree):
 			else:
 				transition = TRANSITION.BOUNCE_LEFT
 			label         = u' '.join(self.suggestions[self.index:])
-			self.suggest(label)
+			self.suggest(label, len(self.term))
 			return transition
 		return TRANSITION.BOUNCE_LEFT
 
@@ -553,7 +555,7 @@ class Searcher(Tree):
 		elif self.suggestions and self.index > 0:
 			self.index   -= 1
 			label         = u' '.join(self.suggestions[self.index:])
-			self.suggest(label)
+			self.suggest(label, len(self.term))
 			return TRANSITION.NONE
 		# if a term is under construction, reduce it by one character:
 		elif self.term:
@@ -564,7 +566,7 @@ class Searcher(Tree):
 				label = u' '.join([s for s in self.suggestions])
 			else:
 				label = u''
-			self.suggest(label)
+			self.suggest(label, len(self.term))
 			return TRANSITION.NONE
 		# remove the last term in the query, if any:
 		elif self.query:
@@ -611,7 +613,7 @@ class Searcher(Tree):
 				self.notify(default_notice)
 				return TRANSITION.BOUNCE_LEFT
 			transition = TRANSITION.BOUNCE_LEFT
-		self.suggest(label)
+		self.suggest(label, len(self.term))
 		return transition
 
 	def play(self):
