@@ -164,9 +164,9 @@ class TextRender(Render):
 		return True
 
 class HighlightTextRender(TextRender):
-	bold_render    = None
-	regular_render = None
-	bold_len       = 0
+	regular_font = None
+	bold_font    = None
+	bold_len     = 0
 	
 	def __new__(cls, font_name, size, position):
 		global singleton
@@ -204,6 +204,7 @@ class HighlightTextRender(TextRender):
 		assert len(text)  >= bold_len
 		self.text     = text
 		self.bold_len = bold_len
+		self.image    = None
 
 class RENDER_MODE:
 	LABEL  = 1
