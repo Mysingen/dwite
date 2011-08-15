@@ -84,4 +84,7 @@ class App(Tkinter.Tk):
 
 if __name__ == '__main__':
 	app = App()
-	app.mainloop()
+	try:
+		app.mainloop()
+	except KeyboardInterrupt:
+		print 'Goodbye'
