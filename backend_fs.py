@@ -391,8 +391,7 @@ class FileSystem(Backend):
 					msg.respond(0, u'', i, False, [])
 			
 			t = Thread(
-				target=target, name='Search(%s)' % ','.join(terms),
-				args=(msg, self.root_dir, terms)
+				target=target, name='Search', args=(msg, self.root_dir, terms)
 			)
 			t.daemon = True
 			t.start()
