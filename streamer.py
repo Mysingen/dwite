@@ -17,9 +17,10 @@ if not (hasattr(mutagen, 'version') and mutagen.version >= (1,19)):
 	print('Dwite requires at least version 1.19 of Mutagen')
 	sys.exit(1)
 
-from threading import Thread
+from threading       import Thread
+from multiprocessing import Process, Queue
 
-from flac import FlacDecoder
+from flac import FlacDecoder, END_OF_STREAM
 
 STOPPED  = 0
 STARTING = 1
@@ -175,7 +176,7 @@ class Streamer(Thread):
 		print data.strip()
 		try:
 			m = re.search('GET (.+?)\?seek=(\d+) HTTP/1\.0', data, re.MULTILINE)
-			track = self.backend.get_item(m.group(1))
+			track = self.backend.get_track(m.group(1))
 			seek  = m.group(2)
 			if track.uri.startswith('file://'):
 				path = track.uri[7:]
@@ -258,19 +259,40 @@ class Decoder:
 			def make_frames():
 				if self.frames:
 					return
-				def metadata_cb(decoder, block):
-					pass
-				def error_cb(decoder, status):
-					raise Exception('error_cb()')
-				def write_cb(decoder, buff, size):
-					pass
-				self.frames = []
-				# path parameter must not be unicode:
-				dec = FlacDecoder(self.path.encode('utf-8'))
-				dec.skip_metadata()
-				while dec.get_state() != FlacDecoder.END_OF_STREAM:
-					self.frames.append(dec.get_position())
-					dec.skip_frame()
+
+				def target(path, queue):
+					# still don't trust ctypes. install signal handler for
+					# SIGSEGV so we can get out of this process somehow:
+					import signal
+					def handler(signum, frame):
+						print 'FlacDecoder caught SIGSEGV'
+						queue.put(None)
+					signal.signal(signal.SIGSEGV, handler)
+				
+					# path parameter must not be unicode:
+					dec = FlacDecoder(path.encode('utf-8'))
+					dec.skip_metadata()
+					frames = []
+					while dec.get_state() != END_OF_STREAM:
+						frames.append(dec.get_position())
+						dec.skip_frame()
+					queue.put(frames)
+
+				# astonishingly, the use of ctypes tends to cause SIGSEGV in
+				# libFLAC if there are enough other threads doing enough other
+				# work at the same time. there is no other thread using libFLAC
+				# and yet it will crash if there is enough other threaded
+				# activity going on. running the ctypes stuff from a process
+				# solves the problem:
+				q = Queue()
+				p = Process(target=target, args=(self.path, q))
+				p.daemon = True
+				p.start()
+				self.frames = q.get()
+				if self.frames == None:
+					self.frames = []
+				p.terminate()
+
 			try:
 				make_frames()
 			except Exception, e:

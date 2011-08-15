@@ -12,6 +12,7 @@ import traceback
 import random
 import getopt
 import threading
+import json
 
 from Queue     import Queue, Empty
 from threading import Thread
@@ -39,13 +40,43 @@ class Conman(Thread):
 
 	def __init__(self):
 		Thread.__init__(self, target=Conman.run, name='Conman')
+		settings = self.load_settings()
 		self.queue    = Queue(100)
-		self.backend  = FileSystem(self.queue)
+		self.backend  = FileSystem(out_queue=self.queue, **settings['backend'])
 		self.streamer = Streamer(self.backend, self.queue)
 		self.jsonwire = JsonWire('', 3484, self.queue, accept=False)
 		self.backend.start()
 		self.streamer.start()
 		self.jsonwire.start()
+
+	def load_settings(self):
+ 		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
+		settings = {}
+		if os.path.exists(path):
+			f = open(path)
+			try:
+				settings = json.load(f)
+			except:
+				print('ERROR: Could not load settings file %s' % path)
+				settings = {}
+			f.close()
+
+		if 'backend' not in settings:
+			settings['backend'] = FileSystem.dump_defaults()
+		return settings
+
+	def save_settings(self):
+		path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.json')
+		try:
+			f = open(path, 'w')
+			settings = json.load(f)
+			f.close()
+		except:
+			settings = {'backend':{}}
+		settings['backend'] = self.backend.dump_settings()
+		f = open(path, 'w')
+		json.dump(settings, f, indent=4)
+		f.close()
 
 	def get_handler(self, msg):
 		if msg.guid in self.handlers:
@@ -110,7 +141,7 @@ class Conman(Thread):
 
 			self.backend.in_queue.put(msg)
 
-		#print('Conman is dead')
+		self.save_settings()
 
 def syntax():
 	print('Syntax: conman [--scan]')
@@ -148,7 +179,13 @@ def main(argv):
 
 	cm.stop(hard=True)
 
-	while threading.active_count() > 1:
+	while True:
 		print [t.name for t in threading.enumerate()]
+		target = threading.active_count() - 1
+		for t in threading.enumerate():
+			if t.daemon:
+				target -= 1
+		if target == 0:
+			break
 		time.sleep(1)
 
