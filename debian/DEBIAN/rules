@@ -1,6 +1,6 @@
 #! /usr/bin/make -f
 
-VERSION := 110809-1
+VERSION := 110815-1
 
 default: binary-indep
 
@@ -27,7 +27,7 @@ binary-indep: make_dirs
 	cp conman debian/usr/share/dwite
 	cp dwite debian/usr/share/dwite
 	cp launcher debian/usr/share/dwite
-	ln -s /usr/share/dwite/launcher debian/usr/bin/dwite-launcher
+	ln -sf /usr/share/dwite/launcher debian/usr/bin/dwite-launcher
 	dpkg-deb -b debian dwite_${VERSION}.deb
 
 build:
