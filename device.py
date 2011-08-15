@@ -108,7 +108,7 @@ class Device(Thread):
 		raise Exception('Device classes must implement load_settings()')
 
 	def save_settings(self):
-		raise Exception('Device classes must implement load_settings()')
+		raise Exception('Device classes must implement save_settings()')
 
 	def load_playlist(self):
 		raise Exception('Device classes must implement load_playlist()')
@@ -333,7 +333,7 @@ class Classic(Device):
 			if self.seeker:
 				(guid3, render3) = self.seeker.ticker()
 				return OverlayRender(render2.base, render3)
-			# just return the NowPlaying render 
+			# just return the NowPlaying render
 			return render2
 		# if the user is seeking, but the menu isn't focused on the currently
 		# playing track, then get a render that is the combination of that menu
@@ -342,66 +342,87 @@ class Classic(Device):
 			(guid3, render3) = self.seeker.ticker()
 			return OverlayRender(render1, render3)
 		# just return the render for the currently focused menu item
+		sys.stdout.flush()
 		return render1
 
 	def default_ticking(self):
 		if self.power in [POWER.OFF, POWER.SLEEP]:
 			return
-		self.display.canvas.clear()
 		render = self.select_render()
 		if render.tick(self.display.canvas):
+			self.display.canvas.clear()
+			self.display.canvas.paste(render.image)
 			self.display.show(TRANSITION.NONE)
 
-	def default_result_handler(self, msg, orig_msg):
-		if msg.errno:
-			print msg.errstr
+	def find_ls_parent(self, item, orig_msg, response):
+		if response.result['item']['guid'] == '':
+			# parent is the menu root's CM widget. may be None if the CM is
+			# no longer registered (the user is browsing a "detached" menu)
+			return self.menu.get_item(item.cm.label)
+		elif item.parent.guid == u'<DUMMY>':
+			# parent it the dummy place-holder as parent, replace it
+			return make_item(item.cm.label, **response.result['item'])
+		return item.parent
+
+	def handle_ls_parent_of_playing(self, orig_msg, response):
+		playing = self.player.get_playing()
+		if not playing:
+			return False
+		if playing.guid != orig_msg.item:
+			return False
+		# note that we don't add playing to it's parent's children here.
+		# it's just to be able to find it again when more result chunks arrive:
+		playing.parent = self.find_ls_parent(playing, orig_msg, response)
+		if not playing.parent:
+			return False
+		# add the actual Ls result to to the parent
+		for r in response.result['contents']:
+			item = make_item(playing.cm.label, **r)
+			playing.parent.add(item)
+			if item == playing:
+				# set the player's item to that instead of the dummy object
+				# it is holding now. otherwise skip to next track won't work
+				self.player.playing.item = item
+		return True
+
+	def handle_ls_parent_of_focused(self, orig_msg, response):
+		focused = self.menu.focused()
+		if focused.guid != orig_msg.item:
+			return False
+		# note that we don't add playing to it's parent's children here.
+		# it's just to be able to find it again when more result chunks arrive:
+		focused.parent = self.find_ls_parent(focused, orig_msg, response)
+		if not focused.parent:
+			return False
+		# add the actual Ls result to to the parent
+		for r in response.result['contents']:
+			item = make_item(focused.cm.label, **r)
+			focused.parent.add(item)
+			if item == focused:
+				self.menu.set_focus(item)
+		return True
+
+	def handle_ls(self, msg_reg, response, orig_msg, user):
+		if response.errno:
+			print response.errstr
 			return
 		if type(orig_msg) == Ls:
 			if orig_msg.parent:
-				stay_focused = False
-				# the result is a listing of the contents of the *parent* of
-				# the item mentioned in the original message. reparent that
-				# item in a new CmDir populated with the results.
-				# if the item is neither focused nor currently playing, then
-				# there is nothing to do. the user navigated away and we can
-				# simply throw away the result.
-				item = self.menu.focused()
-				if item.guid == orig_msg.item:
-					stay_focused = True
-				else:
-					item = self.player.get_playing()
-				if item.guid != orig_msg.item:
-					return # give up
-				if not msg.result['item']['guid']:
-					# parent is the menu root's CM widget
-					parent = self.menu.get_item(item.cm.label)
-					if not parent:
-						return # CM no longer registered. give up.
-				else:
-					parent = make_item(item.cm.label, **msg.result['item'])
-				parent.children = []
-				parent.add(msg.result['contents'])
-				item.parent = parent
-				if stay_focused:
-					self.menu.set_focus(item)
-				# the following is necessary if the item is both focused and
-				# playing. then only the focused item has been reparented but
-				# the playing item needs reparenting too. otherwise the next
-				# track to play will not be found when it plays to finish.
-				playing = self.player.get_playing()
-				if playing and playing.guid == item.guid:
-					self.player.playing.item = item
+				if self.handle_ls_parent_of_playing(orig_msg, response):
+					return
+				if self.handle_ls_parent_of_focused(orig_msg, response):
+					return
 				return
 
 			parent = self.menu.focused().parent
 			if parent.guid == orig_msg.item:
-				parent.add(msg.result['contents'])
+				parent.add(response.result['contents'])
 				# redraw screen in case it was showing '<EMPTY>'
 				(guid, render) = self.menu.ticker(curry=True)
-				self.display.canvas.clear()
 				render.tick(self.display.canvas)
+				self.display.canvas.clear()
+				self.display.canvas.paste(render.image)
 				self.display.show(TRANSITION.NONE)
-				
 
 	def run(self):
 		from dwite import unregister_dm, get_cm, msg_reg
@@ -420,9 +441,7 @@ class Classic(Device):
 				print('Malformed playlist item: %s' % obj)
 
 		while self.alive:
-			msg = None
-
-			guid       = 0
+			msg        = None
 			render     = None
 			transition = TRANSITION.NONE
 
@@ -448,9 +467,7 @@ class Classic(Device):
 				if isinstance(msg, AddCM):
 					self.menu.add_cm(msg.cm)
 
-					# warning: callback run by CM thread:
 					def handle_get_terms(msg_reg, response, orig_msg, self):
-						# TODO: race condition between DM and CM:
 						self.menu.searcher.add_terms(response.result)
 
 					get_terms = GetTerms(msg_reg.make_guid())
@@ -459,8 +476,8 @@ class Classic(Device):
 					continue
 
 				elif isinstance(msg, RemCM):
-					self.menu.rem_cm(msg.cm)
-					continue
+					transition = self.menu.rem_cm(msg.cm)
+					render = self.select_render()
 
 				#### MESSAGES FROM OTHER PROGRAMS/SUBSYSTEMS ####
 
@@ -468,14 +485,15 @@ class Classic(Device):
 					#print 'dm JsonResult %d' % msg.guid
 					try:
 						msg_reg.run_handler(msg)
-					except:
-						(orig_msg, handler, user) = msg_reg.get_handler(msg)
-						if orig_msg:
-							msg_reg.rem_handler(orig_msg)
-							self.default_result_handler(msg, orig_msg)
-							continue
-						else:
-							print 'throwing away %s' % msg
+						if not msg.more:
+							msg_reg.rem_handler(msg)
+						continue
+					except Exception, e:
+						traceback.print_exc()
+						msg_str = unicode(msg)
+						if len(msg_str) > 200:
+							msg_str = msg_str[:200]
+						print 'throwing away %s' % msg_str
 
 				elif isinstance(msg, Terms):
 					self.menu.searcher.add_terms(msg.sender,msg.params['terms'])
@@ -493,9 +511,10 @@ class Classic(Device):
 						msg.respond(4, u'Unplayable item', 0, False, False)
 						continue
 					if msg.item == self.menu.focused():
-						(guid, render) = self.player.ticker()
-						self.display.canvas.clear()
+						(_, render) = self.player.ticker()
 						render.tick(self.display.canvas)
+						self.display.canvas.clear()
+						self.display.canvas.paste(render.image)
 						self.display.show(TRANSITION.NONE)
 						render.min_timeout(325)
 					msg.respond(0, u'EOK', 0, False, True)
@@ -519,13 +538,7 @@ class Classic(Device):
 					# PLAYING, but browsing immediately afterwards will lag
 					# if it takes a long time to complete the Ls request.
 					ls = Ls(msg_reg.make_guid(), msg.item.guid, parent=True)
-
-					# warning: handler executed by CM thread:
-					def handle_ls(msg_reg, response, orig_msg, self):
-						msg_reg.set_handler(orig_msg, None, None)
-						self.in_queue.put(response)
-
-					msg_reg.set_handler(ls, handle_ls, self)
+					msg_reg.set_handler(ls, self.handle_ls, self)
 					msg.item.cm.wire.send(ls.serialize())
 					continue
 
@@ -541,7 +554,6 @@ class Classic(Device):
 						# reply from CM.
 						ls = Ls(msg_reg.make_guid(), item.guid, recursive=True)
 
-						# warning: handler executed by CM thread:
 						def handle_ls_r(msg_reg, response, orig_msg, user):
 							(dm, cm) = user
 							assert type(dm)       == Classic
@@ -557,18 +569,14 @@ class Classic(Device):
 					if self.menu.focused() == self.menu.playlist.children[0]:
 						# render the screen just in case the added items
 						# replaced a focused <EMPTY> object.
-						(guid, render) = self.menu.ticker(curry=True)
+						(_, render) = self.menu.ticker(curry=True)
 					msg.respond(0, u'EOK', 0, False, True)
 
 				#### MESSAGES FROM THE DEVICE ####
 
 				elif isinstance(msg, Helo):
 					# always draw on screen when a device connects
-					(guid, render) = self.menu.ticker(curry=True)
-					self.display.canvas.clear()
-					render.tick(self.display.canvas)
-					self.display.show(TRANSITION.NONE)
-					continue
+					(_, render) = self.menu.ticker(curry=True)
 
 				elif isinstance(msg, Stat):
 					next = self.player.handle_stat(msg)
@@ -579,7 +587,7 @@ class Classic(Device):
 						if self.now_playing_mode:
 							self.menu.set_focus(next)
 							transition = TRANSITION.SCROLL_UP
-							(guid, render) = self.player.ticker()
+							(_, render) = self.player.ticker()
 						else:
 							self.select_now_playing_mode()
 
@@ -616,12 +624,12 @@ class Classic(Device):
 						continue
 
 					if   msg.code == IR.UP:
-						(guid, render, transition) = self.menu.up()
+						(_, render, transition) = self.menu.up()
 						render = self.select_render()
 						self.select_now_playing_mode()
 
 					elif msg.code == IR.DOWN:
-						(guid, render, transition) = self.menu.down()
+						(_, render, transition) = self.menu.down()
 						render = self.select_render()
 						self.select_now_playing_mode()
 
@@ -631,15 +639,10 @@ class Classic(Device):
 							focused = focused.target
 						if type(focused) == CmDir:
 							ls = Ls(msg_reg.make_guid(), focused.guid)
-						
-							# warning: handler executed by CM thread:
-							def handle_ls(msg_reg, response, orig_msg, self):
-								msg_reg.set_handler(orig_msg, None, None)
-								self.in_queue.put(response)
-
-							msg_reg.set_handler(ls, handle_ls, self)
+							msg_reg.set_handler(ls, self.handle_ls, self)
 							focused.cm.wire.send(ls.serialize())
-						(guid, render, transition) = self.menu.right()
+						(_, render, transition) = self.menu.right()
+						render = self.select_render()
 						self.select_now_playing_mode()
 
 					elif msg.code == IR.LEFT:
@@ -672,14 +675,8 @@ class Classic(Device):
 								focused.parent.guid,
 								parent=True
 							)
-						
-							# warning: handler executed by CM thread:
-							def handle_ls(msg_reg, response, orig_msg, self):
-								msg_reg.set_handler(orig_msg, None, None)
-								self.in_queue.put(response)
-							
-							msg_reg.set_handler(ls, handle_ls, self)
-						(guid, render, transition) = self.menu.left()
+							msg_reg.set_handler(ls, self.handle_ls, self)
+						(_, render, transition) = self.menu.left()
 						if ls:
 							focused.cm.wire.send(ls.serialize())
 						self.select_now_playing_mode()
@@ -708,12 +705,12 @@ class Classic(Device):
 							if next and next != item:
 								self.menu.set_focus(next)
 								transition = TRANSITION.SCROLL_UP
-								(guid, render) = self.player.ticker()
+								(_, render) = self.player.ticker()
 							else:
 								# curry the currently focused menu item to
 								# ensure that it is correctly redrawn after
 								# the track stops playing
-								(guid, render) = self.menu.ticker(curry=True)
+								(_, render) = self.menu.ticker(curry=True)
 							self.select_now_playing_mode()
 							#transition = TRANSITION.SCROLL_UP
 							done = True
@@ -748,15 +745,15 @@ class Classic(Device):
 							item.cm.wire.send(ls.serialize())
 							done = True
 						if not done:
-							(guid, render, transition) = self.menu.add()
+							(_, render, transition) = self.menu.add()
 
 					elif msg.code == IR.PLAY:
 						item = self.menu.focused()
 						if self.player.play(item):
 							self.now_playing_mode = True
-							(guid, render) = self.player.ticker()
+							(_, render) = self.player.ticker()
 						else:
-							(guid, render, transition) = self.menu.play()
+							(_, render, transition) = self.menu.play()
 
 					elif msg.code == IR.PAUSE:
 						self.player.pause()
@@ -769,7 +766,7 @@ class Classic(Device):
 							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
-						self.seeker.seek(5000)
+						self.seeker.seek(3000)
 						render = self.select_render()
 
 					elif msg.code == IR.REWIND:
@@ -780,7 +777,7 @@ class Classic(Device):
 							self.seeker = Seeker(self.player.playing.item,
 							                     self.player.duration(),
 							                     self.player.position())
-						self.seeker.seek(-5000)
+						self.seeker.seek(-3000)
 						render = self.select_render()
 
 					elif msg.code == -IR.FORWARD:
@@ -790,9 +787,7 @@ class Classic(Device):
 								continue
 							self.player.jump(self.seeker.position)
 							self.seeker = None
-							# curry the focused menu item to ensure that it
-							# is correctly redrawn without a progres bar:
-							self.menu.ticker(curry=True)
+							render = self.select_render()
 						else:
 							if not self.player.playing:
 								continue
@@ -805,7 +800,7 @@ class Classic(Device):
 								if self.now_playing_mode:
 									self.menu.set_focus(next)
 									transition = TRANSITION.SCROLL_UP
-									(guid, render) = self.player.ticker()
+									(_, render) = self.player.ticker()
 							else:
 								# curry the currently focused menu item to
 								# ensure that it is correctly redrawn after
@@ -820,9 +815,7 @@ class Classic(Device):
 								continue
 							self.player.jump(self.seeker.position)
 							self.seeker = None
-							# curry the focused menu item to ensure that it
-							# is correctly redrawn without a progres bar:
-							self.menu.ticker(curry=True)
+							render = self.select_render()
 						else:
 							if not self.player.playing:
 								continue
@@ -835,7 +828,7 @@ class Classic(Device):
 								if self.now_playing_mode:
 									self.menu.set_focus(prev)
 									transition = TRANSITION.SCROLL_DOWN
-									(guid, render) = self.player.ticker()
+									(_, render) = self.player.ticker()
 							else:
 								# curry the currently focused menu item to
 								# ensure that it is correctly redrawn after
@@ -871,7 +864,7 @@ class Classic(Device):
 							time.sleep(0.1) # TODO: wait for ANIC instead
 							self.display.set_brightness(self.display.brightness)
 							self.menu.set_focus(self.menu.get_item('Playlist'))
-							(guid, render) = self.menu.ticker(curry=True)
+							(_, render) = self.menu.ticker(curry=True)
 							transition = TRANSITION.SCROLL_UP
 
 					elif msg.code == IR.POWER:
@@ -882,7 +875,7 @@ class Classic(Device):
 					elif msg.code in [IR.NUM_1, IR.NUM_2, IR.NUM_3,
 					                  IR.NUM_4, IR.NUM_5, IR.NUM_6,
 					                  IR.NUM_7, IR.NUM_8, IR.NUM_9]:
-						(guid, render, transition) = self.menu.number(msg.code)
+						(_, render, transition) = self.menu.number(msg.code)
 						self.wire.send(StrmStatus().serialize())
 
 					elif msg.code == IR.NOW_PLAYING:
@@ -890,7 +883,7 @@ class Classic(Device):
 							continue
 
 						item = self.player.playing.item
-						if not item.parent:
+						if not item.parent or item.parent.guid == u'<DUMMY>':
 							# in principle, it is not possible for an item to
 							# not have a parent even if it is played through
 							# RPC. *however*, because the item is reparented
@@ -905,7 +898,7 @@ class Classic(Device):
 					elif msg.code == IR.SEARCH:
 						self.menu.set_focus(self.menu.searcher.children[0])
 						self.select_now_playing_mode()
-						(guid, render) = self.menu.ticker(curry=True)
+						(_, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.REPEAT:
 						self.player.toggle_repeat()
@@ -916,7 +909,7 @@ class Classic(Device):
 					elif msg.code == IR.BROWSE:
 						self.menu.set_focus(self.menu.root.children[0])
 						self.select_now_playing_mode()
-						(guid, render) = self.menu.ticker(curry=True)
+						(_, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.SLEEP:
 						if self.power == POWER.ON:
@@ -927,10 +920,10 @@ class Classic(Device):
 					elif msg.code == IR.SIZE:
 						if self.menu.focused() == self.player.get_playing():
 							self.player.next_render_mode()
-							(guid, render) = self.player.ticker(curry=True)
+							(_, render) = self.player.ticker(curry=True)
 						else:
 							self.menu.next_render_mode()
-							(guid, render) = self.menu.ticker(curry=True)
+							(_, render) = self.menu.ticker(curry=True)
 
 					elif msg.code == IR.FAVORITES:
 						print('FAVORITES not handled')
@@ -946,10 +939,11 @@ class Classic(Device):
 					print('Unhandled message: %s' % msg)
 
 				if render:
-					self.display.canvas.clear()
-					render.tick(self.display.canvas)
-					self.display.show(transition)
-					render.min_timeout(325)
+					if render.tick(self.display.canvas, force=True):
+						self.display.canvas.clear()
+						self.display.canvas.paste(render.image)
+						self.display.show(transition)
+						render.min_timeout(325)
 
 			except:
 				traceback.print_exc()

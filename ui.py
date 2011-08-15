@@ -41,14 +41,6 @@ class UiConnection(Connection):
 	def handle(self, msg):
 		from dwite import get_dm, get_cm, msg_reg
 
-		if type(msg) == JsonResult:
-			#print 'ui JsonResult %d' % msg.guid
-			try:
-				msg_reg.run_handler(msg)
-			except:
-				print 'throwing away %s' % msg
-			return
-
 		if type(msg) in [Play, Add]:
 			#print 'ui Play/Add %s' % msg
 			match = re.match(
@@ -90,6 +82,16 @@ class UiConnection(Connection):
 			msg_reg.set_handler(get, handle_get_item, cm, msg)
 			cm.wire.send(get.serialize())
 			return
-		
-		raise Exception('Unhandled message: %s' % msg)
+
+		msg.sender = self.label
+		try:
+			msg_reg.run_handler(msg)
+			msg_str = unicode(msg)
+			if len(msg_str) > 200:
+				msg_str = msg_str[:200]
+		except:
+			owner = msg_reg.get_owner(msg)
+			assert owner != self
+			print 'UI: owner %s: %s' % (type(msg), owner.name)
+			owner.in_queue.put(msg)
 

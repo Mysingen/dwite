@@ -43,8 +43,8 @@ class Backend(Thread):
 	def on_stop(self):
 		raise Exception('Your backend must implement on_stop()')
 
-	def get_item(self, guid):
-		raise Exception('Your backend must implement get_item()')
+	def get_track(self, guid):
+		raise Exception('Your backend must implement get_track()')
 
 	def handle(self, msg):
 		raise Exception('Your backend must implement _handle()')
