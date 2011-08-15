@@ -3,7 +3,7 @@ import ctypes.util
 
 # this function has different implementations on different systems
 def get_libflac_path():
-	return os.path.join(os.environ['DWITE_HOME'], 'lib', 'libflac.dylib'
+	return os.path.join(os.environ['DWITE_HOME'], 'lib', 'libflac.dylib')
 
 SEARCH_FOR_METADATA   = 0x0
 END_OF_STREAM         = 0x4
