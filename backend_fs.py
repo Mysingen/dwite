@@ -335,7 +335,7 @@ class FileSystem(Backend):
 					msg.respond(1, u'No such directory', 0, False, None)
 
 			t = Thread(
-				target=target, name='Ls(%s)' % item_guid,
+				target=target, name='Ls',
 				args=(msg, self.root_dir, item_guid, msg.recursive)
 			)
 			t.daemon = True
@@ -404,7 +404,7 @@ class FileSystem(Backend):
 				scan(db_conn, db_curs, root_dir, u'', True, False)
 				if msg.wire:
 					msg.wire.send(Terms(0, list(get_terms(db_curs))))
-			t = Thread(target=target, name='Scan()', args=(msg, self.root_dir))
+			t = Thread(target=target, name='Scan', args=(msg, self.root_dir))
 			t.daemon = True
 			t.start()
 			return
