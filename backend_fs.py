@@ -221,7 +221,7 @@ def get_item(root_dir, guid, verbose=False):
 		print('WARNING: Unsupported VFS content: %s' % path)
 
 def load_db():
-	path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman_mp.sqlite3')
+	path = os.path.join(os.environ['DWITE_CFG_DIR'], 'conman.sqlite3')
 	db_conn = sqlite3.connect(path)
 	return (db_conn, db_conn.cursor())
 
