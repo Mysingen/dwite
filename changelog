@@ -2,3 +2,28 @@ dwite 110809-1 unknown; urgency=low
 
   * First Debianized version.
 
+dwite 110815-1 unknown; urgency=low
+  * Moved font path handling into fonts.py:get_path() to make it easier
+    to handle differently for different environments.
+  * Moved loading/saving of Conman configuration data from the backend
+    to the main thread. Changed the format slightly as there is no need
+    to track more than one backend.
+  * Bugfix: Root menu was not redrawn correctly when more than one CM
+    present and CM got removed.
+  * Offload long running operations in the file system backend onto
+    worker threads to stop the CM from becomming unresponsive. The
+    threads have .daemon set to make sure they are automatically shut
+    down when the program terminates.
+  * All use of libFLAC moved into its own process to protect the rest of
+    the program from segmentation faults in or below the ctypes integration.
+  * Bugfix: Threads can only have ASCII characters in their names
+  * Implemented chunking of RPC results. Used it on Ls and Search.
+  * Fixed the callback system for messages so that the callback is
+    always executed by the thread that registered it.
+  * Reworked the rendering system to get rid of redundant rendering
+    and to remove some structural limitations that were increasingly
+    hard to work with.
+  * Highlight characters from left to right in the list of search term
+    suggestions. The number of characters is equal to the number of NUM*
+    entered on the remote.
+  
