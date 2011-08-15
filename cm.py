@@ -47,20 +47,19 @@ class CmConnection(Connection):
 			msg.respond(0, u'EOK', 0, False, True)
 			return
 
-		if type(msg) == JsonResult:
-			#print 'cm JsonResult %d' % msg.guid
-			try:
-				msg_reg.run_handler(msg)
-			except:
-				traceback.print_exc()
-				print 'throwing away %s' % msg
-			return
-
-		if type(msg) == Terms:
-			msg.sender = self.label
-			for dm in get_dm(None):
-				dm.in_queue.put(msg)
-			return
-
-		raise Exception('Unhandled message: %s' % msg)
+		msg.sender = self.label
+		try:
+			msg_reg.run_handler(msg)
+			msg_str = unicode(msg)
+			if len(msg_str) > 200:
+				msg_str = msg_str[:200]
+			print(
+				'INTERNAL ERROR: CmConnections should not have any registered'
+				'message handlers: %s' % msg_str
+			)
+		except:
+			owner = msg_reg.get_owner(msg)
+			assert owner != self
+			#print 'CM: owner %s: %s' % (type(msg), owner.name)
+			owner.in_queue.put(msg)
 

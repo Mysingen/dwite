@@ -12,6 +12,7 @@ if not (hasattr(mutagen, 'version') and mutagen.version >= (1,19)):
 	sys.exit(1)
 
 from threading import Thread
+from datetime  import datetime
 
 from magic    import Magic
 from protocol import Ls, GetItem, Search, GetTerms, JsonResult, Terms
@@ -325,7 +326,11 @@ class FileSystem(Backend):
 				item = get_item(root_dir, item_guid)
 				if item:
 					result = get_children(root_dir, item_guid, recursive)
-					msg.respond(0,u'',0,False,{'item':item,'contents':result})
+					i = 0
+					for r in result:
+						msg.respond(0,u'',i,True, {'item':item,'contents':[r]})
+						i += 1
+					msg.respond(0, u'', i, False, {'item':item,'contents':[]})
 				else:
 					msg.respond(1, u'No such directory', 0, False, None)
 
@@ -370,14 +375,20 @@ class FileSystem(Backend):
 					return
 				result = list(result)
 				result.sort()
-				result = [get_item(root_dir, guid) for guid in result]
-				if not result:
+				i = 0
+				for guid in result:
+					item = get_item(root_dir, guid)
+					if not item:
+						continue
+					msg.respond(0, u'', i, True, [item])
+					i += 1
+				if i == 0:
 					# this should really be a very rare occasion: the search
 					# index is soooo outdated that not a single hit actually
 					# corresponds to an existing file:
 					msg.respond(1, u'Nothing found', 0, False, None)
 				else:
-					msg.respond(0, u'', 0, False, result)
+					msg.respond(0, u'', i, False, [])
 			
 			t = Thread(
 				target=target, name='Search(%s)' % ','.join(terms),

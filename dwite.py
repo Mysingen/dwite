@@ -34,28 +34,40 @@ class MessageRegister(object):
 	def set_handler(self, msg, handler, user, override_orig_msg=None):
 		assert isinstance(msg, JsonMessage)
 		assert (msg.guid > 0) and (msg.guid not in self.handlers)
+		owner = threading.current_thread()
+		assert isinstance(owner, threading.Thread)
 		if override_orig_msg:
-			self.handlers[msg.guid] = (override_orig_msg, handler, user)
+			self.handlers[(owner,msg.guid)] = (override_orig_msg, handler, user)
 		else:
-			self.handlers[msg.guid] = (msg, handler, user)
+			self.handlers[(owner,msg.guid)] = (msg, handler, user)
 
 	def get_handler(self, msg):
 		assert isinstance(msg, JsonMessage)
-		if msg.guid in self.handlers:
-			return self.handlers[msg.guid]
+		owner = threading.current_thread()
+		assert isinstance(owner, threading.Thread)
+		if (owner, msg.guid) in self.handlers:
+			return self.handlers[(owner, msg.guid)]
 		return (None, None, None)
 
 	def rem_handler(self, msg):
 		assert isinstance(msg, JsonMessage)
-		assert msg.guid in self.handlers
-		del self.handlers[msg.guid]
+		owner = threading.current_thread()
+		assert isinstance(owner, threading.Thread)
+		assert (owner, msg.guid) in self.handlers
+		del self.handlers[(owner, msg.guid)]
 
 	def run_handler(self, msg):
 		(orig_msg, handler, user) = self.get_handler(msg)
 		if not handler:
 			raise Exception('No handler for %d' % msg.guid)
-		self.rem_handler(msg)
+		#print handler
 		handler(self, msg, orig_msg, user)
+
+	def get_owner(self, msg):
+		for key in self.handlers:
+			if key[1] == msg.guid:
+				return key[0]
+		return None
 
 # global registry of message handlers
 msg_reg = MessageRegister()

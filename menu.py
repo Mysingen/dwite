@@ -38,7 +38,7 @@ class Tree(object):
 		)
 
 	def __str__(self):
-		return '%s %s' % (unicode(type(self)), json.dumps(self.dump(),indent=4))
+		return unicode(json.dumps(self.dump(),indent=4))
 	
 	def __cmp__(self, other):
 		if self.guid == other.guid:
@@ -203,11 +203,19 @@ class CmAudio(CmFile):
 		self.album    = album
 		self.title    = title
 		self.n        = n
-
-	def __str__(self):
-		return 'CmAudio %s %s %s %s %s %s' % (
-			self.guid, self.label, self.artist, self.album, self.title, self.n
-		)
+	
+	def dump(self):
+		r = CmFile.dump(self)
+		r.update({
+			'size'    : self.size,
+			'duration': self.duration,
+			'format'  : self.format,
+			'artist'  : self.artist,
+			'album'   : self.album,
+			'title'   : self.title,
+			'number'  : self.n
+		})
+		return r
 	
 	def get_pretty(self):
 		pretty = self.label # a safe default, but try to improve it:
@@ -238,6 +246,10 @@ class CmDir(CmFile):
 	def add(self, listing):
 		if (not self.children) or (isinstance(self.children[0], Waiting)):
 			self.children = []
+		if isinstance(listing, CmFile):
+			self.children.append(listing)
+			listing.parent = self
+			return
 		for l in listing:
 			guid  = l['guid']
 			label = l['pretty']['label']
@@ -263,7 +275,7 @@ class CmDir(CmFile):
 					)
 				)
 				continue
-			
+
 		if len(self.children) == 0:
 			self.children.append(Empty(self))
 		return self.children
@@ -348,12 +360,12 @@ class SearcherPanel(Tree):
 			return
 		self.label = label
 
-	def __init__(self, bot_panel, top_panel, parent):
+	def __init__(self, bot_panel, top_panel, parent, scroll=True):
 		assert type(top_panel) == unicode
 		guid = ''.join([unicode(random.randint(0,9)) for i in range(32)])
 		Tree.__init__(self, guid, bot_panel, parent)
 		self.top_panel = top_panel
-		self.render    = SearchRender()
+		self.render    = SearchRender(scroll)
 		self.render.curry(self.bot_panel, self.top_panel)
 
 	def __str__(self):
@@ -375,12 +387,11 @@ class SearcherPanel(Tree):
 
 class SearcherSuggestions(SearcherPanel):
 	def __init__(self, bot_panel, top_panel, parent):
-		SearcherPanel.__init__(self, bot_panel, top_panel, parent)
-		self.render.scroll = False
+		SearcherPanel.__init__(self, bot_panel, top_panel, parent, False)
 
 default_notice = (u'<Type to get suggestions. ADD adds a suggestion to the '
 				   'query, LEFT/RIGHT navigates suggestions. LEFT also removes '
-				   'terms from the query if there are no suggestions')
+				   'terms from the query if there are no suggestions>')
 
 class SearcherNotice(SearcherPanel):
 	def __init__(self, bot_panel, top_panel, parent):
@@ -622,43 +633,42 @@ class Searcher(Tree):
 			return None # let menu handle DOWN key
 		from dwite import msg_reg, get_cm, get_dm
 		if self.query:
-			results = SearcherResults(self.query, u'', self)
-			self.children.append(results)
+			# check for existing results container for the same query to reuse:
+			results = self.get_results(self.query)
+			if not results:
+				results = SearcherResults(self.query, u'', self)
+				self.children.append(results)
 			waiting = SearcherSearching(self.get_query(), results)
-			results.children = [waiting]
+			results.children = [waiting] # TODO: preserve currently playing item
 			results.set_focus(waiting)
 
 			for cm in get_cm(None):
 				search = Search(msg_reg.make_guid(), self.query)
 
-				def __handle_search(msg_reg, response, orig_msg, user):
+				def handle_search(msg_reg, response, orig_msg, user):
+					#print 'response: %s' % response
 					(self, cm) = user
 					assert type(self) == Searcher
 					parent = self.get_results(orig_msg.terms)
 					assert parent != None # not possible because added above
-					parent.children = []
+					please_curry = False
+					if type(parent.children[0]) == SearcherSearching:
+						parent.children = []
+						please_curry = True
 
 					if response.errno:
-						parent.children.append(SearcherNotice(
+						parent.children = [SearcherNotice(
 							u'<%s>' % response.errstr, u'', parent
-						))
+						)]
 						return TRANSITION.NONE
 					
 					for r in response.result:
 						item = make_item(cm, **r)
 						link = Link(item, parent)
 						parent.children.append(link)
-					firstborn = parent.children[0]
-					parent.set_focus(firstborn)
-					firstborn.render.curry(firstborn.target)
-
-				# warning: handler is run by a CM thread
-				def handle_search(msg_reg, response, orig_msg, user):
-					# move the message to the DM's queue so that we can
-					# handle it safely:
-					msg_reg.set_handler(orig_msg, __handle_search, user)
-					for dm in get_dm(None):
-						dm.in_queue.put(response)
+					if please_curry:
+						firstborn = parent.children[0]
+						firstborn.render.curry(firstborn.target)
 
 				msg_reg.set_handler(search, handle_search, (self, cm.label))
 				cm.wire.send(search.serialize())
