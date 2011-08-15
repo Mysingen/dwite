@@ -402,8 +402,6 @@ class FileSystem(Backend):
 			def target(msg, root_dir):
 				(db_conn, db_curs) = load_db()
 				scan(db_conn, db_curs, root_dir, u'', True, False)
-				if msg.wire:
-					msg.wire.send(Terms(0, list(get_terms(db_curs))))
 			t = Thread(target=target, name='Scan', args=(msg, self.root_dir))
 			t.daemon = True
 			t.start()
