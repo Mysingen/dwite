@@ -28,6 +28,7 @@ binary-indep: make_dirs
 	cp dwite debian/usr/share/dwite
 	cp launcher debian/usr/share/dwite
 	ln -sf /usr/share/dwite/launcher debian/usr/bin/dwite-launcher
+	chown -R root:root debian/usr
 	dpkg-deb -b debian dwite_${VERSION}.deb
 
 build:
