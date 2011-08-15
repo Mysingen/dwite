@@ -1,6 +1,10 @@
 import ctypes
 import ctypes.util
 
+# this function has different implementations on different systems
+def get_libflac_path():
+	return os.path.join(os.environ['DWITE_HOME'], 'lib', 'libflac.dylib'
+
 SEARCH_FOR_METADATA   = 0x0
 END_OF_STREAM         = 0x4
 WRITE_STATUS_CONTINUE = 0x0
@@ -38,7 +42,7 @@ class FlacDecoder(object):
 			raise Exception('decoder_init_file() failed')
 
 	def __load_libflac(self):
-		path = ctypes.util.find_library('FLAC')
+		path = get_libflac_path()
 		if path:
 			self.libflac = ctypes.CDLL(path)
 		if not self.libflac or not self.libflac._name:
